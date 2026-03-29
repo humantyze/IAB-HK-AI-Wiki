@@ -18,10 +18,11 @@ export default function AdminLogin() {
     try {
       await login({ data: { password } });
       toast({ title: "Authorization Granted", description: "Secure session established." });
-    } catch (err: any) {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Invalid security credential.";
       toast({ 
         title: "Access Denied", 
-        description: err.message || "Invalid security credential.", 
+        description: message, 
         variant: "destructive" 
       });
     }

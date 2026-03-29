@@ -12,8 +12,9 @@ export function useAuth() {
 
   const loginMutation = useLogin({
     mutation: {
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getCheckAuthQueryKey() });
+      onSuccess: async () => {
+        await qc.invalidateQueries({ queryKey: getCheckAuthQueryKey() });
+        await qc.refetchQueries({ queryKey: getCheckAuthQueryKey() });
         setLocation("/admin");
       }
     }
@@ -21,8 +22,9 @@ export function useAuth() {
 
   const logoutMutation = useLogout({
     mutation: {
-      onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getCheckAuthQueryKey() });
+      onSuccess: async () => {
+        await qc.invalidateQueries({ queryKey: getCheckAuthQueryKey() });
+        await qc.refetchQueries({ queryKey: getCheckAuthQueryKey() });
         setLocation("/admin/login");
       }
     }

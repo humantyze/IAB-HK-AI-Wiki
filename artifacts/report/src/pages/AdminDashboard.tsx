@@ -73,8 +73,9 @@ export default function AdminDashboard() {
       form.reset({ targetSections: [], rawText: "", contentType: values.contentType, contributorName: values.contributorName });
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
-    } catch (err: any) {
-      toast({ title: "Transmission Failed", description: err.message, variant: "destructive" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed";
+      toast({ title: "Transmission Failed", description: message, variant: "destructive" });
     }
   };
 

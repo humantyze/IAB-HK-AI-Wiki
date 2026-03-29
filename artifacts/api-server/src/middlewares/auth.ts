@@ -15,34 +15,43 @@ function generateSessionToken(): string {
   return crypto.randomBytes(32).toString("hex");
 }
 
-function signToken(token: string): string {
-  const hmac = crypto.createHmac("sha256", getSecret());
-  hmac.update(token);
-  const signature = hmac.digest("base64url");
-  return `${token}.${signature}`;
+function encrypt(plaintext: string): string {
+  const secret = getSecret();
+  const key = crypto.createHash("sha256").update(secret).digest();
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  let encrypted = cipher.update(plaintext, "utf8", "hex");
+  encrypted += cipher.final("hex");
+  const authTag = cipher.getAuthTag().toString("hex");
+  return `${iv.toString("hex")}.${encrypted}.${authTag}`;
 }
 
-function verifyToken(signedValue: string): string | false {
-  const dotIndex = signedValue.lastIndexOf(".");
-  if (dotIndex === -1) return false;
-  const token = signedValue.slice(0, dotIndex);
-  const signature = signedValue.slice(dotIndex + 1);
-  const hmac = crypto.createHmac("sha256", getSecret());
-  hmac.update(token);
-  const expected = hmac.digest("base64url");
-  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
+function decrypt(ciphertext: string): string | false {
+  try {
+    const secret = getSecret();
+    const key = crypto.createHash("sha256").update(secret).digest();
+    const parts = ciphertext.split(".");
+    if (parts.length !== 3) return false;
+    const iv = Buffer.from(parts[0], "hex");
+    const encrypted = parts[1];
+    const authTag = Buffer.from(parts[2], "hex");
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+    decipher.setAuthTag(authTag);
+    let decrypted = decipher.update(encrypted, "hex", "utf8");
+    decrypted += decipher.final("utf8");
+    return decrypted;
+  } catch {
     return false;
   }
-  return token;
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
-  const signedToken = req.cookies?.[SESSION_COOKIE];
-  if (!signedToken) {
+  const encryptedToken = req.cookies?.[SESSION_COOKIE];
+  if (!encryptedToken) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
-  const token = verifyToken(signedToken);
+  const token = decrypt(encryptedToken);
   if (token === false) {
     res.status(401).json({ error: "Unauthorized" });
     return;
@@ -52,8 +61,8 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 
 export function setAuthCookie(res: Response): void {
   const token = generateSessionToken();
-  const signed = signToken(token);
-  res.cookie(SESSION_COOKIE, signed, {
+  const encrypted = encrypt(token);
+  res.cookie(SESSION_COOKIE, encrypted, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -67,7 +76,7 @@ export function clearAuthCookie(req: Request, res: Response): void {
 }
 
 export function isAuthenticated(req: Request): boolean {
-  const signedToken = req.cookies?.[SESSION_COOKIE];
-  if (!signedToken) return false;
-  return verifyToken(signedToken) !== false;
+  const encryptedToken = req.cookies?.[SESSION_COOKIE];
+  if (!encryptedToken) return false;
+  return decrypt(encryptedToken) !== false;
 }

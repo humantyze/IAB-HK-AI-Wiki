@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, desc } from "drizzle-orm";
 import multer from "multer";
 import path from "path";
+import fs from "fs";
 import { z } from "zod";
 import { db, uploadsTable, sectionsTable, sectionVersionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
@@ -25,8 +26,13 @@ const ALLOWED_MIME_TYPES = [
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
+const uploadsDir = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
 const storage = multer.diskStorage({
-  destination: path.join(process.cwd(), "uploads"),
+  destination: uploadsDir,
   filename: (_req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
     cb(null, uniqueSuffix + "-" + file.originalname);
