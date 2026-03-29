@@ -157,6 +157,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
             bodyMarkdown: result.bodyMarkdown,
             keyInsights: result.keyInsights,
             chartData: result.chartData,
+            imageUrl: result.imageUrl ?? null,
             createdByUploadId: uploadRecord.id,
           })
           .returning();

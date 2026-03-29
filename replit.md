@@ -110,7 +110,7 @@ Utility scripts package. Each script is a `.ts` file in `src/` with a correspond
 
 ### Database Schema
 - `sections` — Report sections (slug, title, bodyMarkdown, keyInsights[], displayOrder, currentVersionId)
-- `section_versions` — Version history for each section (bodyMarkdown, keyInsights[], createdByUploadId)
+- `section_versions` — Version history for each section (bodyMarkdown, keyInsights[], chartData[], imageUrl, createdByUploadId)
 - `uploads` — Contributor data submissions (contributorName, contentType, targetSections[], rawText, status)
 
 ### Auth
@@ -129,8 +129,19 @@ Utility scripts package. Each script is a `.ts` file in `src/` with a correspond
 - `GET /api/auth/me` — check auth status
 - `GET /api/uploads` — auth required, list uploads
 - `POST /api/uploads` — auth required, submit data for AI processing
+- `GET /api/section-images/:filename` — static PNG files for AI-generated section illustrations
 
-### Mocked AI Service
+### AI Service & Image Generation
 - Located at `artifacts/api-server/src/lib/ai-service.ts`
-- Abstracted interface ready for future LLM integration
-- Currently generates mock summaries and insights from uploaded content
+- On each upload, extracts key insights and chart data from submitted text
+- Calls OpenAI `gpt-image-1` via Replit AI Integrations to generate a flat illustration image per section
+- Image prompt derived from section slug + key insights; style: neon-on-dark flat vector illustration
+- Generated images saved as PNG files in `artifacts/api-server/public/section-images/`
+- Served as static files at `/api/section-images/<filename>`
+- Image URL stored in `section_versions.imageUrl`; displayed on Visual Report cards
+- Image generation failures are caught gracefully — card renders without image
+
+### OpenAI Integration
+- Uses Replit AI Integrations proxy (`AI_INTEGRATIONS_OPENAI_BASE_URL`, `AI_INTEGRATIONS_OPENAI_API_KEY`)
+- Server package: `lib/integrations-openai-ai-server` (`@workspace/integrations-openai-ai-server`)
+- Import image functions from `@workspace/integrations-openai-ai-server/image`

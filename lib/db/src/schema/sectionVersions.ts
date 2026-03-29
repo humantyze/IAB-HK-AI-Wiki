@@ -9,6 +9,7 @@ export const sectionVersionsTable = pgTable("section_versions", {
   bodyMarkdown: text("body_markdown").notNull(),
   keyInsights: jsonb("key_insights").notNull().$type<string[]>().default([]),
   chartData: jsonb("chart_data").$type<ChartDataPoint[]>().default([]),
+  imageUrl: text("image_url"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   createdByUploadId: integer("created_by_upload_id"),
 });

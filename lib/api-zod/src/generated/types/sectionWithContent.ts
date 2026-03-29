@@ -5,12 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-
-export interface ChartDataPoint {
-  label: string;
-  value: number;
-  unit: string;
-}
+import type { ChartDataPoint } from "./chartDataPoint";
 
 export interface SectionWithContent {
   id: number;
@@ -21,5 +16,6 @@ export interface SectionWithContent {
   bodyMarkdown: string;
   keyInsights: string[];
   chartData: ChartDataPoint[];
+  imageUrl: string | null;
   lastUpdated: Date;
 }

@@ -62,6 +62,7 @@ function SectionCard({
     description: string;
     keyInsights: string[];
     chartData: ChartDataPoint[];
+    imageUrl: string | null;
     lastUpdated: string;
   };
   index: number;
@@ -83,9 +84,26 @@ function SectionCard({
       initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: index * 0.07, ease: [0.16, 1, 0.3, 1] }}
-      className="bg-card/60 border border-border/60 rounded-2xl p-8 relative overflow-hidden group hover:border-primary/30 transition-all duration-500 hover:shadow-[0_0_40px_rgba(0,240,255,0.05)]"
+      className="bg-card/60 border border-border/60 rounded-2xl overflow-hidden relative group hover:border-primary/30 transition-all duration-500 hover:shadow-[0_0_40px_rgba(0,240,255,0.05)]"
     >
       <div className="absolute inset-0 bg-gradient-to-br from-primary/3 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none rounded-2xl" />
+
+      {/* Illustration Image */}
+      {section.imageUrl && (
+        <div className="relative w-full h-52 overflow-hidden">
+          <img
+            src={section.imageUrl}
+            alt={`Illustration for ${section.title}`}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = "none";
+            }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-card/60" />
+        </div>
+      )}
+
+      <div className="p-8">
 
       {/* Card Header */}
       <div className="flex items-start justify-between mb-6 relative z-10">
@@ -210,6 +228,8 @@ function SectionCard({
           </div>
         )}
       </div>
+
+      </div>
     </motion.div>
   );
 }
@@ -296,6 +316,7 @@ export default function VisualReport() {
                 section={{
                   ...section,
                   chartData: (section as typeof section & { chartData?: ChartDataPoint[] }).chartData ?? [],
+                  imageUrl: (section as typeof section & { imageUrl?: string | null }).imageUrl ?? null,
                 }}
                 index={i}
               />

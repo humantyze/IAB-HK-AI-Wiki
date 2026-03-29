@@ -20,6 +20,7 @@ router.get("/sections", async (_req, res) => {
       bodyMarkdown: sectionVersionsTable.bodyMarkdown,
       keyInsights: sectionVersionsTable.keyInsights,
       chartData: sectionVersionsTable.chartData,
+      imageUrl: sectionVersionsTable.imageUrl,
       versionCreatedAt: sectionVersionsTable.createdAt,
     })
     .from(sectionsTable)
@@ -39,6 +40,7 @@ router.get("/sections", async (_req, res) => {
       bodyMarkdown: row.bodyMarkdown ?? "",
       keyInsights: (row.keyInsights as string[]) ?? [],
       chartData: (row.chartData as Array<{ label: string; value: number; unit: string }>) ?? [],
+      imageUrl: row.imageUrl ?? null,
       lastUpdated: row.versionCreatedAt?.toISOString() ?? new Date().toISOString(),
     })),
   );
@@ -61,6 +63,7 @@ router.get("/sections/:slug", async (req, res) => {
   let bodyMarkdown = "";
   let keyInsights: string[] = [];
   let chartData: Array<{ label: string; value: number; unit: string }> = [];
+  let imageUrl: string | null = null;
   let lastUpdated = new Date().toISOString();
 
   if (section.currentVersionId) {
@@ -73,6 +76,7 @@ router.get("/sections/:slug", async (req, res) => {
       bodyMarkdown = version.bodyMarkdown;
       keyInsights = (version.keyInsights as string[]) || [];
       chartData = (version.chartData as Array<{ label: string; value: number; unit: string }>) || [];
+      imageUrl = version.imageUrl ?? null;
       lastUpdated = version.createdAt.toISOString();
     }
   }
@@ -86,6 +90,7 @@ router.get("/sections/:slug", async (req, res) => {
     bodyMarkdown,
     keyInsights,
     chartData,
+    imageUrl,
     lastUpdated,
   });
 });

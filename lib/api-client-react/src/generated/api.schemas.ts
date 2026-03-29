@@ -24,6 +24,7 @@ export interface SectionWithContent {
   bodyMarkdown: string;
   keyInsights: string[];
   chartData: ChartDataPoint[];
+  imageUrl: string | null;
   lastUpdated: string;
 }
 

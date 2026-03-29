@@ -1,10 +1,15 @@
+import fs from "fs";
+import path from "path";
 import type { ChartDataPoint } from "@workspace/db";
+import { generateImageBuffer } from "@workspace/integrations-openai-ai-server/image";
+import { logger } from "./logger";
 
 export interface AiProcessingResult {
   sectionSlug: string;
   bodyMarkdown: string;
   keyInsights: string[];
   chartData: ChartDataPoint[];
+  imageUrl: string | null;
 }
 
 function extractChartData(text: string): ChartDataPoint[] {
@@ -58,6 +63,41 @@ function extractChartData(text: string): ChartDataPoint[] {
   return points.slice(0, 6);
 }
 
+function buildImagePrompt(sectionSlug: string, keyInsights: string[]): string {
+  const insightSummary = keyInsights.slice(0, 3).join(". ");
+  const topic = sectionSlug.replace(/-/g, " ");
+  return (
+    `Flat vector illustration in a futuristic neon-on-dark style. Topic: ${topic} in Hong Kong's AI marketing landscape. ` +
+    `Key themes: ${insightSummary}. ` +
+    `Style: minimal geometric shapes, cyan and violet neon accents on deep dark background, abstract data visualization motifs, ` +
+    `no text, no people, no faces. Clean, modern, report-ready.`
+  );
+}
+
+async function generateSectionImage(
+  sectionSlug: string,
+  keyInsights: string[],
+): Promise<string | null> {
+  try {
+    const prompt = buildImagePrompt(sectionSlug, keyInsights);
+    const buffer = await generateImageBuffer(prompt, "1024x1024");
+
+    const imagesDir = path.join(process.cwd(), "public", "section-images");
+    if (!fs.existsSync(imagesDir)) {
+      fs.mkdirSync(imagesDir, { recursive: true });
+    }
+
+    const filename = `${sectionSlug}-${Date.now()}.png`;
+    const filePath = path.join(imagesDir, filename);
+    fs.writeFileSync(filePath, buffer);
+
+    return `/api/section-images/${filename}`;
+  } catch (err) {
+    logger.error({ err, sectionSlug }, "Failed to generate section image");
+    return null;
+  }
+}
+
 export async function processUpload(
   rawText: string,
   targetSections: string[],
@@ -73,11 +113,16 @@ export async function processUpload(
 
     const processedBody = `## Updated Content\n\n${rawText}\n\n*This section was updated with new ${contentType.replace(/_/g, " ")} content.*`;
 
+    const keyInsights = insights.length > 0 ? insights : ["New content has been integrated into this section."];
+
+    const imageUrl = await generateSectionImage(slug, keyInsights);
+
     results.push({
       sectionSlug: slug,
       bodyMarkdown: processedBody,
-      keyInsights: insights.length > 0 ? insights : ["New content has been integrated into this section."],
+      keyInsights,
       chartData,
+      imageUrl,
     });
   }
 

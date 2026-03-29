@@ -26,6 +26,14 @@ export const ListSectionsResponseItem = zod.object({
   displayOrder: zod.number(),
   bodyMarkdown: zod.string(),
   keyInsights: zod.array(zod.string()),
+  chartData: zod.array(
+    zod.object({
+      label: zod.string(),
+      value: zod.number(),
+      unit: zod.string(),
+    }),
+  ),
+  imageUrl: zod.string().nullable(),
   lastUpdated: zod.coerce.date(),
 });
 export const ListSectionsResponse = zod.array(ListSectionsResponseItem);
@@ -45,6 +53,14 @@ export const GetSectionBySlugResponse = zod.object({
   displayOrder: zod.number(),
   bodyMarkdown: zod.string(),
   keyInsights: zod.array(zod.string()),
+  chartData: zod.array(
+    zod.object({
+      label: zod.string(),
+      value: zod.number(),
+      unit: zod.string(),
+    }),
+  ),
+  imageUrl: zod.string().nullable(),
   lastUpdated: zod.coerce.date(),
 });
 

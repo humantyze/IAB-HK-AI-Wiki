@@ -255,6 +255,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ChartDataPoint"
+        imageUrl:
+          type: string
+          nullable: true
         lastUpdated:
           type: string
           format: date-time
@@ -267,6 +270,7 @@ components:
         - bodyMarkdown
         - keyInsights
         - chartData
+        - imageUrl
         - lastUpdated
     SectionVersion:
       type: object

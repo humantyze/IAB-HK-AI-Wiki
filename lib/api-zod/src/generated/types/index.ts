@@ -7,6 +7,7 @@
  */
 
 export * from "./authStatus";
+export * from "./chartDataPoint";
 export * from "./createUploadBody";
 export * from "./createUploadBodyContentType";
 export * from "./createUploadRequest";
