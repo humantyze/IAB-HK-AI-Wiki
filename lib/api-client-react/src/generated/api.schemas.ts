@@ -8,3 +8,78 @@
 export interface HealthStatus {
   status: string;
 }
+
+export interface SectionWithContent {
+  id: number;
+  slug: string;
+  title: string;
+  description: string;
+  displayOrder: number;
+  bodyMarkdown: string;
+  keyInsights: string[];
+  lastUpdated: string;
+}
+
+export interface SectionVersion {
+  id: number;
+  sectionId: number;
+  bodyMarkdown: string;
+  keyInsights: string[];
+  createdAt: string;
+  createdByUploadId?: number | null;
+}
+
+export interface LoginRequest {
+  password: string;
+}
+
+export interface LoginResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface AuthStatus {
+  authenticated: boolean;
+}
+
+export interface ErrorResponse {
+  error: string;
+}
+
+export type UploadStatus = (typeof UploadStatus)[keyof typeof UploadStatus];
+
+export const UploadStatus = {
+  pending: "pending",
+  processed: "processed",
+  error: "error",
+} as const;
+
+export interface Upload {
+  id: number;
+  contributorName?: string | null;
+  contentType: string;
+  targetSections: string[];
+  rawText: string;
+  filePath?: string | null;
+  status: UploadStatus;
+  createdAt: string;
+  processedAt?: string | null;
+}
+
+export type CreateUploadRequestContentType =
+  (typeof CreateUploadRequestContentType)[keyof typeof CreateUploadRequestContentType];
+
+export const CreateUploadRequestContentType = {
+  whitepaper: "whitepaper",
+  case_study: "case_study",
+  market_data: "market_data",
+  regulation_update: "regulation_update",
+  trend_insight: "trend_insight",
+} as const;
+
+export interface CreateUploadRequest {
+  contributorName?: string;
+  contentType: CreateUploadRequestContentType;
+  targetSections: string[];
+  rawText: string;
+}

@@ -10,6 +10,12 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: sections
+    description: Report section operations
+  - name: uploads
+    description: Content upload operations
+  - name: auth
+    description: Authentication operations
 paths:
   /healthz:
     get:
@@ -24,6 +30,161 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /sections:
+    get:
+      operationId: listSections
+      tags: [sections]
+      summary: List all report sections with current version
+      responses:
+        "200":
+          description: List of sections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SectionWithContent"
+  /sections/{slug}:
+    get:
+      operationId: getSectionBySlug
+      tags: [sections]
+      summary: Get a single section by slug
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Section found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SectionWithContent"
+        "404":
+          description: Section not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /sections/{sectionId}/versions:
+    get:
+      operationId: listSectionVersions
+      tags: [sections]
+      summary: List version history for a section (authenticated)
+      parameters:
+        - name: sectionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of versions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SectionVersion"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Authenticate with admin password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Log out
+      responses:
+        "200":
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+  /auth/me:
+    get:
+      operationId: checkAuth
+      tags: [auth]
+      summary: Check if currently authenticated
+      responses:
+        "200":
+          description: Auth status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthStatus"
+  /uploads:
+    get:
+      operationId: listUploads
+      tags: [uploads]
+      summary: List all uploads (authenticated)
+      responses:
+        "200":
+          description: List of uploads
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Upload"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createUpload
+      tags: [uploads]
+      summary: Submit new content upload (authenticated)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUploadRequest"
+      responses:
+        "201":
+          description: Upload created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Upload"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +194,144 @@ components:
           type: string
       required:
         - status
-
+    SectionWithContent:
+      type: object
+      properties:
+        id:
+          type: integer
+        slug:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        displayOrder:
+          type: integer
+        bodyMarkdown:
+          type: string
+        keyInsights:
+          type: array
+          items:
+            type: string
+        lastUpdated:
+          type: string
+          format: date-time
+      required:
+        - id
+        - slug
+        - title
+        - description
+        - displayOrder
+        - bodyMarkdown
+        - keyInsights
+        - lastUpdated
+    SectionVersion:
+      type: object
+      properties:
+        id:
+          type: integer
+        sectionId:
+          type: integer
+        bodyMarkdown:
+          type: string
+        keyInsights:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        createdByUploadId:
+          type: integer
+          nullable: true
+      required:
+        - id
+        - sectionId
+        - bodyMarkdown
+        - keyInsights
+        - createdAt
+    LoginRequest:
+      type: object
+      properties:
+        password:
+          type: string
+      required:
+        - password
+    LoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success
+        - message
+    AuthStatus:
+      type: object
+      properties:
+        authenticated:
+          type: boolean
+      required:
+        - authenticated
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+    Upload:
+      type: object
+      properties:
+        id:
+          type: integer
+        contributorName:
+          type: string
+          nullable: true
+        contentType:
+          type: string
+        targetSections:
+          type: array
+          items:
+            type: string
+        rawText:
+          type: string
+        filePath:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, processed, error]
+        createdAt:
+          type: string
+          format: date-time
+        processedAt:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - id
+        - contentType
+        - targetSections
+        - rawText
+        - status
+        - createdAt
+    CreateUploadRequest:
+      type: object
+      properties:
+        contributorName:
+          type: string
+        contentType:
+          type: string
+          enum: [whitepaper, case_study, market_data, regulation_update, trend_insight]
+        targetSections:
+          type: array
+          items:
+            type: string
+        rawText:
+          type: string
+      required:
+        - contentType
+        - targetSections
+        - rawText

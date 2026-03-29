@@ -91,6 +91,44 @@ Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used b
 
 Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
 
+### `artifacts/report` (`@workspace/report`)
+
+React + Vite frontend for the "State of AI in Hong Kong Marketing Industry" report. Dark-mode editorial UI with neon cyan/magenta accents.
+
+- Routes: `/` (public report), `/admin/login` (admin login), `/admin` (contributor dashboard)
+- Uses wouter for routing, Framer Motion for animations, react-markdown for content rendering
+- Custom hooks: `useAuth`, `useSections`, `useSectionVersions`, `useUploads`, `useSubmitUpload`
+- Depends on: `@workspace/api-client-react`
+
 ### `scripts` (`@workspace/scripts`)
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+
+- `seed` — seeds 8 report sections with key insights from the HK AI marketing PDF
+
+## Application: State of AI in HK Marketing
+
+### Database Schema
+- `sections` — Report sections (slug, title, bodyMarkdown, keyInsights[], displayOrder, currentVersionId)
+- `section_versions` — Version history for each section (bodyMarkdown, keyInsights[], createdByUploadId)
+- `uploads` — Contributor data submissions (contributorName, contentType, targetSections[], rawText, status)
+
+### Auth
+- Password-protected admin area using `ADMIN_PASSWORD` env var (set to `hkai2026admin`)
+- Session tokens: cryptographically random 64-char hex strings stored server-side in memory
+- httpOnly cookies with sameSite=lax, secure in production
+
+### API Routes
+- `GET /api/sections` — public, lists all sections
+- `GET /api/sections/:slug` — public, single section
+- `GET /api/sections/:id/versions` — auth required, version history
+- `POST /api/auth/login` — authenticate with password
+- `POST /api/auth/logout` — invalidate session
+- `GET /api/auth/me` — check auth status
+- `GET /api/uploads` — auth required, list uploads
+- `POST /api/uploads` — auth required, submit data for AI processing
+
+### Mocked AI Service
+- Located at `artifacts/api-server/src/lib/ai-service.ts`
+- Abstracted interface ready for future LLM integration
+- Currently generates mock summaries and insights from uploaded content

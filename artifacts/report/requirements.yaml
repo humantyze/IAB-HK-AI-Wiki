@@ -1,0 +1,20 @@
+packages:
+  "framer-motion": "Animations and page transitions"
+  "react-markdown": "Rendering markdown content in report sections"
+  "recharts": "Data visualization placeholders"
+  "date-fns": "Date formatting"
+  "clsx": "Class merging"
+  "tailwind-merge": "Class merging"
+  "react-hook-form": "Form management"
+  "@hookform/resolvers": "Zod validation for forms"
+
+images:
+  - path: "artifacts/report/public/images/hero-bg.png"
+    description: "Dark moody futuristic Hong Kong cityscape at night with subtle cyan and magenta neon lights, cinematic lighting, editorial style, abstract grid overlays, high-end photography"
+    aspect_ratio: "16:9"
+  - path: "artifacts/report/public/images/abstract-neon.png"
+    description: "Abstract geometric shapes with glowing neon cyan and magenta outlines on a pitch black background, minimalist futuristic aesthetic"
+    aspect_ratio: "16:9"
+
+notes:
+  - "Using generated Orval React Query hooks from @workspace/api-client-react"

@@ -14,3 +14,114 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * @summary List all report sections with current version
+ */
+export const ListSectionsResponseItem = zod.object({
+  id: zod.number(),
+  slug: zod.string(),
+  title: zod.string(),
+  description: zod.string(),
+  displayOrder: zod.number(),
+  bodyMarkdown: zod.string(),
+  keyInsights: zod.array(zod.string()),
+  lastUpdated: zod.coerce.date(),
+});
+export const ListSectionsResponse = zod.array(ListSectionsResponseItem);
+
+/**
+ * @summary Get a single section by slug
+ */
+export const GetSectionBySlugParams = zod.object({
+  slug: zod.coerce.string(),
+});
+
+export const GetSectionBySlugResponse = zod.object({
+  id: zod.number(),
+  slug: zod.string(),
+  title: zod.string(),
+  description: zod.string(),
+  displayOrder: zod.number(),
+  bodyMarkdown: zod.string(),
+  keyInsights: zod.array(zod.string()),
+  lastUpdated: zod.coerce.date(),
+});
+
+/**
+ * @summary List version history for a section (authenticated)
+ */
+export const ListSectionVersionsParams = zod.object({
+  sectionId: zod.coerce.number(),
+});
+
+export const ListSectionVersionsResponseItem = zod.object({
+  id: zod.number(),
+  sectionId: zod.number(),
+  bodyMarkdown: zod.string(),
+  keyInsights: zod.array(zod.string()),
+  createdAt: zod.coerce.date(),
+  createdByUploadId: zod.number().nullish(),
+});
+export const ListSectionVersionsResponse = zod.array(
+  ListSectionVersionsResponseItem,
+);
+
+/**
+ * @summary Authenticate with admin password
+ */
+export const LoginBody = zod.object({
+  password: zod.string(),
+});
+
+export const LoginResponse = zod.object({
+  success: zod.boolean(),
+  message: zod.string(),
+});
+
+/**
+ * @summary Log out
+ */
+export const LogoutResponse = zod.object({
+  success: zod.boolean(),
+  message: zod.string(),
+});
+
+/**
+ * @summary Check if currently authenticated
+ */
+export const CheckAuthResponse = zod.object({
+  authenticated: zod.boolean(),
+});
+
+/**
+ * @summary List all uploads (authenticated)
+ */
+export const ListUploadsResponseItem = zod.object({
+  id: zod.number(),
+  contributorName: zod.string().nullish(),
+  contentType: zod.string(),
+  targetSections: zod.array(zod.string()),
+  rawText: zod.string(),
+  filePath: zod.string().nullish(),
+  status: zod.enum(["pending", "processed", "error"]),
+  createdAt: zod.coerce.date(),
+  processedAt: zod.coerce.date().nullish(),
+});
+export const ListUploadsResponse = zod.array(ListUploadsResponseItem);
+
+/**
+ * @summary Submit new content upload (authenticated)
+ */
+export const CreateUploadBody = zod.object({
+  contributorName: zod.string().optional(),
+  contentType: zod.enum([
+    "whitepaper",
+    "case_study",
+    "market_data",
+    "regulation_update",
+    "trend_insight",
+  ]),
+  targetSections: zod.array(zod.string()),
+  rawText: zod.string(),
+});

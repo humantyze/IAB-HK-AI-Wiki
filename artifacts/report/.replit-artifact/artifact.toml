@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "State of AI in HK Marketing"
+version = "1.0.0"
+id = "artifacts/report"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20970
+
+[services.development]
+run = "pnpm --filter @workspace/report run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/report", "run", "build" ]
+publicDir = "artifacts/report/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20970"
+BASE_PATH = "/"

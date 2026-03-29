@@ -5,18 +5,31 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { HealthStatus } from "./api.schemas";
+import type {
+  AuthStatus,
+  CreateUploadRequest,
+  ErrorResponse,
+  HealthStatus,
+  LoginRequest,
+  LoginResponse,
+  SectionVersion,
+  SectionWithContent,
+  Upload,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -99,3 +112,643 @@ export function useHealthCheck<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary List all report sections with current version
+ */
+export const getListSectionsUrl = () => {
+  return `/api/sections`;
+};
+
+export const listSections = async (
+  options?: RequestInit,
+): Promise<SectionWithContent[]> => {
+  return customFetch<SectionWithContent[]>(getListSectionsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSectionsQueryKey = () => {
+  return [`/api/sections`] as const;
+};
+
+export const getListSectionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSections>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listSections>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListSectionsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listSections>>> = ({
+    signal,
+  }) => listSections({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSections>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSectionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSections>>
+>;
+export type ListSectionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all report sections with current version
+ */
+
+export function useListSections<
+  TData = Awaited<ReturnType<typeof listSections>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listSections>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSectionsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get a single section by slug
+ */
+export const getGetSectionBySlugUrl = (slug: string) => {
+  return `/api/sections/${slug}`;
+};
+
+export const getSectionBySlug = async (
+  slug: string,
+  options?: RequestInit,
+): Promise<SectionWithContent> => {
+  return customFetch<SectionWithContent>(getGetSectionBySlugUrl(slug), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSectionBySlugQueryKey = (slug: string) => {
+  return [`/api/sections/${slug}`] as const;
+};
+
+export const getGetSectionBySlugQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSectionBySlug>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  slug: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSectionBySlug>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSectionBySlugQueryKey(slug);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getSectionBySlug>>
+  > = ({ signal }) => getSectionBySlug(slug, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!slug,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSectionBySlug>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSectionBySlugQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSectionBySlug>>
+>;
+export type GetSectionBySlugQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get a single section by slug
+ */
+
+export function useGetSectionBySlug<
+  TData = Awaited<ReturnType<typeof getSectionBySlug>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  slug: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getSectionBySlug>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSectionBySlugQueryOptions(slug, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List version history for a section (authenticated)
+ */
+export const getListSectionVersionsUrl = (sectionId: number) => {
+  return `/api/sections/${sectionId}/versions`;
+};
+
+export const listSectionVersions = async (
+  sectionId: number,
+  options?: RequestInit,
+): Promise<SectionVersion[]> => {
+  return customFetch<SectionVersion[]>(getListSectionVersionsUrl(sectionId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSectionVersionsQueryKey = (sectionId: number) => {
+  return [`/api/sections/${sectionId}/versions`] as const;
+};
+
+export const getListSectionVersionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSectionVersions>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  sectionId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSectionVersions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListSectionVersionsQueryKey(sectionId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listSectionVersions>>
+  > = ({ signal }) =>
+    listSectionVersions(sectionId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!sectionId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSectionVersions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSectionVersionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSectionVersions>>
+>;
+export type ListSectionVersionsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary List version history for a section (authenticated)
+ */
+
+export function useListSectionVersions<
+  TData = Awaited<ReturnType<typeof listSectionVersions>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  sectionId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSectionVersions>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSectionVersionsQueryOptions(sectionId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Authenticate with admin password
+ */
+export const getLoginUrl = () => {
+  return `/api/auth/login`;
+};
+
+export const login = async (
+  loginRequest: LoginRequest,
+  options?: RequestInit,
+): Promise<LoginResponse> => {
+  return customFetch<LoginResponse>(getLoginUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(loginRequest),
+  });
+};
+
+export const getLoginMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof login>>,
+    TError,
+    { data: BodyType<LoginRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof login>>,
+  TError,
+  { data: BodyType<LoginRequest> },
+  TContext
+> => {
+  const mutationKey = ["login"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof login>>,
+    { data: BodyType<LoginRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return login(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type LoginMutationResult = NonNullable<
+  Awaited<ReturnType<typeof login>>
+>;
+export type LoginMutationBody = BodyType<LoginRequest>;
+export type LoginMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Authenticate with admin password
+ */
+export const useLogin = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof login>>,
+    TError,
+    { data: BodyType<LoginRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof login>>,
+  TError,
+  { data: BodyType<LoginRequest> },
+  TContext
+> => {
+  return useMutation(getLoginMutationOptions(options));
+};
+
+/**
+ * @summary Log out
+ */
+export const getLogoutUrl = () => {
+  return `/api/auth/logout`;
+};
+
+export const logout = async (options?: RequestInit): Promise<LoginResponse> => {
+  return customFetch<LoginResponse>(getLogoutUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getLogoutMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof logout>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof logout>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["logout"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof logout>>,
+    void
+  > = () => {
+    return logout(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type LogoutMutationResult = NonNullable<
+  Awaited<ReturnType<typeof logout>>
+>;
+
+export type LogoutMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Log out
+ */
+export const useLogout = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof logout>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof logout>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getLogoutMutationOptions(options));
+};
+
+/**
+ * @summary Check if currently authenticated
+ */
+export const getCheckAuthUrl = () => {
+  return `/api/auth/me`;
+};
+
+export const checkAuth = async (options?: RequestInit): Promise<AuthStatus> => {
+  return customFetch<AuthStatus>(getCheckAuthUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getCheckAuthQueryKey = () => {
+  return [`/api/auth/me`] as const;
+};
+
+export const getCheckAuthQueryOptions = <
+  TData = Awaited<ReturnType<typeof checkAuth>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof checkAuth>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getCheckAuthQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof checkAuth>>> = ({
+    signal,
+  }) => checkAuth({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof checkAuth>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type CheckAuthQueryResult = NonNullable<
+  Awaited<ReturnType<typeof checkAuth>>
+>;
+export type CheckAuthQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Check if currently authenticated
+ */
+
+export function useCheckAuth<
+  TData = Awaited<ReturnType<typeof checkAuth>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof checkAuth>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getCheckAuthQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List all uploads (authenticated)
+ */
+export const getListUploadsUrl = () => {
+  return `/api/uploads`;
+};
+
+export const listUploads = async (options?: RequestInit): Promise<Upload[]> => {
+  return customFetch<Upload[]>(getListUploadsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListUploadsQueryKey = () => {
+  return [`/api/uploads`] as const;
+};
+
+export const getListUploadsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listUploads>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listUploads>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListUploadsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listUploads>>> = ({
+    signal,
+  }) => listUploads({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listUploads>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListUploadsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listUploads>>
+>;
+export type ListUploadsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary List all uploads (authenticated)
+ */
+
+export function useListUploads<
+  TData = Awaited<ReturnType<typeof listUploads>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listUploads>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListUploadsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Submit new content upload (authenticated)
+ */
+export const getCreateUploadUrl = () => {
+  return `/api/uploads`;
+};
+
+export const createUpload = async (
+  createUploadRequest: CreateUploadRequest,
+  options?: RequestInit,
+): Promise<Upload> => {
+  return customFetch<Upload>(getCreateUploadUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createUploadRequest),
+  });
+};
+
+export const getCreateUploadMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createUpload>>,
+    TError,
+    { data: BodyType<CreateUploadRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createUpload>>,
+  TError,
+  { data: BodyType<CreateUploadRequest> },
+  TContext
+> => {
+  const mutationKey = ["createUpload"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createUpload>>,
+    { data: BodyType<CreateUploadRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createUpload(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateUploadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createUpload>>
+>;
+export type CreateUploadMutationBody = BodyType<CreateUploadRequest>;
+export type CreateUploadMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Submit new content upload (authenticated)
+ */
+export const useCreateUpload = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createUpload>>,
+    TError,
+    { data: BodyType<CreateUploadRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createUpload>>,
+  TError,
+  { data: BodyType<CreateUploadRequest> },
+  TContext
+> => {
+  return useMutation(getCreateUploadMutationOptions(options));
+};
