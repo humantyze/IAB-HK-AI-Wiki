@@ -10,50 +10,36 @@ import { requireAuth } from "../middlewares/auth";
 const router: IRouter = Router();
 
 router.get("/sections", async (_req, res) => {
-  const sections = await db
+  const rows = await db
     .select({
       id: sectionsTable.id,
       slug: sectionsTable.slug,
       title: sectionsTable.title,
       description: sectionsTable.description,
       displayOrder: sectionsTable.displayOrder,
-      currentVersionId: sectionsTable.currentVersionId,
+      bodyMarkdown: sectionVersionsTable.bodyMarkdown,
+      keyInsights: sectionVersionsTable.keyInsights,
+      versionCreatedAt: sectionVersionsTable.createdAt,
     })
     .from(sectionsTable)
+    .leftJoin(
+      sectionVersionsTable,
+      eq(sectionsTable.currentVersionId, sectionVersionsTable.id),
+    )
     .orderBy(asc(sectionsTable.displayOrder));
 
-  const result = [];
-  for (const section of sections) {
-    let bodyMarkdown = "";
-    let keyInsights: string[] = [];
-    let lastUpdated = new Date().toISOString();
-
-    if (section.currentVersionId) {
-      const [version] = await db
-        .select()
-        .from(sectionVersionsTable)
-        .where(eq(sectionVersionsTable.id, section.currentVersionId))
-        .limit(1);
-      if (version) {
-        bodyMarkdown = version.bodyMarkdown;
-        keyInsights = (version.keyInsights as string[]) || [];
-        lastUpdated = version.createdAt.toISOString();
-      }
-    }
-
-    result.push({
-      id: section.id,
-      slug: section.slug,
-      title: section.title,
-      description: section.description,
-      displayOrder: section.displayOrder,
-      bodyMarkdown,
-      keyInsights,
-      lastUpdated,
-    });
-  }
-
-  res.json(result);
+  res.json(
+    rows.map((row) => ({
+      id: row.id,
+      slug: row.slug,
+      title: row.title,
+      description: row.description,
+      displayOrder: row.displayOrder,
+      bodyMarkdown: row.bodyMarkdown ?? "",
+      keyInsights: (row.keyInsights as string[]) ?? [],
+      lastUpdated: row.versionCreatedAt?.toISOString() ?? new Date().toISOString(),
+    })),
+  );
 });
 
 router.get("/sections/:slug", async (req, res) => {
