@@ -26,12 +26,10 @@ app.use(
     },
   }),
 );
-app.use(cors({
-  credentials: true,
-  origin: process.env.NODE_ENV === "production"
-    ? process.env.CORS_ORIGIN || true
-    : true,
-}));
+const corsOrigin = process.env.NODE_ENV === "production"
+  ? process.env.CORS_ORIGIN || false
+  : true;
+app.use(cors({ credentials: true, origin: corsOrigin }));
 app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
