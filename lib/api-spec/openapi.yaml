@@ -219,6 +219,19 @@ components:
           type: string
       required:
         - status
+    ChartDataPoint:
+      type: object
+      properties:
+        label:
+          type: string
+        value:
+          type: number
+        unit:
+          type: string
+      required:
+        - label
+        - value
+        - unit
     SectionWithContent:
       type: object
       properties:
@@ -238,6 +251,10 @@ components:
           type: array
           items:
             type: string
+        chartData:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChartDataPoint"
         lastUpdated:
           type: string
           format: date-time
@@ -249,6 +266,7 @@ components:
         - displayOrder
         - bodyMarkdown
         - keyInsights
+        - chartData
         - lastUpdated
     SectionVersion:
       type: object
