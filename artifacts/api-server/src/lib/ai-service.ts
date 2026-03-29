@@ -73,7 +73,7 @@ function buildImagePrompt(sectionSlug: string, keyInsights: string[]): string {
   );
 }
 
-async function generateSectionImage(
+export async function generateSectionImage(
   sectionSlug: string,
   keyInsights: string[],
 ): Promise<string | null> {

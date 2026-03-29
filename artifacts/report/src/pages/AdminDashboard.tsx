@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
 import { Link, useLocation } from "wouter";
-import { LogOut, Upload as UploadIcon, History, GitBranch, ShieldAlert, Paperclip, X } from "lucide-react";
+import { LogOut, Upload as UploadIcon, History, GitBranch, ShieldAlert, Paperclip, X, ImageIcon } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
 import { useSections, useSectionVersions } from "@/hooks/use-sections";
@@ -39,6 +39,7 @@ export default function AdminDashboard() {
   const { data: versions } = useSectionVersions(selectedSectionId ?? 0);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [generatingImages, setGeneratingImages] = useState(false);
 
   const form = useForm<z.infer<typeof uploadSchema>>({
     resolver: zodResolver(uploadSchema),
@@ -76,6 +77,25 @@ export default function AdminDashboard() {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Upload failed";
       toast({ title: "Transmission Failed", description: message, variant: "destructive" });
+    }
+  };
+
+  const handleGenerateImages = async () => {
+    setGeneratingImages(true);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/admin/generate-images`, { method: "POST", credentials: "include" });
+      const data = await res.json() as { generated: number; failed: number; message: string };
+      if (res.ok) {
+        toast({ title: "Image Generation Complete", description: data.message });
+      } else {
+        toast({ title: "Generation Failed", description: String((data as { error?: string }).error ?? data.message), variant: "destructive" });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Request failed";
+      toast({ title: "Generation Failed", description: message, variant: "destructive" });
+    } finally {
+      setGeneratingImages(false);
     }
   };
 
@@ -341,7 +361,22 @@ export default function AdminDashboard() {
               <div className="flex flex-col lg:flex-row h-full min-h-[700px]">
                 {/* Sidebar within card */}
                 <div className="w-full lg:w-80 border-r border-border/30 bg-background/20 p-8">
-                  <h4 className="font-display tracking-[0.2em] text-[10px] uppercase text-muted-foreground mb-6">Select Vector</h4>
+                  <div className="mb-6">
+                    <h4 className="font-display tracking-[0.2em] text-[10px] uppercase text-muted-foreground mb-4">Select Vector</h4>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGenerateImages}
+                      disabled={generatingImages}
+                      className="w-full border-accent/30 text-accent hover:bg-accent/10 font-display uppercase tracking-widest text-[10px] h-10"
+                    >
+                      <ImageIcon className="w-3 h-3 mr-2" />
+                      {generatingImages ? "Generating… (may take a minute)" : "Generate Section Images"}
+                    </Button>
+                    <p className="text-[10px] text-muted-foreground/50 mt-2 leading-snug">
+                      Generates AI illustrations for all sections that don't have an image yet.
+                    </p>
+                  </div>
                   <div className="space-y-3">
                     {sections?.sort((a,b) => a.displayOrder - b.displayOrder).map((sec) => (
                       <button

@@ -1,11 +1,13 @@
 import { Router, type IRouter } from "express";
-import { eq, asc, desc } from "drizzle-orm";
+import { eq, asc, desc, isNull } from "drizzle-orm";
 import { db, sectionsTable, sectionVersionsTable } from "@workspace/db";
 import {
   GetSectionBySlugParams,
   ListSectionVersionsParams,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
+import { generateSectionImage } from "../lib/ai-service";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
@@ -114,6 +116,55 @@ router.get("/sections/:sectionId/versions", requireAuth, async (req, res) => {
       createdByUploadId: v.createdByUploadId,
     })),
   );
+});
+
+router.post("/admin/generate-images", requireAuth, async (_req, res) => {
+  const rows = await db
+    .select({
+      sectionSlug: sectionsTable.slug,
+      versionId: sectionVersionsTable.id,
+      keyInsights: sectionVersionsTable.keyInsights,
+    })
+    .from(sectionsTable)
+    .innerJoin(
+      sectionVersionsTable,
+      eq(sectionsTable.currentVersionId, sectionVersionsTable.id),
+    )
+    .where(isNull(sectionVersionsTable.imageUrl));
+
+  if (rows.length === 0) {
+    res.json({ generated: 0, failed: 0, skipped: 0, message: "All sections already have images." });
+    return;
+  }
+
+  let generated = 0;
+  let failed = 0;
+
+  for (const row of rows) {
+    const keyInsights = (row.keyInsights as string[]) ?? [];
+    try {
+      const imageUrl = await generateSectionImage(row.sectionSlug, keyInsights);
+      if (imageUrl) {
+        await db
+          .update(sectionVersionsTable)
+          .set({ imageUrl })
+          .where(eq(sectionVersionsTable.id, row.versionId));
+        generated++;
+      } else {
+        failed++;
+      }
+    } catch (err) {
+      logger.error({ err, sectionSlug: row.sectionSlug }, "Backfill image generation failed");
+      failed++;
+    }
+  }
+
+  res.json({
+    generated,
+    failed,
+    skipped: 0,
+    message: `Generated ${generated} image(s); ${failed} failed.`,
+  });
 });
 
 export default router;
