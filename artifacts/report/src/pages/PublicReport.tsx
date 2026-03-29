@@ -100,7 +100,7 @@ export default function PublicReport() {
                 document.getElementById(`section-${sortedSections[0]?.slug}`)?.scrollIntoView({ behavior: 'smooth' });
               }}
             >
-              Initialize Sequence <ArrowRight className="ml-3 w-4 h-4" />
+              Access Report <ArrowRight className="ml-3 w-4 h-4" />
             </Button>
           </motion.div>
         </div>
