@@ -114,9 +114,10 @@ Utility scripts package. Each script is a `.ts` file in `src/` with a correspond
 - `uploads` — Contributor data submissions (contributorName, contentType, targetSections[], rawText, status)
 
 ### Auth
-- Password-protected admin area using `ADMIN_PASSWORD` env var (set to `hkai2026admin`)
-- Session tokens: cryptographically random 64-char hex strings stored server-side in memory
+- Password-protected admin area using `ADMIN_PASSWORD` env var (set as Replit secret)
+- Session tokens: cryptographically random, signed with `SESSION_SECRET` via cookie-signature
 - httpOnly cookies with sameSite=lax, secure in production
+- File uploads: multer with type validation (PDF, TXT, CSV, DOCX, XLSX) and 10MB size limit
 
 ### API Routes
 - `GET /api/sections` — public, lists all sections

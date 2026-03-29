@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format } from "date-fns";
 import { Link, useLocation } from "wouter";
-import { LogOut, Upload as UploadIcon, History, GitBranch, ShieldAlert } from "lucide-react";
+import { LogOut, Upload as UploadIcon, History, GitBranch, ShieldAlert, Paperclip, X } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
 import { useSections, useSectionVersions } from "@/hooks/use-sections";
@@ -37,6 +37,8 @@ export default function AdminDashboard() {
 
   const [selectedSectionId, setSelectedSectionId] = useState<number | null>(null);
   const { data: versions } = useSectionVersions(selectedSectionId ?? 0);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<z.infer<typeof uploadSchema>>({
     resolver: zodResolver(uploadSchema),
@@ -66,9 +68,11 @@ export default function AdminDashboard() {
 
   const onSubmit = async (values: z.infer<typeof uploadSchema>) => {
     try {
-      await submitUpload.mutateAsync({ data: values });
+      await submitUpload.mutateAsync({ ...values, file: selectedFile });
       toast({ title: "Transmission Successful", description: "Data packet queued for AI processing engine." });
       form.reset({ targetSections: [], rawText: "", contentType: values.contentType, contributorName: values.contributorName });
+      setSelectedFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (err: any) {
       toast({ title: "Transmission Failed", description: err.message, variant: "destructive" });
     }
@@ -225,6 +229,39 @@ export default function AdminDashboard() {
                         </FormItem>
                       )}
                     />
+
+                    <div>
+                      <label className="font-display tracking-[0.2em] uppercase text-[10px] text-muted-foreground block mb-3">Supplementary File (Optional)</label>
+                      <div className="flex items-center gap-4">
+                        <label className="flex-1 flex items-center gap-3 p-4 border border-dashed border-border/50 rounded-xl bg-background/30 hover:border-primary/30 hover:bg-background/50 transition-all cursor-pointer group">
+                          <Paperclip className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                          <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
+                            {selectedFile ? selectedFile.name : "Attach PDF, TXT, CSV, DOCX, or XLSX (max 10MB)"}
+                          </span>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            className="hidden"
+                            accept=".pdf,.txt,.csv,.docx,.xlsx"
+                            onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+                          />
+                        </label>
+                        {selectedFile && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setSelectedFile(null);
+                              if (fileInputRef.current) fileInputRef.current.value = "";
+                            }}
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
 
                     <div className="flex justify-end pt-4">
                       <Button 
