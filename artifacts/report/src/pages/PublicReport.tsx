@@ -61,7 +61,6 @@ export default function PublicReport() {
           <Menu className="w-6 h-6" />
         </Button>
       </div>
-
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center px-6 lg:px-24 pt-20 lg:pt-0 overflow-hidden">
         <div className="absolute inset-0 z-0">
@@ -105,7 +104,6 @@ export default function PublicReport() {
           </motion.div>
         </div>
       </section>
-
       {/* Main Content Layout */}
       <div className="max-w-[1800px] mx-auto flex flex-col lg:flex-row relative">
         
@@ -118,7 +116,7 @@ export default function PublicReport() {
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
           overflow-y-auto
         `}>
-          <h3 className="font-display font-semibold text-[10px] tracking-[0.3em] text-muted-foreground uppercase mb-10 pl-4">Index / Directory</h3>
+          <h3 className="font-display font-semibold text-[10px] tracking-[0.3em] text-muted-foreground uppercase mb-10 pl-4">Table of Contents</h3>
           <nav className="space-y-2">
             {sortedSections.map((section, idx) => (
               <button
@@ -216,7 +214,6 @@ export default function PublicReport() {
         </main>
 
       </div>
-
       {/* Footer */}
       <footer className="border-t border-border/50 py-16 px-6 relative overflow-hidden bg-card/50">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:2rem_2rem] opacity-50 z-0 pointer-events-none" />
