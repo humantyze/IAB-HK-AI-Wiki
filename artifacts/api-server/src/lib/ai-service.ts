@@ -104,13 +104,11 @@ async function generateSectionImage(
 
     const buffer = Buffer.from(base64, "base64");
     const imagesDir = path.join(process.cwd(), "public", "section-images");
-    if (!fs.existsSync(imagesDir)) {
-      fs.mkdirSync(imagesDir, { recursive: true });
-    }
+    await fs.promises.mkdir(imagesDir, { recursive: true });
 
     const filename = `${sectionSlug}-${Date.now()}.png`;
     const filePath = path.join(imagesDir, filename);
-    fs.writeFileSync(filePath, buffer);
+    await fs.promises.writeFile(filePath, buffer);
 
     return `/api/section-images/${filename}`;
   } catch (err) {
