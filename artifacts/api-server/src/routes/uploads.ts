@@ -2,11 +2,18 @@ import { Router, type IRouter } from "express";
 import { eq, desc } from "drizzle-orm";
 import multer from "multer";
 import path from "path";
+import { z } from "zod";
 import { db, uploadsTable, sectionsTable, sectionVersionsTable } from "@workspace/db";
-import { CreateUploadBody } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
 import { processUpload } from "../lib/ai-service";
 import { logger } from "../lib/logger";
+
+const UploadFormSchema = z.object({
+  contributorName: z.string().optional(),
+  contentType: z.enum(["whitepaper", "case_study", "market_data", "regulation_update", "trend_insight"]),
+  targetSections: z.array(z.string()).min(1, "At least one target section is required"),
+  rawText: z.string().min(1, "Raw text is required"),
+});
 
 const ALLOWED_MIME_TYPES = [
   "application/pdf",
@@ -62,11 +69,13 @@ router.get("/uploads", requireAuth, async (_req, res) => {
 });
 
 router.post("/uploads", requireAuth, upload.single("file"), async (req, res) => {
-  const data = CreateUploadBody.parse(
-    typeof req.body.targetSections === "string"
-      ? { ...req.body, targetSections: JSON.parse(req.body.targetSections) }
-      : req.body,
-  );
+  const rawBody = {
+    ...req.body,
+    targetSections: typeof req.body.targetSections === "string"
+      ? JSON.parse(req.body.targetSections)
+      : req.body.targetSections,
+  };
+  const data = UploadFormSchema.parse(rawBody);
 
   const filePath = req.file ? req.file.filename : null;
 

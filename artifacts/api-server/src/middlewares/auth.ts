@@ -1,6 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
-import { sign, unsign } from "cookie-signature";
 
 const SESSION_COOKIE = "admin_session";
 
@@ -17,11 +16,24 @@ function generateSessionToken(): string {
 }
 
 function signToken(token: string): string {
-  return sign(token, getSecret());
+  const hmac = crypto.createHmac("sha256", getSecret());
+  hmac.update(token);
+  const signature = hmac.digest("base64url");
+  return `${token}.${signature}`;
 }
 
 function verifyToken(signedValue: string): string | false {
-  return unsign(signedValue, getSecret());
+  const dotIndex = signedValue.lastIndexOf(".");
+  if (dotIndex === -1) return false;
+  const token = signedValue.slice(0, dotIndex);
+  const signature = signedValue.slice(dotIndex + 1);
+  const hmac = crypto.createHmac("sha256", getSecret());
+  hmac.update(token);
+  const expected = hmac.digest("base64url");
+  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
+    return false;
+  }
+  return token;
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {

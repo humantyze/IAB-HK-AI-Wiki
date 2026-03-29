@@ -111,7 +111,7 @@ export const ListUploadsResponseItem = zod.object({
 export const ListUploadsResponse = zod.array(ListUploadsResponseItem);
 
 /**
- * @summary Submit new content upload (authenticated)
+ * @summary Submit new content upload (authenticated, multipart)
  */
 export const CreateUploadBody = zod.object({
   contributorName: zod.string().optional(),
@@ -122,6 +122,12 @@ export const CreateUploadBody = zod.object({
     "regulation_update",
     "trend_insight",
   ]),
-  targetSections: zod.array(zod.string()),
+  targetSections: zod.string().describe("JSON-encoded array of section slugs"),
   rawText: zod.string(),
+  file: zod
+    .instanceof(File)
+    .optional()
+    .describe(
+      "Optional supplementary file (PDF, TXT, CSV, DOCX, XLSX, max 10MB)",
+    ),
 });

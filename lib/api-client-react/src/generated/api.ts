@@ -18,7 +18,7 @@ import type {
 
 import type {
   AuthStatus,
-  CreateUploadRequest,
+  CreateUploadBody,
   ErrorResponse,
   HealthStatus,
   LoginRequest,
@@ -668,39 +668,49 @@ export function useListUploads<
 }
 
 /**
- * @summary Submit new content upload (authenticated)
+ * @summary Submit new content upload (authenticated, multipart)
  */
 export const getCreateUploadUrl = () => {
   return `/api/uploads`;
 };
 
 export const createUpload = async (
-  createUploadRequest: CreateUploadRequest,
+  createUploadBody: CreateUploadBody,
   options?: RequestInit,
 ): Promise<Upload> => {
+  const formData = new FormData();
+  if (createUploadBody.contributorName !== undefined) {
+    formData.append(`contributorName`, createUploadBody.contributorName);
+  }
+  formData.append(`contentType`, createUploadBody.contentType);
+  formData.append(`targetSections`, createUploadBody.targetSections);
+  formData.append(`rawText`, createUploadBody.rawText);
+  if (createUploadBody.file !== undefined) {
+    formData.append(`file`, createUploadBody.file);
+  }
+
   return customFetch<Upload>(getCreateUploadUrl(), {
     ...options,
     method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(createUploadRequest),
+    body: formData,
   });
 };
 
 export const getCreateUploadMutationOptions = <
-  TError = ErrorType<ErrorResponse>,
+  TError = ErrorType<ErrorResponse | Upload>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof createUpload>>,
     TError,
-    { data: BodyType<CreateUploadRequest> },
+    { data: BodyType<CreateUploadBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof createUpload>>,
   TError,
-  { data: BodyType<CreateUploadRequest> },
+  { data: BodyType<CreateUploadBody> },
   TContext
 > => {
   const mutationKey = ["createUpload"];
@@ -714,7 +724,7 @@ export const getCreateUploadMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof createUpload>>,
-    { data: BodyType<CreateUploadRequest> }
+    { data: BodyType<CreateUploadBody> }
   > = (props) => {
     const { data } = props ?? {};
 
@@ -727,27 +737,27 @@ export const getCreateUploadMutationOptions = <
 export type CreateUploadMutationResult = NonNullable<
   Awaited<ReturnType<typeof createUpload>>
 >;
-export type CreateUploadMutationBody = BodyType<CreateUploadRequest>;
-export type CreateUploadMutationError = ErrorType<ErrorResponse>;
+export type CreateUploadMutationBody = BodyType<CreateUploadBody>;
+export type CreateUploadMutationError = ErrorType<ErrorResponse | Upload>;
 
 /**
- * @summary Submit new content upload (authenticated)
+ * @summary Submit new content upload (authenticated, multipart)
  */
 export const useCreateUpload = <
-  TError = ErrorType<ErrorResponse>,
+  TError = ErrorType<ErrorResponse | Upload>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof createUpload>>,
     TError,
-    { data: BodyType<CreateUploadRequest> },
+    { data: BodyType<CreateUploadBody> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof createUpload>>,
   TError,
-  { data: BodyType<CreateUploadRequest> },
+  { data: BodyType<CreateUploadBody> },
   TContext
 > => {
   return useMutation(getCreateUploadMutationOptions(options));

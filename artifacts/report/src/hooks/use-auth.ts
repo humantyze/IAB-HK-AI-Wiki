@@ -1,4 +1,4 @@
-import { useCheckAuth, useLogin, useLogout } from "@workspace/api-client-react";
+import { useCheckAuth, useLogin, useLogout, getCheckAuthQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 
@@ -7,13 +7,13 @@ export function useAuth() {
   const [, setLocation] = useLocation();
 
   const authQuery = useCheckAuth({
-    query: { retry: false, staleTime: 1000 * 60 * 5 }
+    query: { queryKey: getCheckAuthQueryKey(), retry: false, staleTime: 1000 * 60 * 5 }
   });
 
   const loginMutation = useLogin({
     mutation: {
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        qc.invalidateQueries({ queryKey: getCheckAuthQueryKey() });
         setLocation("/admin");
       }
     }
@@ -22,7 +22,7 @@ export function useAuth() {
   const logoutMutation = useLogout({
     mutation: {
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        qc.invalidateQueries({ queryKey: getCheckAuthQueryKey() });
         setLocation("/admin/login");
       }
     }

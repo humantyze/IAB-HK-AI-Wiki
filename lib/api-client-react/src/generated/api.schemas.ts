@@ -83,3 +83,24 @@ export interface CreateUploadRequest {
   targetSections: string[];
   rawText: string;
 }
+
+export type CreateUploadBodyContentType =
+  (typeof CreateUploadBodyContentType)[keyof typeof CreateUploadBodyContentType];
+
+export const CreateUploadBodyContentType = {
+  whitepaper: "whitepaper",
+  case_study: "case_study",
+  market_data: "market_data",
+  regulation_update: "regulation_update",
+  trend_insight: "trend_insight",
+} as const;
+
+export type CreateUploadBody = {
+  contributorName?: string;
+  contentType: CreateUploadBodyContentType;
+  /** JSON-encoded array of section slugs */
+  targetSections: string;
+  rawText: string;
+  /** Optional supplementary file (PDF, TXT, CSV, DOCX, XLSX, max 10MB) */
+  file?: Blob;
+};

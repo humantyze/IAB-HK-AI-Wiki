@@ -1,2 +1,14 @@
 export * from "./generated/api";
-export * from "./generated/types";
+export {
+  type AuthStatus,
+  CreateUploadBodyContentType,
+  type CreateUploadRequest,
+  CreateUploadRequestContentType,
+  type ErrorResponse,
+  type HealthStatus,
+  type LoginRequest,
+  type SectionVersion,
+  type SectionWithContent,
+  type Upload,
+  UploadStatus,
+} from "./generated/types";

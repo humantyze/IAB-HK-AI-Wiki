@@ -7,6 +7,8 @@
  */
 
 export * from "./authStatus";
+export * from "./createUploadBody";
+export * from "./createUploadBodyContentType";
 export * from "./createUploadRequest";
 export * from "./createUploadRequestContentType";
 export * from "./errorResponse";

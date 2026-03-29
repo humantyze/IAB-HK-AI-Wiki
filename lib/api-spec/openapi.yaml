@@ -165,13 +165,32 @@ paths:
     post:
       operationId: createUpload
       tags: [uploads]
-      summary: Submit new content upload (authenticated)
+      summary: Submit new content upload (authenticated, multipart)
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
-              $ref: "#/components/schemas/CreateUploadRequest"
+              type: object
+              properties:
+                contributorName:
+                  type: string
+                contentType:
+                  type: string
+                  enum: [whitepaper, case_study, market_data, regulation_update, trend_insight]
+                targetSections:
+                  type: string
+                  description: JSON-encoded array of section slugs
+                rawText:
+                  type: string
+                file:
+                  type: string
+                  format: binary
+                  description: Optional supplementary file (PDF, TXT, CSV, DOCX, XLSX, max 10MB)
+              required:
+                - contentType
+                - targetSections
+                - rawText
       responses:
         "201":
           description: Upload created
@@ -185,6 +204,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Processing error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Upload"
 components:
   schemas:
     HealthStatus:
