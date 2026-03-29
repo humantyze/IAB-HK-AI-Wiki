@@ -92,7 +92,7 @@ function SectionCard({
       {section.imageUrl && (
         <div className="relative w-full h-52 overflow-hidden">
           <img
-            src={section.imageUrl}
+            src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}${section.imageUrl}`}
             alt={`Illustration for ${section.title}`}
             className="w-full h-full object-cover"
             onError={(e) => {
