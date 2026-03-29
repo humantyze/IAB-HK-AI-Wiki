@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, inArray } from "drizzle-orm";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -107,6 +107,19 @@ router.post("/uploads", requireAuth, (req, res, next) => {
     return;
   }
   const data = parseResult.data;
+
+  if (data.targetSections.length > 0) {
+    const existingSections = await db
+      .select({ slug: sectionsTable.slug })
+      .from(sectionsTable)
+      .where(inArray(sectionsTable.slug, data.targetSections));
+    const existingSlugs = new Set(existingSections.map((s) => s.slug));
+    const invalid = data.targetSections.filter((s) => !existingSlugs.has(s));
+    if (invalid.length > 0) {
+      res.status(400).json({ error: `Unknown target sections: ${invalid.join(", ")}` });
+      return;
+    }
+  }
 
   const filePath = req.file ? req.file.filename : null;
 
