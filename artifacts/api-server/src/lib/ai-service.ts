@@ -87,7 +87,7 @@ async function generateSectionImage(
 
   try {
     const { default: OpenAI } = await import("openai");
-    const client = new OpenAI({ apiKey, baseURL: baseUrl });
+    const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 30_000 });
 
     const prompt = buildImagePrompt(sectionSlug, keyInsights);
     const response = await client.images.generate({
