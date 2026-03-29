@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { format } from "date-fns";
-import { ArrowRight, ChevronRight, Menu } from "lucide-react";
+import { ArrowRight, ChevronRight, Menu, Lock } from "lucide-react";
 import { useSections } from "@/hooks/use-sections";
 import { Button } from "@/components/ui/button";
 import { ChartPlaceholder } from "@/components/ChartPlaceholder";
@@ -92,15 +92,24 @@ export default function PublicReport() {
               An avant-garde exploration of artificial intelligence adoption, transformational use cases, and the evolving regulatory landscape shaping the future of digital experiences in the Greater Bay Area.
             </p>
             
-            <Button 
-              size="lg" 
-              className="h-14 px-8 font-display uppercase tracking-[0.15em] text-sm rounded-none border border-primary/50 bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground transition-all duration-500 shadow-[0_0_20px_rgba(0,240,255,0.15)] hover:shadow-[0_0_40px_rgba(0,240,255,0.4)]"
-              onClick={() => {
-                document.getElementById(`section-${sortedSections[0]?.slug}`)?.scrollIntoView({ behavior: 'smooth' });
-              }}
-            >
-              Access Report <ArrowRight className="ml-3 w-4 h-4" />
-            </Button>
+            <div className="flex items-center gap-6">
+              <Button 
+                size="lg" 
+                className="h-14 px-8 font-display uppercase tracking-[0.15em] text-sm rounded-none border border-primary/50 bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground transition-all duration-500 shadow-[0_0_20px_rgba(0,240,255,0.15)] hover:shadow-[0_0_40px_rgba(0,240,255,0.4)]"
+                onClick={() => {
+                  document.getElementById(`section-${sortedSections[0]?.slug}`)?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              >
+                Access Report <ArrowRight className="ml-3 w-4 h-4" />
+              </Button>
+
+              <Link href="/admin/login">
+                <span className="group inline-flex items-center gap-2 text-muted-foreground/50 hover:text-primary transition-colors duration-300 cursor-pointer">
+                  <Lock className="w-4 h-4 group-hover:shadow-[0_0_8px_rgba(0,240,255,0.6)] transition-all duration-300" />
+                  <span className="font-display uppercase tracking-[0.2em] text-[10px]">Contributor Access</span>
+                </span>
+              </Link>
+            </div>
           </motion.div>
         </div>
       </section>
