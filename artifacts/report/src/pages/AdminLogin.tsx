@@ -36,7 +36,6 @@ export default function AdminLogin() {
       </div>
       <div className="absolute top-1/4 -left-32 w-[500px] h-[500px] bg-primary/20 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-1/4 -right-32 w-[500px] h-[500px] bg-secondary/20 rounded-full blur-[120px] pointer-events-none" />
-
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -49,7 +48,7 @@ export default function AdminLogin() {
             <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/5 flex items-center justify-center mb-6 border border-primary/20 shadow-[inset_0_0_20px_rgba(0,240,255,0.1)]">
               <Lock className="w-6 h-6 text-primary" />
             </div>
-            <CardTitle className="font-serif text-3xl font-bold tracking-tight text-foreground/90">System Access</CardTitle>
+            <CardTitle className="font-serif text-3xl font-bold tracking-tight text-foreground/90">CONTENT PORTAL</CardTitle>
             <CardDescription className="font-display tracking-[0.2em] uppercase text-[10px] mt-4 text-muted-foreground">
               State of AI Report • Contributor Portal
             </CardDescription>
