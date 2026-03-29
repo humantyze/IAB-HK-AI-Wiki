@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, desc } from "drizzle-orm";
 import { db, sectionsTable, sectionVersionsTable } from "@workspace/db";
 import {
   GetSectionBySlugParams,
@@ -106,7 +106,7 @@ router.get("/sections/:sectionId/versions", requireAuth, async (req, res) => {
     .select()
     .from(sectionVersionsTable)
     .where(eq(sectionVersionsTable.sectionId, Number(sectionId)))
-    .orderBy(asc(sectionVersionsTable.createdAt));
+    .orderBy(desc(sectionVersionsTable.createdAt));
 
   res.json(
     versions.map((v) => ({
