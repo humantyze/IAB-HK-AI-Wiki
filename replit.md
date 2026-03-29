@@ -143,5 +143,5 @@ Utility scripts package. Each script is a `.ts` file in `src/` with a correspond
 
 ### OpenAI Integration
 - Uses Replit AI Integrations proxy (`AI_INTEGRATIONS_OPENAI_BASE_URL`, `AI_INTEGRATIONS_OPENAI_API_KEY`)
-- Server package: `lib/integrations-openai-ai-server` (`@workspace/integrations-openai-ai-server`)
-- Import image functions from `@workspace/integrations-openai-ai-server/image`
+- Image generation is initialized lazily inside the generation function — missing env vars produce a warning log and skip image generation (no crash)
+- The `openai` npm package is a direct dependency of `@workspace/api-server`

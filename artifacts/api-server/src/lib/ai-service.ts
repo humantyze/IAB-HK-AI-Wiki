@@ -1,7 +1,6 @@
 import fs from "fs";
 import path from "path";
 import type { ChartDataPoint } from "@workspace/db";
-import { generateImageBuffer } from "@workspace/integrations-openai-ai-server/image";
 import { logger } from "./logger";
 
 export interface AiProcessingResult {
@@ -78,10 +77,32 @@ async function generateSectionImage(
   sectionSlug: string,
   keyInsights: string[],
 ): Promise<string | null> {
-  try {
-    const prompt = buildImagePrompt(sectionSlug, keyInsights);
-    const buffer = await generateImageBuffer(prompt, "1024x1024");
+  const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
 
+  if (!baseUrl || !apiKey) {
+    logger.warn({ sectionSlug }, "OpenAI env vars not set; skipping image generation");
+    return null;
+  }
+
+  try {
+    const { default: OpenAI } = await import("openai");
+    const client = new OpenAI({ apiKey, baseURL: baseUrl });
+
+    const prompt = buildImagePrompt(sectionSlug, keyInsights);
+    const response = await client.images.generate({
+      model: "gpt-image-1",
+      prompt,
+      size: "1024x1024",
+    });
+
+    const base64 = response.data[0]?.b64_json ?? "";
+    if (!base64) {
+      logger.warn({ sectionSlug }, "Image generation returned empty data");
+      return null;
+    }
+
+    const buffer = Buffer.from(base64, "base64");
     const imagesDir = path.join(process.cwd(), "public", "section-images");
     if (!fs.existsSync(imagesDir)) {
       fs.mkdirSync(imagesDir, { recursive: true });
