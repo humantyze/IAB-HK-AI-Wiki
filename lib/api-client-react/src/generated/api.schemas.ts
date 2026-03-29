@@ -9,6 +9,12 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface ChartDataPoint {
+  label: string;
+  value: number;
+  unit: string;
+}
+
 export interface SectionWithContent {
   id: number;
   slug: string;
@@ -17,6 +23,7 @@ export interface SectionWithContent {
   displayOrder: number;
   bodyMarkdown: string;
   keyInsights: string[];
+  chartData: ChartDataPoint[];
   lastUpdated: string;
 }
 

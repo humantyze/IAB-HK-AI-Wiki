@@ -8,9 +8,16 @@ export const sectionVersionsTable = pgTable("section_versions", {
   sectionId: integer("section_id").notNull().references(() => sectionsTable.id),
   bodyMarkdown: text("body_markdown").notNull(),
   keyInsights: jsonb("key_insights").notNull().$type<string[]>().default([]),
+  chartData: jsonb("chart_data").$type<ChartDataPoint[]>().default([]),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   createdByUploadId: integer("created_by_upload_id"),
 });
+
+export interface ChartDataPoint {
+  label: string;
+  value: number;
+  unit: string;
+}
 
 export const insertSectionVersionSchema = createInsertSchema(sectionVersionsTable).omit({ id: true });
 export type InsertSectionVersion = z.infer<typeof insertSectionVersionSchema>;

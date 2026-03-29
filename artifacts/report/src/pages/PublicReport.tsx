@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import { format } from "date-fns";
-import { ArrowRight, ChevronRight, Menu, Lock } from "lucide-react";
+import { ArrowRight, ChevronRight, Menu, Lock, BarChart3 } from "lucide-react";
 import { useSections } from "@/hooks/use-sections";
 import { Button } from "@/components/ui/button";
 import { ChartPlaceholder } from "@/components/ChartPlaceholder";
@@ -92,7 +92,7 @@ export default function PublicReport() {
 
             With continuous updates from IAB Hong Kong members.</p>
             
-            <div className="flex items-center gap-6">
+            <div className="flex flex-wrap items-center gap-4">
               <Button 
                 size="lg" 
                 className="h-14 px-8 font-display uppercase tracking-[0.15em] text-sm rounded-none border border-primary/50 bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground transition-all duration-500 shadow-[0_0_20px_rgba(0,240,255,0.15)] hover:shadow-[0_0_40px_rgba(0,240,255,0.4)]"
@@ -102,6 +102,16 @@ export default function PublicReport() {
               >
                 Access Report <ArrowRight className="ml-3 w-4 h-4" />
               </Button>
+
+              <Link href="/visual">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="h-14 px-8 font-display uppercase tracking-[0.15em] text-sm rounded-none border border-secondary/50 bg-secondary/5 hover:bg-secondary/15 text-secondary hover:text-secondary transition-all duration-500 shadow-[0_0_20px_rgba(255,0,255,0.08)] hover:shadow-[0_0_40px_rgba(255,0,255,0.25)]"
+                >
+                  <BarChart3 className="mr-3 w-4 h-4" /> Visual Summary
+                </Button>
+              </Link>
 
               <Link href="/admin/login">
                 <span className="group inline-flex items-center gap-2 text-muted-foreground/50 hover:text-primary transition-colors duration-300 cursor-pointer">
