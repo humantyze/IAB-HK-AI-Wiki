@@ -88,9 +88,9 @@ export default function PublicReport() {
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-secondary">HONG KONG</span><br/>
               MARKETING
             </h1>
-            <p className="text-xl md:text-2xl text-muted-foreground font-light max-w-3xl leading-relaxed mb-12">
-              An avant-garde exploration of artificial intelligence adoption, transformational use cases, and the evolving regulatory landscape shaping the future of digital experiences in the Greater Bay Area.
-            </p>
+            <p className="text-xl md:text-2xl text-muted-foreground font-light max-w-3xl leading-relaxed mb-12">A living exploration of AI adoption, transformational use cases, and the evolving regulatory landscape shaping the future of digital experiences in Hong Kong. 
+
+            With continuous updates from IAB Hong Kong members.</p>
             
             <div className="flex items-center gap-6">
               <Button 
