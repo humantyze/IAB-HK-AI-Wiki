@@ -75,14 +75,38 @@ router.get("/uploads", requireAuth, async (_req, res) => {
   );
 });
 
-router.post("/uploads", requireAuth, upload.single("file"), async (req, res) => {
-  const rawBody = {
-    ...req.body,
-    targetSections: typeof req.body.targetSections === "string"
+router.post("/uploads", requireAuth, (req, res, next) => {
+  upload.single("file")(req, res, (err) => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        res.status(400).json({ error: `Upload error: ${err.message}` });
+        return;
+      }
+      res.status(400).json({ error: err.message || "File upload failed" });
+      return;
+    }
+    next();
+  });
+}, async (req, res) => {
+  let targetSections: string[];
+  try {
+    targetSections = typeof req.body.targetSections === "string"
       ? JSON.parse(req.body.targetSections)
-      : req.body.targetSections,
-  };
-  const data = UploadFormSchema.parse(rawBody);
+      : req.body.targetSections;
+  } catch {
+    res.status(400).json({ error: "Invalid targetSections: must be a valid JSON array" });
+    return;
+  }
+
+  const parseResult = UploadFormSchema.safeParse({
+    ...req.body,
+    targetSections,
+  });
+  if (!parseResult.success) {
+    res.status(400).json({ error: "Validation failed", details: parseResult.error.flatten().fieldErrors });
+    return;
+  }
+  const data = parseResult.data;
 
   const filePath = req.file ? req.file.filename : null;
 
