@@ -1,0 +1,157 @@
+Design and build a full-stack web app called **“State of AI in Hong Kong Marketing Industry”**, which acts as a dynamic, living version of a report.
+
+## High-level concept
+
+Build a web app where:
+
+- The main public-facing experience is a visually striking, avant garde, single-page “report” site about the state of AI in Hong Kong’s marketing industry.
+- Vetted contributors, using a password-protected upload area, can upload new content (e.g. text sections, structured data, charts, maybe images).
+- An AI backend processes those uploads and automatically updates and regenerates the report sections, insights, and visualizations.
+- Visitors can navigate different sections of the report (overview, trends, case studies, data and charts, forecasts, glossary, etc.) via an elegant navigation system.
+
+Assume the app will be used by marketing leaders and agencies in Hong Kong.
+
+Use the attached report as the "core" of the content.
+
+## Tech stack and architecture
+
+Choose a modern and simple-to-deploy stack, for example:
+
+- Frontend: React + TypeScript + a modern styling approach (Tailwind CSS or CSS-in-JS). The focus is on unconventional, avant garde layout and typography.
+- Backend: Node.js with an Express or Next.js API layer.
+- Database: A simple persistent store (e.g. SQLite or PostgreSQL) to keep:
+    - Source uploads (raw content, metadata, author, timestamp).
+    - Normalized content sections (by topic, format, and version).
+    - AI-generated summaries, insights, and structure for the report.
+- Authentication: Lightweight password-based access for the upload interface, with the ability to later extend to full user accounts.
+- AI integration: Abstract the AI calls behind a service so I can later plug in any LLM API (e.g. OpenAI, Anthropic, etc.). For now, mock the AI calls with a simple function that transforms text and returns structured sections.
+
+Make sure the project runs in Replit with minimal configuration and includes instructions in the README for setting environment variables (e.g. AI_API_KEY, ADMIN_PASSWORD).
+
+## Core user flows
+
+1. **Public reader experience**
+    - When a visitor lands on the site, they see a hero “cover” for the report: “State of AI in Hong Kong Marketing Industry”.
+    - The report is broken into clearly defined sections, such as:
+        - Executive Overview
+        - Market Context and Macroeconomic Backdrop
+        - Adoption Levels in Hong Kong Marketing Teams
+        - Use Cases and Case Studies (local brands, agencies)
+        - Tools and Platforms Landscape
+        - Regulatory and Ethical Considerations in Hong Kong
+        - Future Scenarios and Forecasts
+        - Data and Methodology
+    - Each section is populated from AI-generated content based on the latest vetted uploads.
+    - Provide a persistent, elegant navigation mechanism:
+        - A left-hand vertical section index OR
+        - A bottom “timeline” / “chapters” bar OR
+        - An experimental navigation pattern (e.g. radial or card-based) as long as it remains usable.
+    - Include subtle transitions and microinteractions (e.g. parallax, soft easing transitions) but keep performance acceptable.
+2. **Password-protected upload experience**
+    - A hidden “Admin / Contributor” entry point, like a small link or icon in the footer (“Contributor Login”).
+    - Clicking it leads to an upload interface protected by a password (use an environment variable for the password).
+    - After login, show a simple dashboard with:
+        - An upload form for:
+            - Content type (e.g. "Whitepaper", “Case Study”, “Market Data”, “Regulation Update”, “Trend Insight”).
+            - Section target(s) (which report section it should influence).
+            - Text content (rich text or markdown; for now you can use a multiline text field).
+            - Optional file upload (PDF, CSV, or image) – implement the UI and backend endpoints, but basic processing of text is enough for the first version.
+        - A list of previous uploads with timestamps and status (e.g. “Processed”, “Pending Review”).
+    - Apply basic security best practices for uploads:
+        - Restrict allowed file types to safe formats (e.g. PDF, CSV, images) and validate mime types.
+        - Enforce a maximum upload size.
+        - Store files outside the public web root and reference them via IDs rather than direct paths.
+3. **AI-driven report update flow**
+    - When a new upload is submitted:
+        - Store the raw content and metadata in the database.
+        - Call an AI-processing service that:
+            - Reads the new content.
+            - Decides which section(s) of the report it affects.
+            - Generates or updates:
+                - Summaries.
+                - Bullet insights or key takeaways (even if they are rendered as paragraphs).
+                - Optional data highlights (e.g. “72% of HK marketers say…” if structured data is present).
+            - This service returns a structured JSON shape, for example:
+                - `sectionId`
+                - `title`
+                - `bodyHtml` or `bodyMarkdown`
+                - `keyInsights[]`
+                - `lastUpdated`
+        - Merge the new AI-generated content into the stored representation of the report sections, preserving a version history.
+    - The public report view always pulls the latest version of each section from the database.
+4. **Versioning and history**
+    - Maintain basic versioning:
+        - Each section has multiple versions, with a “current” flag.
+        - The public report shows only the current version.
+        - In the admin view, allow contributors to see previous versions of a section and who/what update created them (just a simple list with timestamps is fine for now).
+
+## Design and UX requirements
+
+I want the design to be **aesthetically pleasing** and almost avant garde, yet still readable for executives.
+
+- Visual direction:
+    - Think “futuristic editorial magazine” rather than a typical SaaS dashboard.
+    - Use bold typography, asymmetrical layouts, generous white space, and layered elements (e.g. overlapping cards, gradient backgrounds, neon accents).
+    - Play with a Hong Kong visual motif subtly: skyline silhouettes, neon colours, grid overlays, or subtle Cantonese character accents.
+    - Dark-mode default is preferred, but ensure sufficient contrast for readability.
+- Layout and navigation:
+    - The report should feel like a journey:
+        - Section transitions could slide, fade, or scroll-snapped panels.
+        - A mini-map or section index should always be visible or accessible, so users never feel lost.
+    - Include a “Back to Overview” anchor that brings users to the executive summary.
+- Content presentation:
+    - Each section should have:
+        - Title and subtitle.
+        - Last updated timestamp.
+        - Main narrative content.
+        - One or two highlighted “Insights” blocks that visually pop (e.g. coloured pill with a short summary).
+    - If you can, include a basic chart or data visualization placeholder component that can later be wired to real data from uploads.
+
+Please create a coherent design system (colors, typography scale, spacing, border radii, etc.) and implement it consistently across the app.
+
+## Data model and API design
+
+Design a simple but extensible schema, example (you can refine):
+
+- `uploads`:
+    - id
+    - contributorName (string, optional)
+    - contentType (enum/string)
+    - targetSections (array or string)
+    - rawText (text)
+    - filePath (string, optional)
+    - createdAt, processedAt
+    - status (pending/processed/error)
+- `sections`:
+    - id
+    - slug (e.g. “executive-overview”)
+    - title
+    - description
+    - currentVersionId
+- `sectionVersions`:
+    - id
+    - sectionId
+    - body (text / markdown / HTML)
+    - keyInsights (JSON)
+    - createdAt
+    - createdByUploadId (nullable for initial seed)
+
+Create RESTful or simple JSON API endpoints for:
+
+- Getting all sections with their current version for the public report.
+- Getting one section by slug.
+- Creating a new upload (authenticated).
+- Listing uploads (authenticated).
+
+
+## Security and configuration
+
+- Use environment variables for:
+    - ADMIN_PASSWORD
+    - DATABASE_URL (if needed)
+- Implement password-protected access to the upload/admin routes:
+    - A minimal session mechanism or encrypted cookie is enough for now.
+- Protect file uploads:
+    - Validate file type and size.
+    - Never serve raw file paths directly; access via a secure endpoint if needed.
+
