@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Lock } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
 
@@ -45,8 +44,12 @@ export default function AdminLogin() {
         <Card className="bg-card/40 backdrop-blur-2xl border-border/50 shadow-[0_0_50px_rgba(0,0,0,0.5)] rounded-2xl overflow-hidden relative">
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-accent to-secondary" />
           <CardHeader className="text-center pb-8 pt-10">
-            <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/5 flex items-center justify-center mb-6 border border-primary/20 shadow-[inset_0_0_20px_rgba(0,240,255,0.1)]">
-              <Lock className="w-6 h-6 text-primary" />
+            <div className="mx-auto mb-6 flex items-center justify-center">
+              <img
+                src={`${import.meta.env.BASE_URL}images/iabhk-logo.png`}
+                alt="IAB HK"
+                className="h-16 w-auto object-contain"
+              />
             </div>
             <CardTitle className="font-serif text-3xl font-bold tracking-tight text-foreground/90">CONTENT PORTAL</CardTitle>
             <CardDescription className="font-display tracking-[0.2em] uppercase text-[10px] mt-4 text-muted-foreground">
