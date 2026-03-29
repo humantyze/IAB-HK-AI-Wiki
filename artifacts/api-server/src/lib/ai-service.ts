@@ -96,7 +96,7 @@ async function generateSectionImage(
       size: "1024x1024",
     });
 
-    const base64 = response.data[0]?.b64_json ?? "";
+    const base64 = response.data?.[0]?.b64_json ?? "";
     if (!base64) {
       logger.warn({ sectionSlug }, "Image generation returned empty data");
       return null;
