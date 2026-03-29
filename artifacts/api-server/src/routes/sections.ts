@@ -118,7 +118,9 @@ router.get("/sections/:sectionId/versions", requireAuth, async (req, res) => {
   );
 });
 
-router.post("/admin/generate-images", requireAuth, async (_req, res) => {
+router.post("/admin/generate-images", requireAuth, async (req, res) => {
+  const promptExtra = typeof req.body?.promptExtra === "string" ? req.body.promptExtra.trim() : undefined;
+
   const rows = await db
     .select({
       sectionSlug: sectionsTable.slug,
@@ -143,7 +145,7 @@ router.post("/admin/generate-images", requireAuth, async (_req, res) => {
   for (const row of rows) {
     const keyInsights = (row.keyInsights as string[]) ?? [];
     try {
-      const imageUrl = await generateSectionImage(row.sectionSlug, keyInsights);
+      const imageUrl = await generateSectionImage(row.sectionSlug, keyInsights, promptExtra);
       if (imageUrl) {
         await db
           .update(sectionVersionsTable)

@@ -40,6 +40,7 @@ export default function AdminDashboard() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [generatingImages, setGeneratingImages] = useState(false);
+  const [promptExtra, setPromptExtra] = useState("");
 
   const form = useForm<z.infer<typeof uploadSchema>>({
     resolver: zodResolver(uploadSchema),
@@ -84,7 +85,12 @@ export default function AdminDashboard() {
     setGeneratingImages(true);
     try {
       const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
-      const res = await fetch(`${baseUrl}/api/admin/generate-images`, { method: "POST", credentials: "include" });
+      const res = await fetch(`${baseUrl}/api/admin/generate-images`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ promptExtra: promptExtra.trim() || undefined }),
+      });
       const data = await res.json() as { generated: number; failed: number; message: string };
       if (res.ok) {
         toast({ title: "Image Generation Complete", description: data.message });
@@ -373,9 +379,21 @@ export default function AdminDashboard() {
                       <ImageIcon className="w-3 h-3 mr-2" />
                       {generatingImages ? "Generating… (may take a minute)" : "Generate Section Images"}
                     </Button>
-                    <p className="text-[10px] text-muted-foreground/50 mt-2 leading-snug">
-                      Generates AI illustrations for all sections that don't have an image yet.
-                    </p>
+                    <div className="mt-3 space-y-1">
+                      <label className="font-display tracking-[0.2em] text-[10px] uppercase text-muted-foreground/60">
+                        Prompt Addition (Optional)
+                      </label>
+                      <Input
+                        value={promptExtra}
+                        onChange={(e) => setPromptExtra(e.target.value)}
+                        placeholder="e.g. bold, vibrant colors"
+                        disabled={generatingImages}
+                        className="bg-background/50 border-border/50 h-9 rounded-lg text-xs focus-visible:ring-accent/30"
+                      />
+                      <p className="text-[10px] text-muted-foreground/40 leading-snug">
+                        Appended to each section's image prompt.
+                      </p>
+                    </div>
                   </div>
                   <div className="space-y-3">
                     {sections?.sort((a,b) => a.displayOrder - b.displayOrder).map((sec) => (

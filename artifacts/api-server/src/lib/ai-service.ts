@@ -62,12 +62,13 @@ function extractChartData(text: string): ChartDataPoint[] {
   return points.slice(0, 6);
 }
 
-function buildImagePrompt(sectionSlug: string, keyInsights: string[]): string {
+function buildImagePrompt(sectionSlug: string, keyInsights: string[], promptExtra?: string): string {
   const insightSummary = keyInsights.slice(0, 3).join(". ");
   const topic = sectionSlug.replace(/-/g, " ");
+  const extra = promptExtra?.trim() ? ` ${promptExtra.trim()}.` : "";
   return (
     `Flat vector illustration in a futuristic neon-on-dark style. Topic: ${topic} in Hong Kong's AI marketing landscape. ` +
-    `Key themes: ${insightSummary}. ` +
+    `Key themes: ${insightSummary}.${extra} ` +
     `Style: minimal geometric shapes, cyan and violet neon accents on deep dark background, abstract data visualization motifs, ` +
     `no text, no people, no faces. Clean, modern, report-ready.`
   );
@@ -76,6 +77,7 @@ function buildImagePrompt(sectionSlug: string, keyInsights: string[]): string {
 export async function generateSectionImage(
   sectionSlug: string,
   keyInsights: string[],
+  promptExtra?: string,
 ): Promise<string | null> {
   const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
   const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
@@ -89,7 +91,7 @@ export async function generateSectionImage(
     const { default: OpenAI } = await import("openai");
     const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 30_000 });
 
-    const prompt = buildImagePrompt(sectionSlug, keyInsights);
+    const prompt = buildImagePrompt(sectionSlug, keyInsights, promptExtra);
     const response = await client.images.generate({
       model: "gpt-image-1",
       prompt,
