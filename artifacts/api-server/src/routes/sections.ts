@@ -17,13 +17,20 @@ if (!fs.existsSync(sectionImagesDir)) {
   fs.mkdirSync(sectionImagesDir, { recursive: true });
 }
 
-const ALLOWED_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/webp"];
+const ALLOWED_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+type AllowedImageMime = (typeof ALLOWED_IMAGE_MIME_TYPES)[number];
+
+const MIME_TO_EXT: Record<AllowedImageMime, string> = {
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/webp": ".webp",
+};
 
 const imageStorage = multer.diskStorage({
   destination: sectionImagesDir,
   filename: (_req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname).toLowerCase() || ".png";
+    const ext = MIME_TO_EXT[file.mimetype as AllowedImageMime] ?? ".png";
     cb(null, `upload-${uniqueSuffix}${ext}`);
   },
 });
@@ -32,7 +39,7 @@ const imageUpload = multer({
   storage: imageStorage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (ALLOWED_IMAGE_MIME_TYPES.includes(file.mimetype)) {
+    if ((ALLOWED_IMAGE_MIME_TYPES as readonly string[]).includes(file.mimetype)) {
       cb(null, true);
     } else {
       cb(new Error(`File type ${file.mimetype} not allowed. Allowed: PNG, JPEG, WebP`));
@@ -237,11 +244,19 @@ router.post("/admin/sections/:sectionId/upload-image", requireAuth, (req, res, n
   }
 
   const imageUrl = `/api/section-images/${req.file.filename}`;
+  const savedFilePath = path.join(sectionImagesDir, req.file.filename);
 
-  await db
-    .update(sectionVersionsTable)
-    .set({ imageUrl })
-    .where(eq(sectionVersionsTable.id, section.currentVersionId));
+  try {
+    await db
+      .update(sectionVersionsTable)
+      .set({ imageUrl })
+      .where(eq(sectionVersionsTable.id, section.currentVersionId));
+  } catch (err) {
+    fs.unlink(savedFilePath, (unlinkErr) => {
+      if (unlinkErr) logger.warn({ unlinkErr, savedFilePath }, "Failed to clean up uploaded image after DB error");
+    });
+    throw err;
+  }
 
   logger.info({ sectionId, imageUrl }, "Section image uploaded manually");
   res.json({ imageUrl });
