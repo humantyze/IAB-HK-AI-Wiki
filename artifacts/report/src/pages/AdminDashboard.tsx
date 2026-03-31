@@ -174,13 +174,13 @@ export default function AdminDashboard() {
               <div className="font-display text-[10px] uppercase tracking-widest text-secondary/70">Level 3 Access Verified</div>
             </div>
           </div>
-          <div className="flex items-center space-x-6">
-            <Link href="/" className="text-[11px] font-display uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
+          <div className="flex items-center space-x-3 sm:space-x-6">
+            <Link href="/" className="hidden sm:block text-[11px] font-display uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
               View Public Report
             </Link>
-            <div className="w-px h-6 bg-border" />
+            <div className="hidden sm:block w-px h-6 bg-border" />
             <Button variant="ghost" size="sm" onClick={() => logout()} className="text-muted-foreground hover:text-destructive font-display uppercase tracking-widest text-[11px]">
-              <LogOut className="w-3 h-3 mr-2" /> Terminate Session
+              <LogOut className="w-3 h-3 sm:mr-2" /><span className="hidden sm:inline">Terminate Session</span>
             </Button>
           </div>
         </div>
@@ -188,15 +188,15 @@ export default function AdminDashboard() {
 
       <main className="max-w-[1600px] mx-auto px-6 py-12 relative z-10">
         <Tabs defaultValue="upload" className="space-y-8">
-          <TabsList className="bg-card/50 backdrop-blur-md border border-border/50 p-1 rounded-xl h-auto">
-            <TabsTrigger value="upload" className="py-3 px-6 rounded-lg font-display tracking-[0.15em] uppercase text-xs data-[state=active]:bg-primary/10 data-[state=active]:text-primary transition-all">
-              <UploadIcon className="w-4 h-4 mr-3" /> Content
+          <TabsList className="w-full bg-card/50 backdrop-blur-md border border-border/50 p-1 rounded-xl h-auto">
+            <TabsTrigger value="upload" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-[0.15em] uppercase text-xs data-[state=active]:bg-primary/10 data-[state=active]:text-primary transition-all">
+              <UploadIcon className="w-4 h-4 sm:mr-3" /><span className="hidden sm:inline">Content</span>
             </TabsTrigger>
-            <TabsTrigger value="history" className="py-3 px-6 rounded-lg font-display tracking-[0.15em] uppercase text-xs data-[state=active]:bg-secondary/10 data-[state=active]:text-secondary transition-all">
-              <History className="w-4 h-4 mr-3" /> Upload History
+            <TabsTrigger value="history" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-[0.15em] uppercase text-xs data-[state=active]:bg-secondary/10 data-[state=active]:text-secondary transition-all">
+              <History className="w-4 h-4 sm:mr-3" /><span className="hidden sm:inline">Upload History</span>
             </TabsTrigger>
-            <TabsTrigger value="versions" className="py-3 px-6 rounded-lg font-display tracking-[0.15em] uppercase text-xs data-[state=active]:bg-accent/10 data-[state=active]:text-accent transition-all">
-              <GitBranch className="w-4 h-4 mr-3" /> Image Generation
+            <TabsTrigger value="versions" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-[0.15em] uppercase text-xs data-[state=active]:bg-accent/10 data-[state=active]:text-accent transition-all">
+              <GitBranch className="w-4 h-4 sm:mr-3" /><span className="hidden sm:inline">Image Generation</span>
             </TabsTrigger>
           </TabsList>
 
@@ -204,11 +204,11 @@ export default function AdminDashboard() {
           <TabsContent value="upload" className="mt-8 outline-none">
             <Card className="border-primary/20 shadow-[0_10px_50px_rgba(0,240,255,0.03)] bg-card/40 backdrop-blur-md rounded-2xl overflow-hidden">
               <div className="h-1 w-full bg-gradient-to-r from-primary to-transparent" />
-              <CardHeader className="pb-8 pt-10 px-10">
+              <CardHeader className="pb-4 sm:pb-8 pt-6 sm:pt-10 px-4 sm:px-10">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="font-serif text-3xl font-bold">Content Addition Panel</CardTitle>
-                    <CardDescription className="text-base mt-2 font-light">
+                    <CardTitle className="font-serif text-xl sm:text-3xl font-bold">Content Addition Panel</CardTitle>
+                    <CardDescription className="text-sm sm:text-base mt-2 font-light">
                       {phase === "input"
                         ? "Submit intelligence, research, or market data. The AI will analyse the content and suggest which report sections to update."
                         : "Review the AI-generated integration plan below. Approve or remove sections, then confirm to integrate."}
@@ -227,7 +227,7 @@ export default function AdminDashboard() {
                 </div>
               </CardHeader>
 
-              <CardContent className="px-10 pb-10">
+              <CardContent className="px-4 sm:px-10 pb-6 sm:pb-10">
                 {phase === "input" && (
                   <Form {...form}>
                     <form onSubmit={form.handleSubmit(handleAnalyze)} className="space-y-10">
@@ -325,7 +325,7 @@ export default function AdminDashboard() {
                         <Button
                           type="submit"
                           disabled={analyzeUpload.isPending}
-                          className="h-14 px-10 font-display uppercase tracking-[0.2em] text-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl shadow-[0_0_20px_rgba(0,240,255,0.2)] hover:shadow-[0_0_30px_rgba(0,240,255,0.4)] transition-all"
+                          className="w-full sm:w-auto h-14 px-10 font-display uppercase tracking-[0.2em] text-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl shadow-[0_0_20px_rgba(0,240,255,0.2)] hover:shadow-[0_0_30px_rgba(0,240,255,0.4)] transition-all"
                         >
                           {analyzeUpload.isPending
                             ? <><div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-3" />Analysing…</>
@@ -409,7 +409,7 @@ export default function AdminDashboard() {
                     </div>
 
                     {/* Approved count + confirm */}
-                    <div className="flex items-center justify-between pt-4 border-t border-border/30">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-4 border-t border-border/30">
                       <p className="text-xs text-muted-foreground font-light">
                         <span className="text-foreground font-medium">{approvedSlugs.size}</span> of {analysis.suggestions.length} section{analysis.suggestions.length !== 1 ? "s" : ""} approved for integration
                       </p>
@@ -417,7 +417,7 @@ export default function AdminDashboard() {
                         type="button"
                         onClick={handleConfirmIntegration}
                         disabled={submitUpload.isPending || approvedSlugs.size === 0}
-                        className="h-14 px-10 font-display uppercase tracking-[0.2em] text-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl shadow-[0_0_20px_rgba(0,240,255,0.2)] hover:shadow-[0_0_30px_rgba(0,240,255,0.4)] transition-all disabled:opacity-40"
+                        className="w-full sm:w-auto h-14 px-10 font-display uppercase tracking-[0.2em] text-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl shadow-[0_0_20px_rgba(0,240,255,0.2)] hover:shadow-[0_0_30px_rgba(0,240,255,0.4)] transition-all disabled:opacity-40"
                       >
                         {submitUpload.isPending
                           ? <><div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-3" />Integrating…</>
@@ -434,11 +434,11 @@ export default function AdminDashboard() {
           <TabsContent value="history" className="mt-8 outline-none">
             <Card className="border-secondary/20 shadow-[0_10px_50px_rgba(255,0,255,0.03)] bg-card/40 backdrop-blur-md rounded-2xl overflow-hidden">
               <div className="h-1 w-full bg-gradient-to-r from-secondary to-transparent" />
-              <CardHeader className="pb-8 pt-10 px-10">
-                <CardTitle className="font-serif text-3xl font-bold">Processing Log</CardTitle>
+              <CardHeader className="pb-4 sm:pb-8 pt-6 sm:pt-10 px-4 sm:px-10">
+                <CardTitle className="font-serif text-xl sm:text-3xl font-bold">Processing Log</CardTitle>
                 <CardDescription className="text-base mt-2 font-light">Status of all data payloads submitted for AI synthesis.</CardDescription>
               </CardHeader>
-              <CardContent className="px-10 pb-10">
+              <CardContent className="px-4 sm:px-10 pb-6 sm:pb-10">
                 <div className="space-y-6">
                   {uploads?.length === 0 && (
                     <div className="text-center py-20 text-muted-foreground border border-dashed border-border/50 rounded-2xl bg-background/20 font-display tracking-widest uppercase text-xs">
@@ -492,7 +492,7 @@ export default function AdminDashboard() {
             <Card className="border-accent/20 shadow-[0_10px_50px_rgba(0,150,255,0.03)] bg-card/40 backdrop-blur-md rounded-2xl overflow-hidden min-h-[700px]">
               <div className="h-1 w-full bg-gradient-to-r from-accent to-transparent" />
               <div className="flex flex-col lg:flex-row h-full min-h-[700px]">
-                <div className="w-full lg:w-80 border-r border-border/30 bg-background/20 p-8">
+                <div className="w-full lg:w-80 border-r border-border/30 bg-background/20 p-4 sm:p-8">
                   <div className="mb-6">
                     <h4 className="font-display tracking-[0.2em] text-[10px] uppercase text-muted-foreground mb-4">Select Vector</h4>
                     <Button
@@ -536,7 +536,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div className="flex-1 p-8 lg:p-12 overflow-y-auto">
+                <div className="flex-1 p-4 sm:p-8 lg:p-12 overflow-y-auto">
                   {!selectedSectionId ? (
                     <div className="h-full flex flex-col items-center justify-center text-muted-foreground border border-dashed border-border/40 rounded-2xl bg-background/10">
                       <GitBranch className="w-12 h-12 mb-4 opacity-20" />
