@@ -84,9 +84,7 @@ export default function PublicReport() {
               <span className="text-primary/90">March 2026 | Research Report</span>
             </div>
             <h1 className="text-6xl md:text-7xl lg:text-8xl font-serif font-black leading-[1.05] tracking-tighter mb-8 text-foreground/90">
-              STATE OF AI IN<br/>
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-secondary">HONG KONG</span><br/>
-              MARKETING
+              STATE OF AI IN <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-secondary">HONG KONG'S</span> MARKETING INDUSTRY
             </h1>
             <p className="text-xl md:text-2xl text-muted-foreground font-light max-w-3xl leading-relaxed mb-12">A living exploration of AI adoption, transformational use cases, and the evolving regulatory landscape shaping the future of digital experiences in Hong Kong. 
 
