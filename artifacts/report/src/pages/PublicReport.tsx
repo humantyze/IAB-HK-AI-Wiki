@@ -81,7 +81,7 @@ export default function PublicReport() {
           >
             <div className="inline-flex items-center space-x-3 bg-primary/5 border border-primary/30 px-5 py-2 rounded-full text-xs font-display tracking-[0.2em] uppercase mb-8 backdrop-blur-sm">
               <span className="w-2 h-2 rounded-full bg-primary shadow-[0_0_10px_rgba(0,240,255,0.8)] animate-pulse" />
-              <span className="text-primary/90">March 2026 | Research Report</span>
+              <span className="text-primary/90">IAB Hong Kong Web Book</span>
             </div>
             <h1 className="text-6xl md:text-7xl lg:text-8xl font-serif font-black leading-[1.05] tracking-tighter mb-8 text-foreground/90">
               STATE OF AI IN <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-secondary">HONG KONG'S</span> MARKETING INDUSTRY
