@@ -196,7 +196,7 @@ export default function AdminDashboard() {
               <History className="w-4 h-4 mr-3" /> Upload History
             </TabsTrigger>
             <TabsTrigger value="versions" className="py-3 px-6 rounded-lg font-display tracking-[0.15em] uppercase text-xs data-[state=active]:bg-accent/10 data-[state=active]:text-accent transition-all">
-              <GitBranch className="w-4 h-4 mr-3" /> Section Control
+              <GitBranch className="w-4 h-4 mr-3" /> Image Generation
             </TabsTrigger>
           </TabsList>
 
