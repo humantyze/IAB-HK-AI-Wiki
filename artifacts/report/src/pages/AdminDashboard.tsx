@@ -277,7 +277,7 @@ export default function AdminDashboard() {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-muted-foreground">
-                              Raw Intelligence Payload <span className="text-muted-foreground/50 normal-case tracking-normal font-sans text-[11px]">(Optional — attach a file below instead)</span>
+                              Paste text here <span className="text-muted-foreground/50 normal-case tracking-normal font-sans text-[11px]">(Optional — attach a file below instead)</span>
                             </FormLabel>
                             <FormControl>
                               <Textarea
