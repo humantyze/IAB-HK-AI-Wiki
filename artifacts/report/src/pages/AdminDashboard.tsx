@@ -190,7 +190,7 @@ export default function AdminDashboard() {
         <Tabs defaultValue="upload" className="space-y-8">
           <TabsList className="bg-card/50 backdrop-blur-md border border-border/50 p-1 rounded-xl h-auto">
             <TabsTrigger value="upload" className="py-3 px-6 rounded-lg font-display tracking-[0.15em] uppercase text-xs data-[state=active]:bg-primary/10 data-[state=active]:text-primary transition-all">
-              <UploadIcon className="w-4 h-4 mr-3" /> Data Injection
+              <UploadIcon className="w-4 h-4 mr-3" /> Content
             </TabsTrigger>
             <TabsTrigger value="history" className="py-3 px-6 rounded-lg font-display tracking-[0.15em] uppercase text-xs data-[state=active]:bg-secondary/10 data-[state=active]:text-secondary transition-all">
               <History className="w-4 h-4 mr-3" /> Processing Log
