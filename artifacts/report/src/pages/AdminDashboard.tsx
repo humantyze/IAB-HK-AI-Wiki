@@ -250,7 +250,7 @@ export default function AdminDashboard() {
                           name="contentType"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-muted-foreground">Data Classification</FormLabel>
+                              <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-muted-foreground">Type of Content</FormLabel>
                               <Select onValueChange={field.onChange} defaultValue={field.value}>
                                 <FormControl>
                                   <SelectTrigger className="bg-background/50 border-border/50 h-12 rounded-xl focus:ring-primary/30">
