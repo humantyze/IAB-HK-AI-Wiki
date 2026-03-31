@@ -6,14 +6,14 @@ import fs from "fs";
 import { z } from "zod";
 import { db, uploadsTable, sectionsTable, sectionVersionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
-import { processUpload } from "../lib/ai-service";
+import { processUpload, analyzeSections } from "../lib/ai-service";
 import { logger } from "../lib/logger";
 
 const UploadFormSchema = z.object({
   contributorName: z.string().optional(),
   contentType: z.enum(["whitepaper", "case_study", "market_data", "regulation_update", "trend_insight"]),
   targetSections: z.array(z.string()).min(1, "At least one target section is required"),
-  rawText: z.string().min(1, "Raw text is required"),
+  rawText: z.string().optional().default(""),
 });
 
 const ALLOWED_MIME_TYPES = [
@@ -73,6 +73,38 @@ router.get("/uploads", requireAuth, async (_req, res) => {
       processedAt: u.processedAt?.toISOString() ?? null,
     })),
   );
+});
+
+router.post("/uploads/analyze", requireAuth, (req, res, next) => {
+  upload.single("file")(req, res, (err) => {
+    if (err) {
+      res.status(400).json({ error: err instanceof multer.MulterError ? `Upload error: ${err.message}` : (err.message || "File upload failed") });
+      return;
+    }
+    next();
+  });
+}, async (req, res) => {
+  const rawText: string = req.body.rawText ?? "";
+  const contentType: string = req.body.contentType ?? "market_data";
+
+  if (!rawText.trim() && !req.file) {
+    res.status(400).json({ error: "Provide either raw text content or a file to analyse." });
+    return;
+  }
+
+  const allSections = await db
+    .select({ slug: sectionsTable.slug, title: sectionsTable.title })
+    .from(sectionsTable);
+
+  const textToAnalyse = rawText.trim() || `Uploaded file: ${req.file?.originalname ?? "unknown"}`;
+
+  try {
+    const result = await analyzeSections(textToAnalyse, contentType, allSections);
+    res.json(result);
+  } catch (err) {
+    logger.error({ err }, "Section analysis failed");
+    res.status(500).json({ error: "Analysis failed. Please try again." });
+  }
 });
 
 router.post("/uploads", requireAuth, (req, res, next) => {

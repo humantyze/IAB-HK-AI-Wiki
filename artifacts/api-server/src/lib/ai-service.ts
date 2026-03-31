@@ -3,6 +3,19 @@ import path from "path";
 import type { ChartDataPoint } from "@workspace/db";
 import { logger } from "./logger";
 
+export interface SectionSuggestion {
+  slug: string;
+  title: string;
+  reason: string;
+  confidence: "high" | "medium" | "low";
+}
+
+export interface AnalysisResult {
+  summary: string;
+  suggestions: SectionSuggestion[];
+  taskList: string[];
+}
+
 export interface AiProcessingResult {
   sectionSlug: string;
   bodyMarkdown: string;
@@ -116,6 +129,82 @@ export async function generateSectionImage(
   } catch (err) {
     logger.error({ err, sectionSlug }, "Failed to generate section image");
     return null;
+  }
+}
+
+export async function analyzeSections(
+  rawText: string,
+  contentType: string,
+  availableSections: { slug: string; title: string }[],
+): Promise<AnalysisResult> {
+  const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+
+  if (!baseUrl || !apiKey) {
+    logger.warn("OpenAI env vars not set; skipping section analysis");
+    return { summary: "", suggestions: [], taskList: ["OpenAI not configured — analysis unavailable"] };
+  }
+
+  try {
+    const { default: OpenAI } = await import("openai");
+    const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 30_000 });
+
+    const sectionList = availableSections.map((s) => `  - slug: "${s.slug}" → ${s.title}`).join("\n");
+    const isWhitepaper = contentType === "whitepaper";
+
+    const systemPrompt = `You are an AI content analyst for a report called "State of AI in Hong Kong's Marketing Industry".
+Your task: analyse submitted content and decide which existing report sections it should update.
+
+Available sections:
+${sectionList}
+
+Rules:
+- ${isWhitepaper ? "For whitepapers, map EVERY relevant chapter/topic to the best matching section — you may suggest many sections." : "For this content type, suggest the 1–3 most relevant sections only."}
+- Only recommend a section when the content clearly relates to its topic.
+- "confidence" is "high" when the section topic is the primary focus of the submitted content, "medium" when related, "low" when tangential.
+- Return ONLY valid JSON (no markdown fences, no explanation text).
+
+JSON schema:
+{
+  "summary": "1–2 sentence description of the submitted content",
+  "suggestions": [
+    { "slug": "<slug>", "title": "<title>", "reason": "<why this content belongs here>", "confidence": "high"|"medium"|"low" }
+  ],
+  "taskList": [
+    "<action string, e.g. 'Update AI Adoption Rates section with new survey data showing 67% adoption'>"
+  ]
+}`;
+
+    const userPrompt = `Content type: ${contentType.replace(/_/g, " ")}\n\nContent:\n${rawText.substring(0, 4000)}`;
+
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.2,
+    });
+
+    const raw = response.choices[0]?.message?.content ?? "{}";
+    const parsed = JSON.parse(raw) as {
+      summary?: string;
+      suggestions?: SectionSuggestion[];
+      taskList?: string[];
+    };
+
+    const validSlugs = new Set(availableSections.map((s) => s.slug));
+    const suggestions = (parsed.suggestions ?? []).filter((s) => validSlugs.has(s.slug));
+
+    return {
+      summary: parsed.summary ?? "",
+      suggestions,
+      taskList: parsed.taskList ?? suggestions.map((s) => `Update "${s.title}" with new ${contentType.replace(/_/g, " ")} content`),
+    };
+  } catch (err) {
+    logger.error({ err }, "Failed to analyse sections");
+    return { summary: "", suggestions: [], taskList: [] };
   }
 }
 

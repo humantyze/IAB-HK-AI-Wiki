@@ -5,11 +5,54 @@ export function useUploads() {
   return useListUploads();
 }
 
+interface AnalyzeData {
+  contentType: string;
+  rawText?: string;
+  file?: File | null;
+}
+
+export interface SectionSuggestion {
+  slug: string;
+  title: string;
+  reason: string;
+  confidence: "high" | "medium" | "low";
+}
+
+export interface AnalysisResult {
+  summary: string;
+  suggestions: SectionSuggestion[];
+  taskList: string[];
+}
+
+export function useAnalyzeUpload() {
+  return useMutation({
+    mutationFn: async (data: AnalyzeData): Promise<AnalysisResult> => {
+      const formData = new FormData();
+      formData.append("contentType", data.contentType);
+      if (data.rawText) formData.append("rawText", data.rawText);
+      if (data.file) formData.append("file", data.file);
+
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/uploads/analyze`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Analysis failed" }));
+        throw new Error(err.error || "Analysis failed");
+      }
+      return res.json() as Promise<AnalysisResult>;
+    },
+  });
+}
+
 interface UploadData {
   contributorName?: string;
   contentType: string;
   targetSections: string[];
-  rawText: string;
+  rawText?: string;
   file?: File | null;
 }
 
@@ -21,7 +64,7 @@ export function useSubmitUpload() {
       if (data.contributorName) formData.append("contributorName", data.contributorName);
       formData.append("contentType", data.contentType);
       formData.append("targetSections", JSON.stringify(data.targetSections));
-      formData.append("rawText", data.rawText);
+      if (data.rawText) formData.append("rawText", data.rawText);
       if (data.file) formData.append("file", data.file);
 
       const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
