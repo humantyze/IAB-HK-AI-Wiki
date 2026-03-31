@@ -237,7 +237,7 @@ export default function AdminDashboard() {
                           name="contributorName"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-muted-foreground">Source Identity (Optional)</FormLabel>
+                              <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-muted-foreground">Source</FormLabel>
                               <FormControl>
                                 <Input placeholder="Enter author or organization name" className="bg-background/50 border-border/50 h-12 rounded-xl focus-visible:ring-primary/30" {...field} />
                               </FormControl>
