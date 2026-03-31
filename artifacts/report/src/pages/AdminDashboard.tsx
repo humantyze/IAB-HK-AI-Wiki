@@ -189,13 +189,13 @@ export default function AdminDashboard() {
       <main className="max-w-[1600px] mx-auto px-6 py-12 relative z-10">
         <Tabs defaultValue="upload" className="space-y-8">
           <TabsList className="w-full bg-card/50 backdrop-blur-md border border-border/50 p-1 rounded-xl h-auto">
-            <TabsTrigger value="upload" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-[0.15em] uppercase text-xs data-[state=active]:bg-primary/10 data-[state=active]:text-primary transition-all">
+            <TabsTrigger value="upload" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-tight sm:tracking-[0.15em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-primary/10 data-[state=active]:text-primary transition-all">
               <UploadIcon className="hidden sm:inline-flex w-4 h-4 sm:mr-3" />Content
             </TabsTrigger>
-            <TabsTrigger value="history" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-[0.15em] uppercase text-xs data-[state=active]:bg-secondary/10 data-[state=active]:text-secondary transition-all">
+            <TabsTrigger value="history" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-tight sm:tracking-[0.15em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-secondary/10 data-[state=active]:text-secondary transition-all">
               <History className="hidden sm:inline-flex w-4 h-4 sm:mr-3" />Upload History
             </TabsTrigger>
-            <TabsTrigger value="versions" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-[0.15em] uppercase text-xs data-[state=active]:bg-accent/10 data-[state=active]:text-accent transition-all">
+            <TabsTrigger value="versions" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-tight sm:tracking-[0.15em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-accent/10 data-[state=active]:text-accent transition-all">
               <GitBranch className="hidden sm:inline-flex w-4 h-4 sm:mr-3" />Image Generation
             </TabsTrigger>
           </TabsList>
