@@ -170,7 +170,7 @@ export default function AdminDashboard() {
               <ShieldAlert className="text-secondary w-5 h-5" />
             </div>
             <div>
-              <div className="font-serif font-bold text-lg leading-tight text-foreground/90">CONTRIBUTOR PORTAL</div>
+              <div className="font-serif font-bold text-base sm:text-lg leading-tight text-foreground/90">CONTRIBUTOR PORTAL</div>
               <div className="font-display text-[10px] uppercase tracking-widest text-secondary/70">Level 3 Access Verified</div>
             </div>
           </div>
@@ -190,13 +190,13 @@ export default function AdminDashboard() {
         <Tabs defaultValue="upload" className="space-y-8">
           <TabsList className="w-full bg-card/50 backdrop-blur-md border border-border/50 p-1 rounded-xl h-auto">
             <TabsTrigger value="upload" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-[0.15em] uppercase text-xs data-[state=active]:bg-primary/10 data-[state=active]:text-primary transition-all">
-              <UploadIcon className="w-4 h-4 sm:mr-3" /><span className="hidden sm:inline">Content</span>
+              <UploadIcon className="hidden sm:inline-flex w-4 h-4 sm:mr-3" />Content
             </TabsTrigger>
             <TabsTrigger value="history" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-[0.15em] uppercase text-xs data-[state=active]:bg-secondary/10 data-[state=active]:text-secondary transition-all">
-              <History className="w-4 h-4 sm:mr-3" /><span className="hidden sm:inline">Upload History</span>
+              <History className="hidden sm:inline-flex w-4 h-4 sm:mr-3" />Upload History
             </TabsTrigger>
             <TabsTrigger value="versions" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-[0.15em] uppercase text-xs data-[state=active]:bg-accent/10 data-[state=active]:text-accent transition-all">
-              <GitBranch className="w-4 h-4 sm:mr-3" /><span className="hidden sm:inline">Image Generation</span>
+              <GitBranch className="hidden sm:inline-flex w-4 h-4 sm:mr-3" />Image Generation
             </TabsTrigger>
           </TabsList>
 
