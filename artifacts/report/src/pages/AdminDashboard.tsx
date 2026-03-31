@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -7,12 +8,13 @@ import { Link, useLocation } from "wouter";
 import {
   LogOut, Upload as UploadIcon, History, GitBranch, ShieldAlert,
   Paperclip, X, ImageIcon, Sparkles, CheckCircle2, AlertCircle,
-  ArrowLeft, ChevronRight,
+  ArrowLeft, ChevronRight, UploadCloud,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
 import { useSections, useSectionVersions } from "@/hooks/use-sections";
 import { useUploads, useSubmitUpload, useAnalyzeUpload, type AnalysisResult, type SectionSuggestion } from "@/hooks/use-uploads";
+import { getListSectionsQueryKey } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 
 import { Button } from "@/components/ui/button";
@@ -44,6 +46,7 @@ export default function AdminDashboard() {
   const submitUpload = useSubmitUpload();
   const analyzeUpload = useAnalyzeUpload();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const [selectedSectionId, setSelectedSectionId] = useState<number | null>(null);
   const { data: versions } = useSectionVersions(selectedSectionId ?? 0);
@@ -51,6 +54,7 @@ export default function AdminDashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [generatingImages, setGeneratingImages] = useState(false);
   const [promptExtra, setPromptExtra] = useState("");
+  const [uploadingSectionId, setUploadingSectionId] = useState<number | null>(null);
 
   const [phase, setPhase] = useState<"input" | "review">("input");
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
@@ -156,6 +160,33 @@ export default function AdminDashboard() {
       toast({ title: "Generation Failed", description: message, variant: "destructive" });
     } finally {
       setGeneratingImages(false);
+    }
+  };
+
+  const handleImageUpload = async (sectionId: number, file: File | undefined) => {
+    if (!file) return;
+    setUploadingSectionId(sectionId);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const formData = new FormData();
+      formData.append("image", file);
+      const res = await fetch(`${baseUrl}/api/admin/sections/${sectionId}/upload-image`, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      const data = await res.json() as { imageUrl?: string; error?: string };
+      if (res.ok) {
+        toast({ title: "Image Uploaded", description: "Section image updated successfully." });
+        await queryClient.invalidateQueries({ queryKey: getListSectionsQueryKey() });
+      } else {
+        toast({ title: "Upload Failed", description: String(data.error ?? "Upload failed"), variant: "destructive" });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed";
+      toast({ title: "Upload Failed", description: message, variant: "destructive" });
+    } finally {
+      setUploadingSectionId(null);
     }
   };
 
@@ -521,17 +552,50 @@ export default function AdminDashboard() {
                   </div>
                   <div className="space-y-3">
                     {sections?.sort((a, b) => a.displayOrder - b.displayOrder).map((sec) => (
-                      <button
+                      <div
                         key={sec.id}
-                        onClick={() => setSelectedSectionId(sec.id)}
-                        className={`w-full text-left p-4 rounded-xl text-sm transition-all duration-300 border
+                        className={`rounded-xl text-sm transition-all duration-300 border
                           ${selectedSectionId === sec.id
                             ? "bg-accent/10 border-accent/30 text-accent shadow-[inset_0_0_15px_rgba(0,150,255,0.05)]"
-                            : "hover:bg-background/50 border-transparent text-muted-foreground"}`}
+                            : "border-transparent hover:bg-background/50 text-muted-foreground"}`}
                       >
-                        <div className="font-display text-[10px] opacity-50 mb-1">SECTION {sec.displayOrder}</div>
-                        <div className="font-medium leading-tight">{sec.title}</div>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSectionId(sec.id)}
+                          className="w-full text-left px-4 pt-4 pb-2"
+                        >
+                          <div className="font-display text-[10px] opacity-50 mb-1">SECTION {sec.displayOrder}</div>
+                          <div className="font-medium leading-tight">{sec.title}</div>
+                        </button>
+                        <div className="px-4 pb-3 flex items-center gap-2">
+                          <label className={`flex items-center gap-1.5 cursor-pointer text-[10px] font-display uppercase tracking-widest px-3 py-1.5 rounded-lg border transition-all
+                            ${uploadingSectionId === sec.id
+                              ? "border-accent/20 text-accent/50 pointer-events-none"
+                              : "border-accent/30 text-accent/70 hover:text-accent hover:bg-accent/10"}`}
+                          >
+                            {uploadingSectionId === sec.id
+                              ? <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                              : <UploadCloud className="w-3 h-3" />}
+                            {uploadingSectionId === sec.id ? "Uploading…" : "Upload Image"}
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+                              disabled={uploadingSectionId !== null}
+                              onChange={(e) => {
+                                handleImageUpload(sec.id, e.target.files?.[0]);
+                                e.target.value = "";
+                              }}
+                            />
+                          </label>
+                          {sec.imageUrl && (
+                            <span
+                              className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0"
+                              title="Image set"
+                            />
+                          )}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>

@@ -1,5 +1,8 @@
 import { Router, type IRouter } from "express";
 import { eq, asc, desc, isNull } from "drizzle-orm";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { db, sectionsTable, sectionVersionsTable } from "@workspace/db";
 import {
   GetSectionBySlugParams,
@@ -8,6 +11,34 @@ import {
 import { requireAuth } from "../middlewares/auth";
 import { generateSectionImage } from "../lib/ai-service";
 import { logger } from "../lib/logger";
+
+const sectionImagesDir = path.join(process.cwd(), "public", "section-images");
+if (!fs.existsSync(sectionImagesDir)) {
+  fs.mkdirSync(sectionImagesDir, { recursive: true });
+}
+
+const ALLOWED_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/webp"];
+
+const imageStorage = multer.diskStorage({
+  destination: sectionImagesDir,
+  filename: (_req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname).toLowerCase() || ".png";
+    cb(null, `upload-${uniqueSuffix}${ext}`);
+  },
+});
+
+const imageUpload = multer({
+  storage: imageStorage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (ALLOWED_IMAGE_MIME_TYPES.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`File type ${file.mimetype} not allowed. Allowed: PNG, JPEG, WebP`));
+    }
+  },
+});
 
 const router: IRouter = Router();
 
@@ -167,6 +198,53 @@ router.post("/admin/generate-images", requireAuth, async (req, res) => {
     skipped: 0,
     message: `Generated ${generated} image(s); ${failed} failed.`,
   });
+});
+
+router.post("/admin/sections/:sectionId/upload-image", requireAuth, (req, res, next) => {
+  imageUpload.single("image")(req, res, (err) => {
+    if (err) {
+      res.status(400).json({ error: err instanceof multer.MulterError ? `Upload error: ${err.message}` : (err.message || "Image upload failed") });
+      return;
+    }
+    next();
+  });
+}, async (req, res) => {
+  const sectionId = parseInt(String(req.params.sectionId), 10);
+  if (isNaN(sectionId)) {
+    res.status(400).json({ error: "Invalid section ID" });
+    return;
+  }
+
+  if (!req.file) {
+    res.status(400).json({ error: "No image file provided" });
+    return;
+  }
+
+  const [section] = await db
+    .select()
+    .from(sectionsTable)
+    .where(eq(sectionsTable.id, sectionId))
+    .limit(1);
+
+  if (!section) {
+    res.status(404).json({ error: "Section not found" });
+    return;
+  }
+
+  if (!section.currentVersionId) {
+    res.status(400).json({ error: "Section has no current version to attach image to" });
+    return;
+  }
+
+  const imageUrl = `/api/section-images/${req.file.filename}`;
+
+  await db
+    .update(sectionVersionsTable)
+    .set({ imageUrl })
+    .where(eq(sectionVersionsTable.id, section.currentVersionId));
+
+  logger.info({ sectionId, imageUrl }, "Section image uploaded manually");
+  res.json({ imageUrl });
 });
 
 export default router;
