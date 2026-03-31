@@ -207,7 +207,7 @@ export default function AdminDashboard() {
               <CardHeader className="pb-8 pt-10 px-10">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="font-serif text-3xl font-bold">Data Injection Interface</CardTitle>
+                    <CardTitle className="font-serif text-3xl font-bold">Content Addition Panel</CardTitle>
                     <CardDescription className="text-base mt-2 font-light">
                       {phase === "input"
                         ? "Submit intelligence, research, or market data. The AI will analyse the content and suggest which report sections to update."
