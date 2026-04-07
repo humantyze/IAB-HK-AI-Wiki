@@ -102,7 +102,7 @@ export async function generateSectionImage(
 
   try {
     const { default: OpenAI } = await import("openai");
-    const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 30_000 });
+    const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 120_000 });
 
     const prompt = buildImagePrompt(sectionSlug, keyInsights, promptExtra);
     const response = await client.images.generate({
@@ -147,7 +147,7 @@ export async function analyzeSections(
 
   try {
     const { default: OpenAI } = await import("openai");
-    const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 30_000 });
+    const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 120_000 });
 
     const sectionList = availableSections.map((s) => `  - slug: "${s.slug}" → ${s.title}`).join("\n");
     const isWhitepaper = contentType === "whitepaper";

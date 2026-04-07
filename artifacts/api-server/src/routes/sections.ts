@@ -180,8 +180,12 @@ router.post("/admin/generate-images", requireAuth, async (req, res) => {
   let generated = 0;
   let failed = 0;
 
-  for (const row of rows) {
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
     const keyInsights = (row.keyInsights as string[]) ?? [];
+    if (i > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
     try {
       const imageUrl = await generateSectionImage(row.sectionSlug, keyInsights, promptExtra);
       if (imageUrl) {
