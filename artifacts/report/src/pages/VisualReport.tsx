@@ -1,8 +1,11 @@
-import { useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
-import { ArrowLeft, BarChart3, Clock, Zap } from "lucide-react";
+import {
+  ArrowLeft, BarChart3, Clock, Zap,
+  ChevronLeft, ChevronRight,
+} from "lucide-react";
 import { useSections } from "@/hooks/use-sections";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +34,26 @@ const CHART_COLORS = [
   "hsl(var(--accent) / 0.7)",
 ];
 
+const EASE_IN: [number, number, number, number] = [0.16, 1, 0.3, 1];
+const EASE_OUT: [number, number, number, number] = [0.7, 0, 0.84, 0];
+
+const slideVariants = {
+  enter: (dir: number) => ({
+    x: dir > 0 ? "40%" : "-40%",
+    opacity: 0,
+  }),
+  center: {
+    x: 0,
+    opacity: 1,
+    transition: { duration: 0.45, ease: EASE_IN },
+  },
+  exit: (dir: number) => ({
+    x: dir > 0 ? "-40%" : "40%",
+    opacity: 0,
+    transition: { duration: 0.3, ease: EASE_OUT },
+  }),
+};
+
 function StatBadge({ point, index }: { point: ChartDataPoint; index: number }) {
   const colors = [
     "border-primary/40 bg-primary/5 text-primary",
@@ -51,9 +74,42 @@ function StatBadge({ point, index }: { point: ChartDataPoint; index: number }) {
   );
 }
 
+function ImagePanel({ imageUrl, title }: { imageUrl: string | null; title: string }) {
+  const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+  if (imageUrl) {
+    return (
+      <div className="relative w-full h-full min-h-[200px]">
+        <img
+          src={`${base}${imageUrl}`}
+          alt={`Illustration for ${title}`}
+          className="w-full h-full object-cover"
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.display = "none";
+          }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-l from-transparent via-transparent to-card/40 hidden lg:block" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-card/60 lg:hidden" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative w-full h-full min-h-[200px] flex items-center justify-center overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-secondary/5 to-accent/10" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_50%,rgba(0,240,255,0.08),transparent)]" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 rounded-full border border-primary/10 opacity-40" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-full border border-primary/20 opacity-60" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-primary/10 border border-primary/30" />
+      <BarChart3 className="absolute w-8 h-8 text-primary/20" />
+    </div>
+  );
+}
+
 function SectionCard({
   section,
   index,
+  direction,
 }: {
   section: {
     id: number;
@@ -66,6 +122,7 @@ function SectionCard({
     lastUpdated: string;
   };
   index: number;
+  direction: number;
 }) {
   const hasChartData = section.chartData && section.chartData.length > 0;
   const chartPoints = useMemo(
@@ -81,153 +138,148 @@ function SectionCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: index * 0.07, ease: [0.16, 1, 0.3, 1] }}
-      className="bg-card/60 border border-border/60 rounded-2xl overflow-hidden relative group hover:border-primary/30 transition-all duration-500 hover:shadow-[0_0_40px_rgba(0,240,255,0.05)]"
+      key={section.id}
+      custom={direction}
+      variants={slideVariants}
+      initial="enter"
+      animate="center"
+      exit="exit"
+      className="bg-card/60 border border-border/60 rounded-2xl overflow-hidden relative group hover:border-primary/30 transition-colors duration-500 hover:shadow-[0_0_40px_rgba(0,240,255,0.05)] flex flex-col lg:flex-row"
+      style={{ minHeight: "480px" }}
     >
       <div className="absolute inset-0 bg-gradient-to-br from-primary/3 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none rounded-2xl" />
 
-      {/* Illustration Image */}
-      {section.imageUrl && (
-        <div className="relative w-full h-52 overflow-hidden">
-          <img
-            src={`${import.meta.env.BASE_URL.replace(/\/$/, "")}${section.imageUrl}`}
-            alt={`Illustration for ${section.title}`}
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).style.display = "none";
-            }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-card/60" />
-        </div>
-      )}
-
-      <div className="p-8">
-
-      {/* Card Header */}
-      <div className="flex items-start justify-between mb-6 relative z-10">
-        <div className="flex items-start gap-4">
-          <span className="font-display font-black text-4xl text-muted/20 select-none leading-none mt-1">
-            {String(index + 1).padStart(2, "0")}
-          </span>
-          <div>
-            <h2 className="text-xl font-serif font-bold text-foreground/90 leading-tight">
-              {section.title}
-            </h2>
-            {section.description && (
-              <p className="text-xs text-muted-foreground mt-1 font-light leading-snug max-w-lg">
-                {section.description}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50 font-display tracking-widest uppercase shrink-0 ml-4">
-          <Clock className="w-3 h-3" />
-          {format(new Date(section.lastUpdated), "MMM dd, yyyy")}
-        </div>
+      {/* Right panel — image (shown on top on mobile via order) */}
+      <div className="order-first lg:order-last w-full h-52 lg:h-auto lg:w-1/3 flex-shrink-0 relative overflow-hidden lg:border-l lg:border-border/40">
+        <ImagePanel imageUrl={section.imageUrl} title={section.title} />
       </div>
 
-      {/* Stat Badges */}
-      {hasChartData && (
-        <div className="flex flex-wrap gap-3 mb-8 relative z-10">
-          {section.chartData.slice(0, 4).map((point, i) => (
-            <StatBadge key={i} point={point} index={i} />
-          ))}
-        </div>
-      )}
+      {/* Left panel — text & data content */}
+      <div className="flex-1 p-8 flex flex-col overflow-hidden">
 
-      <div className={`relative z-10 grid gap-8 ${hasChartData && chartPoints.length >= 2 ? "lg:grid-cols-2" : "grid-cols-1"}`}>
-        {/* Bar Chart */}
-        {hasChartData && chartPoints.length >= 2 && (
-          <div className="bg-background/30 rounded-xl p-6 border border-border/40">
-            <h3 className="font-display font-semibold text-[10px] tracking-[0.25em] uppercase text-primary mb-4 flex items-center gap-2">
-              <BarChart3 className="w-3 h-3" />
-              Data Breakdown
-            </h3>
-            <div className="h-[180px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartPoints} barCategoryGap="30%">
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="hsl(var(--border))"
-                    vertical={false}
-                  />
-                  <XAxis
-                    dataKey="name"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={10}
-                    tickLine={false}
-                    axisLine={false}
-                    dy={8}
-                    tick={{ fill: "hsl(var(--muted-foreground))" }}
-                  />
-                  <YAxis
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={10}
-                    tickLine={false}
-                    axisLine={false}
-                    dx={-6}
-                    tick={{ fill: "hsl(var(--muted-foreground))" }}
-                    tickFormatter={(v) => {
-                      const u = chartPoints[0]?.unit ?? "";
-                      return `${v}${u}`;
-                    }}
-                  />
-                  <Tooltip
-                    cursor={{ fill: "hsl(var(--muted) / 0.15)" }}
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      borderColor: "hsl(var(--border))",
-                      color: "hsl(var(--foreground))",
-                      borderRadius: "8px",
-                      fontSize: "11px",
-                      fontFamily: "var(--font-display)",
-                    }}
-                    formatter={(value: number, _name: string, props: { payload?: { unit?: string; fullLabel?: string } }) => [
-                      `${value}${props.payload?.unit ?? ""}`,
-                      props.payload?.fullLabel ?? "",
-                    ]}
-                    labelFormatter={() => ""}
-                  />
-                  <Bar dataKey="value" radius={[3, 3, 0, 0]} maxBarSize={48}>
-                    {chartPoints.map((_entry, i) => (
-                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+        {/* Card Header */}
+        <div className="flex items-start justify-between mb-6 relative z-10">
+          <div className="flex items-start gap-4">
+            <span className="font-display font-black text-4xl text-muted/20 select-none leading-none mt-1">
+              {String(index + 1).padStart(2, "0")}
+            </span>
+            <div>
+              <h2 className="text-xl font-serif font-bold text-foreground/90 leading-tight">
+                {section.title}
+              </h2>
+              {section.description && (
+                <p className="text-xs text-muted-foreground mt-1 font-light leading-snug max-w-lg">
+                  {section.description}
+                </p>
+              )}
             </div>
           </div>
-        )}
+          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50 font-display tracking-widest uppercase shrink-0 ml-4">
+            <Clock className="w-3 h-3" />
+            {format(new Date(section.lastUpdated), "MMM dd, yyyy")}
+          </div>
+        </div>
 
-        {/* Key Insights */}
-        {section.keyInsights && section.keyInsights.length > 0 && (
-          <div className="bg-background/30 rounded-xl p-6 border border-border/40">
-            <h3 className="font-display font-semibold text-[10px] tracking-[0.25em] uppercase text-secondary mb-4 flex items-center gap-2">
-              <Zap className="w-3 h-3" />
-              Key Insights
-            </h3>
-            <ul className="space-y-3">
-              {section.keyInsights.slice(0, 3).map((insight, i) => (
-                <li key={i} className="flex items-start gap-3">
-                  <span className="w-1.5 h-1.5 rounded-full bg-secondary/60 shrink-0 mt-2" />
-                  <span className="text-sm text-muted-foreground leading-relaxed font-light line-clamp-3">
-                    {insight}
-                  </span>
-                </li>
-              ))}
-            </ul>
+        {/* Stat Badges */}
+        {hasChartData && (
+          <div className="flex flex-wrap gap-3 mb-8 relative z-10">
+            {section.chartData.slice(0, 4).map((point, i) => (
+              <StatBadge key={i} point={point} index={i} />
+            ))}
           </div>
         )}
 
-        {/* No data placeholder */}
-        {!hasChartData && (!section.keyInsights || section.keyInsights.length === 0) && (
-          <div className="col-span-full flex items-center justify-center h-32 text-muted-foreground/40 text-sm font-display tracking-widest uppercase">
-            No data available yet
-          </div>
-        )}
-      </div>
+        <div className={`relative z-10 grid gap-8 flex-1 ${hasChartData && chartPoints.length >= 2 ? "lg:grid-cols-2" : "grid-cols-1"}`}>
+          {/* Bar Chart */}
+          {hasChartData && chartPoints.length >= 2 && (
+            <div className="bg-background/30 rounded-xl p-6 border border-border/40">
+              <h3 className="font-display font-semibold text-[10px] tracking-[0.25em] uppercase text-primary mb-4 flex items-center gap-2">
+                <BarChart3 className="w-3 h-3" />
+                Data Breakdown
+              </h3>
+              <div className="h-[180px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartPoints} barCategoryGap="30%">
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="hsl(var(--border))"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="name"
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={10}
+                      tickLine={false}
+                      axisLine={false}
+                      dy={8}
+                      tick={{ fill: "hsl(var(--muted-foreground))" }}
+                    />
+                    <YAxis
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={10}
+                      tickLine={false}
+                      axisLine={false}
+                      dx={-6}
+                      tick={{ fill: "hsl(var(--muted-foreground))" }}
+                      tickFormatter={(v) => {
+                        const u = chartPoints[0]?.unit ?? "";
+                        return `${v}${u}`;
+                      }}
+                    />
+                    <Tooltip
+                      cursor={{ fill: "hsl(var(--muted) / 0.15)" }}
+                      contentStyle={{
+                        backgroundColor: "hsl(var(--card))",
+                        borderColor: "hsl(var(--border))",
+                        color: "hsl(var(--foreground))",
+                        borderRadius: "8px",
+                        fontSize: "11px",
+                        fontFamily: "var(--font-display)",
+                      }}
+                      formatter={(value: number, _name: string, props: { payload?: { unit?: string; fullLabel?: string } }) => [
+                        `${value}${props.payload?.unit ?? ""}`,
+                        props.payload?.fullLabel ?? "",
+                      ]}
+                      labelFormatter={() => ""}
+                    />
+                    <Bar dataKey="value" radius={[3, 3, 0, 0]} maxBarSize={48}>
+                      {chartPoints.map((_entry, i) => (
+                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* Key Insights */}
+          {section.keyInsights && section.keyInsights.length > 0 && (
+            <div className="bg-background/30 rounded-xl p-6 border border-border/40">
+              <h3 className="font-display font-semibold text-[10px] tracking-[0.25em] uppercase text-secondary mb-4 flex items-center gap-2">
+                <Zap className="w-3 h-3" />
+                Key Insights
+              </h3>
+              <ul className="space-y-3">
+                {section.keyInsights.slice(0, 3).map((insight, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <span className="w-1.5 h-1.5 rounded-full bg-secondary/60 shrink-0 mt-2" />
+                    <span className="text-sm text-muted-foreground leading-relaxed font-light line-clamp-3">
+                      {insight}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* No data placeholder */}
+          {!hasChartData && (!section.keyInsights || section.keyInsights.length === 0) && (
+            <div className="col-span-full flex items-center justify-center h-32 text-muted-foreground/40 text-sm font-display tracking-widest uppercase">
+              No data available yet
+            </div>
+          )}
+        </div>
 
       </div>
     </motion.div>
@@ -236,11 +288,43 @@ function SectionCard({
 
 export default function VisualReport() {
   const { data: sections, isLoading } = useSections();
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [direction, setDirection] = useState(1);
 
   const sortedSections = useMemo(
     () => (sections ?? []).sort((a, b) => a.displayOrder - b.displayOrder),
     [sections],
   );
+
+  const total = sortedSections.length;
+
+  const goTo = useCallback((index: number, dir: number) => {
+    setDirection(dir);
+    setActiveIndex(index);
+  }, []);
+
+  const goPrev = useCallback(() => {
+    if (activeIndex > 0) goTo(activeIndex - 1, -1);
+  }, [activeIndex, goTo]);
+
+  const goNext = useCallback(() => {
+    if (activeIndex < total - 1) goTo(activeIndex + 1, 1);
+  }, [activeIndex, total, goTo]);
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") goPrev();
+      if (e.key === "ArrowRight") goNext();
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [goPrev, goNext]);
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [sortedSections.length]);
+
+  const currentSection = sortedSections[activeIndex];
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -293,13 +377,13 @@ export default function VisualReport() {
             </h1>
             <p className="text-muted-foreground font-light max-w-2xl leading-relaxed">
               A visual breakdown of key data points, insights, and trends across{" "}
-              {sortedSections.length || "all"} report sections. Updated automatically as new research is contributed.
+              {total || "all"} report sections. Updated automatically as new research is contributed.
             </p>
           </motion.div>
         </div>
       </section>
 
-      {/* Cards Grid */}
+      {/* Carousel */}
       <main className="max-w-[1400px] mx-auto px-6 pb-24">
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
@@ -308,25 +392,82 @@ export default function VisualReport() {
               <div className="absolute inset-0 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
           </div>
+        ) : total === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground/40 gap-4">
+            <BarChart3 className="w-12 h-12" />
+            <p className="font-display uppercase tracking-widest text-sm">No report sections yet</p>
+          </div>
         ) : (
-          <div className="grid gap-6">
-            {sortedSections.map((section, i) => (
-              <SectionCard
-                key={section.id}
-                section={{
-                  ...section,
-                  chartData: (section as typeof section & { chartData?: ChartDataPoint[] }).chartData ?? [],
-                  imageUrl: (section as typeof section & { imageUrl?: string | null }).imageUrl ?? null,
-                }}
-                index={i}
-              />
-            ))}
-            {sortedSections.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-64 text-muted-foreground/40 gap-4">
-                <BarChart3 className="w-12 h-12" />
-                <p className="font-display uppercase tracking-widest text-sm">No report sections yet</p>
+          <div className="space-y-6">
+            {/* Card area */}
+            <div className="relative overflow-hidden">
+              <AnimatePresence mode="wait" custom={direction}>
+                {currentSection && (
+                  <SectionCard
+                    key={currentSection.id}
+                    section={{
+                      ...currentSection,
+                      chartData: (currentSection as typeof currentSection & { chartData?: ChartDataPoint[] }).chartData ?? [],
+                      imageUrl: (currentSection as typeof currentSection & { imageUrl?: string | null }).imageUrl ?? null,
+                    }}
+                    index={activeIndex}
+                    direction={direction}
+                  />
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Navigation controls */}
+            <div className="flex items-center justify-between gap-4">
+              {/* Prev button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={goPrev}
+                disabled={activeIndex === 0}
+                aria-label="Previous section"
+                className="gap-2 font-display uppercase tracking-widest text-xs text-muted-foreground hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span className="hidden sm:inline">Prev</span>
+              </Button>
+
+              {/* Dots + counter */}
+              <div className="flex flex-col items-center gap-3">
+                {/* Dot indicators */}
+                <div className="flex items-center gap-2">
+                  {sortedSections.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => goTo(i, i > activeIndex ? 1 : -1)}
+                      aria-label={`Go to section ${i + 1}`}
+                      className={`rounded-full transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
+                        i === activeIndex
+                          ? "w-6 h-1.5 bg-primary shadow-[0_0_8px_rgba(0,240,255,0.6)]"
+                          : "w-1.5 h-1.5 bg-border/60 hover:bg-primary/40"
+                      }`}
+                    />
+                  ))}
+                </div>
+                {/* Counter */}
+                <span className="font-display text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">
+                  {activeIndex + 1} / {total}
+                </span>
               </div>
-            )}
+
+              {/* Next button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={goNext}
+                disabled={activeIndex === total - 1}
+                aria-label="Next section"
+                className="gap-2 font-display uppercase tracking-widest text-xs text-muted-foreground hover:text-primary disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <span className="hidden sm:inline">Next</span>
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         )}
       </main>
