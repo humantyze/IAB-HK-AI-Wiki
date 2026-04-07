@@ -299,9 +299,10 @@ export default function VisualReport() {
   const total = sortedSections.length;
 
   const goTo = useCallback((index: number, dir: number) => {
+    if (index === activeIndex) return;
     setDirection(dir);
     setActiveIndex(index);
-  }, []);
+  }, [activeIndex]);
 
   const goPrev = useCallback(() => {
     if (activeIndex > 0) goTo(activeIndex - 1, -1);
@@ -441,6 +442,7 @@ export default function VisualReport() {
                       key={i}
                       onClick={() => goTo(i, i > activeIndex ? 1 : -1)}
                       aria-label={`Go to section ${i + 1}`}
+                      aria-current={i === activeIndex ? "true" : undefined}
                       className={`rounded-full transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
                         i === activeIndex
                           ? "w-6 h-1.5 bg-primary shadow-[0_0_8px_rgba(0,240,255,0.6)]"
