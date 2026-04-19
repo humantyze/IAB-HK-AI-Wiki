@@ -52,38 +52,38 @@
 
 :root {
   /* Enforce Dark Mode Theme */
-  --background: 240 10% 4%;
-  --foreground: 0 0% 98%;
+  --background: 222 22% 6%;
+  --foreground: 210 20% 96%;
   
-  --card: 240 10% 6%;
-  --card-foreground: 0 0% 98%;
-  --card-border: 240 10% 12%;
+  --card: 222 20% 8%;
+  --card-foreground: 210 20% 96%;
+  --card-border: 222 18% 14%;
   
-  --popover: 240 10% 6%;
-  --popover-foreground: 0 0% 98%;
-  --popover-border: 240 10% 12%;
+  --popover: 222 20% 8%;
+  --popover-foreground: 210 20% 96%;
+  --popover-border: 222 18% 14%;
   
-  /* Cyan Neon */
-  --primary: 184 100% 50%;
-  --primary-foreground: 0 0% 0%;
+  /* Deep Teal-Blue */
+  --primary: 197 70% 44%;
+  --primary-foreground: 0 0% 100%;
   
-  /* Magenta Neon */
-  --secondary: 300 100% 50%;
+  /* Indigo */
+  --secondary: 245 60% 62%;
   --secondary-foreground: 0 0% 100%;
   
-  --muted: 240 10% 10%;
-  --muted-foreground: 240 5% 65%;
+  --muted: 222 18% 12%;
+  --muted-foreground: 220 10% 58%;
   
-  /* Electric Blue */
-  --accent: 210 100% 50%;
+  /* Steel Blue */
+  --accent: 213 55% 52%;
   --accent-foreground: 0 0% 100%;
   
-  --destructive: 0 84% 60%;
+  --destructive: 0 72% 54%;
   --destructive-foreground: 0 0% 98%;
   
-  --border: 240 10% 15%;
-  --input: 240 10% 15%;
-  --ring: 184 100% 50%;
+  --border: 222 18% 16%;
+  --input: 222 18% 16%;
+  --ring: 197 70% 44%;
   
   --radius: 0.5rem;
 }
