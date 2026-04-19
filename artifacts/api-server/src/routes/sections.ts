@@ -167,9 +167,19 @@ router.get("/section-images/:filename", async (req, res) => {
 router.post("/admin/generate-images", requireAuth, async (req, res) => {
   const promptExtra = typeof req.body?.promptExtra === "string" ? req.body.promptExtra.trim() : undefined;
 
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const send = (data: object) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
   const allRows = await db
     .select({
       sectionSlug: sectionsTable.slug,
+      sectionTitle: sectionsTable.title,
       versionId: sectionVersionsTable.id,
       keyInsights: sectionVersionsTable.keyInsights,
       imageUrl: sectionVersionsTable.imageUrl,
@@ -180,16 +190,16 @@ router.post("/admin/generate-images", requireAuth, async (req, res) => {
       eq(sectionsTable.currentVersionId, sectionVersionsTable.id),
     );
 
-  const rowsToGenerate: Array<{ sectionSlug: string; versionId: number; keyInsights: string[] }> = [];
+  const rowsToGenerate: Array<{ sectionSlug: string; sectionTitle: string; versionId: number; keyInsights: string[] }> = [];
 
   for (const row of allRows) {
     if (!row.imageUrl) {
-      rowsToGenerate.push({ sectionSlug: row.sectionSlug, versionId: row.versionId, keyInsights: (row.keyInsights as string[]) ?? [] });
+      rowsToGenerate.push({ sectionSlug: row.sectionSlug, sectionTitle: row.sectionTitle, versionId: row.versionId, keyInsights: (row.keyInsights as string[]) ?? [] });
       continue;
     }
     const filename = extractFilenameFromUrl(row.imageUrl);
     if (!filename) {
-      rowsToGenerate.push({ sectionSlug: row.sectionSlug, versionId: row.versionId, keyInsights: (row.keyInsights as string[]) ?? [] });
+      rowsToGenerate.push({ sectionSlug: row.sectionSlug, sectionTitle: row.sectionTitle, versionId: row.versionId, keyInsights: (row.keyInsights as string[]) ?? [] });
       continue;
     }
     const exists = await sectionImageExists(filename);
@@ -199,14 +209,17 @@ router.post("/admin/generate-images", requireAuth, async (req, res) => {
         .update(sectionVersionsTable)
         .set({ imageUrl: null })
         .where(eq(sectionVersionsTable.id, row.versionId));
-      rowsToGenerate.push({ sectionSlug: row.sectionSlug, versionId: row.versionId, keyInsights: (row.keyInsights as string[]) ?? [] });
+      rowsToGenerate.push({ sectionSlug: row.sectionSlug, sectionTitle: row.sectionTitle, versionId: row.versionId, keyInsights: (row.keyInsights as string[]) ?? [] });
     }
   }
 
   if (rowsToGenerate.length === 0) {
-    res.json({ generated: 0, failed: 0, skipped: 0, message: "All sections already have images." });
+    send({ type: "complete", generated: 0, failed: 0, message: "All sections already have images." });
+    res.end();
     return;
   }
+
+  send({ type: "start", total: rowsToGenerate.length });
 
   let generated = 0;
   let failed = 0;
@@ -216,6 +229,9 @@ router.post("/admin/generate-images", requireAuth, async (req, res) => {
     if (i > 0) {
       await new Promise((resolve) => setTimeout(resolve, 3000));
     }
+
+    send({ type: "generating", current: i + 1, total: rowsToGenerate.length, sectionSlug: row.sectionSlug, sectionTitle: row.sectionTitle });
+
     try {
       const imageUrl = await generateSectionImage(row.sectionSlug, row.keyInsights, promptExtra);
       if (imageUrl) {
@@ -224,21 +240,20 @@ router.post("/admin/generate-images", requireAuth, async (req, res) => {
           .set({ imageUrl })
           .where(eq(sectionVersionsTable.id, row.versionId));
         generated++;
+        send({ type: "done", current: i + 1, total: rowsToGenerate.length, sectionSlug: row.sectionSlug, sectionTitle: row.sectionTitle, imageUrl });
       } else {
         failed++;
+        send({ type: "failed", current: i + 1, total: rowsToGenerate.length, sectionSlug: row.sectionSlug, sectionTitle: row.sectionTitle });
       }
     } catch (err) {
       logger.error({ err, sectionSlug: row.sectionSlug }, "Backfill image generation failed");
       failed++;
+      send({ type: "failed", current: i + 1, total: rowsToGenerate.length, sectionSlug: row.sectionSlug, sectionTitle: row.sectionTitle });
     }
   }
 
-  res.json({
-    generated,
-    failed,
-    skipped: 0,
-    message: `Generated ${generated} image(s); ${failed} failed.`,
-  });
+  send({ type: "complete", generated, failed, message: `Generated ${generated} image(s)${failed > 0 ? `; ${failed} failed` : ""}.` });
+  res.end();
 });
 
 router.post("/admin/sections/:sectionId/upload-image", requireAuth, (req, res, next) => {

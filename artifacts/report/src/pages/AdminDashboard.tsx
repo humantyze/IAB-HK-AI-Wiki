@@ -53,6 +53,13 @@ export default function AdminDashboard() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [generatingImages, setGeneratingImages] = useState(false);
+  const [imageProgress, setImageProgress] = useState<{
+    current: number;
+    total: number;
+    currentSectionTitle: string;
+    completedSlugs: Set<string>;
+    failedSlugs: Set<string>;
+  } | null>(null);
   const [promptExtra, setPromptExtra] = useState("");
   const [uploadingSectionId, setUploadingSectionId] = useState<number | null>(null);
 
@@ -141,6 +148,7 @@ export default function AdminDashboard() {
 
   const handleGenerateImages = async () => {
     setGeneratingImages(true);
+    setImageProgress(null);
     try {
       const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
       const res = await fetch(`${baseUrl}/api/admin/generate-images`, {
@@ -149,17 +157,62 @@ export default function AdminDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ promptExtra: promptExtra.trim() || undefined }),
       });
-      const data = await res.json() as { generated: number; failed: number; message: string };
-      if (res.ok) {
-        toast({ title: "Image Generation Complete", description: data.message });
-      } else {
-        toast({ title: "Generation Failed", description: String((data as { error?: string }).error ?? data.message), variant: "destructive" });
+
+      if (!res.ok || !res.body) {
+        const data = await res.json() as { error?: string; message?: string };
+        toast({ title: "Generation Failed", description: String(data.error ?? data.message ?? "Unknown error"), variant: "destructive" });
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let completedSlugs = new Set<string>();
+      let failedSlugs = new Set<string>();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const event = JSON.parse(line.slice(6)) as Record<string, unknown>;
+            if (event.type === "start") {
+              setImageProgress({ current: 0, total: event.total as number, currentSectionTitle: "", completedSlugs: new Set(), failedSlugs: new Set() });
+            } else if (event.type === "generating") {
+              setImageProgress({ current: (event.current as number) - 1, total: event.total as number, currentSectionTitle: event.sectionTitle as string, completedSlugs: new Set(completedSlugs), failedSlugs: new Set(failedSlugs) });
+            } else if (event.type === "done") {
+              completedSlugs = new Set([...completedSlugs, event.sectionSlug as string]);
+              setImageProgress({ current: event.current as number, total: event.total as number, currentSectionTitle: event.sectionTitle as string, completedSlugs: new Set(completedSlugs), failedSlugs: new Set(failedSlugs) });
+            } else if (event.type === "failed") {
+              failedSlugs = new Set([...failedSlugs, event.sectionSlug as string]);
+              setImageProgress({ current: event.current as number, total: event.total as number, currentSectionTitle: event.sectionTitle as string, completedSlugs: new Set(completedSlugs), failedSlugs: new Set(failedSlugs) });
+            } else if (event.type === "complete") {
+              const { generated, failed, message } = event as { generated: number; failed: number; message: string };
+              if (failed > 0) {
+                toast({ title: "Generation Complete", description: message, variant: "destructive" });
+              } else if (generated === 0) {
+                toast({ title: "No New Images Needed", description: message });
+              } else {
+                toast({ title: "Images Generated", description: message });
+              }
+              await queryClient.invalidateQueries({ queryKey: getListSectionsQueryKey() });
+            }
+          } catch {
+            // ignore malformed events
+          }
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Request failed";
       toast({ title: "Generation Failed", description: message, variant: "destructive" });
     } finally {
       setGeneratingImages(false);
+      setImageProgress(null);
     }
   };
 
@@ -525,7 +578,7 @@ export default function AdminDashboard() {
               <div className="flex flex-col lg:flex-row h-full min-h-[700px]">
                 <div className="w-full lg:w-80 border-r border-border/30 bg-background/20 p-4 sm:p-8">
                   <div className="mb-6">
-                    <h4 className="font-display tracking-[0.2em] text-[10px] uppercase text-muted-foreground mb-4">Select Vector</h4>
+                    <h4 className="font-display tracking-[0.2em] text-[10px] uppercase text-muted-foreground mb-4">Sections</h4>
                     <Button
                       variant="outline"
                       size="sm"
@@ -534,21 +587,44 @@ export default function AdminDashboard() {
                       className="w-full border-accent/30 text-accent hover:bg-accent/10 font-display uppercase tracking-widest text-[10px] h-10"
                     >
                       <ImageIcon className="w-3 h-3 mr-2" />
-                      {generatingImages ? "Generating… (may take a minute)" : "Generate Section Images"}
+                      {generatingImages ? "Generating…" : "Generate Section Images"}
                     </Button>
-                    <div className="mt-3 space-y-1">
-                      <label className="font-display tracking-[0.2em] text-[10px] uppercase text-muted-foreground/60">
-                        Prompt Addition (Optional)
-                      </label>
-                      <Input
-                        value={promptExtra}
-                        onChange={(e) => setPromptExtra(e.target.value)}
-                        placeholder="e.g. bold, vibrant colors"
-                        disabled={generatingImages}
-                        className="bg-background/50 border-border/50 h-9 rounded-lg text-xs focus-visible:ring-accent/30"
-                      />
-                      <p className="text-[10px] text-muted-foreground/40 leading-snug">Appended to each section's image prompt.</p>
-                    </div>
+
+                    {imageProgress && imageProgress.total > 0 && (
+                      <div className="mt-3 space-y-2">
+                        <div className="flex items-center justify-between text-[10px] font-display uppercase tracking-widest text-muted-foreground">
+                          <span>{imageProgress.current} of {imageProgress.total} done</span>
+                          <span>{Math.round((imageProgress.current / imageProgress.total) * 100)}%</span>
+                        </div>
+                        <div className="h-1 bg-border/30 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-accent to-secondary transition-all duration-700 ease-out"
+                            style={{ width: `${(imageProgress.current / imageProgress.total) * 100}%` }}
+                          />
+                        </div>
+                        {imageProgress.currentSectionTitle && (
+                          <p className="text-[10px] text-muted-foreground/60 truncate">
+                            {imageProgress.current < imageProgress.total ? `Generating: ${imageProgress.currentSectionTitle}` : imageProgress.currentSectionTitle}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {!imageProgress && (
+                      <div className="mt-3 space-y-1">
+                        <label className="font-display tracking-[0.2em] text-[10px] uppercase text-muted-foreground/60">
+                          Prompt Addition (Optional)
+                        </label>
+                        <Input
+                          value={promptExtra}
+                          onChange={(e) => setPromptExtra(e.target.value)}
+                          placeholder="e.g. bold, vibrant colors"
+                          disabled={generatingImages}
+                          className="bg-background/50 border-border/50 h-9 rounded-lg text-xs focus-visible:ring-accent/30"
+                        />
+                        <p className="text-[10px] text-muted-foreground/40 leading-snug">Appended to each section's image prompt.</p>
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-3">
                     {sections?.sort((a, b) => a.displayOrder - b.displayOrder).map((sec) => (
@@ -588,7 +664,7 @@ export default function AdminDashboard() {
                               }}
                             />
                           </label>
-                          {sec.imageUrl && (
+                          {(sec.imageUrl || imageProgress?.completedSlugs.has(sec.slug)) && (
                             <span
                               className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0"
                               title="Image set"
@@ -604,7 +680,7 @@ export default function AdminDashboard() {
                   {!selectedSectionId ? (
                     <div className="h-full flex flex-col items-center justify-center text-muted-foreground border border-dashed border-border/40 rounded-2xl bg-background/10">
                       <GitBranch className="w-12 h-12 mb-4 opacity-20" />
-                      <p className="font-display tracking-widest text-xs uppercase">Initialize Vector Selection</p>
+                      <p className="font-display tracking-widest text-xs uppercase">Select a section to view its history</p>
                     </div>
                   ) : (
                     <div className="space-y-10">
@@ -615,7 +691,7 @@ export default function AdminDashboard() {
                         <p className="font-display tracking-[0.2em] uppercase text-[10px] text-accent mt-3">Version Matrix</p>
                       </div>
 
-                      {versions?.length === 0 && <p className="text-muted-foreground font-light italic">No historical records found for this vector.</p>}
+                      {versions?.length === 0 && <p className="text-muted-foreground font-light italic">No version history found for this section.</p>}
 
                       {versions?.map((version, idx) => (
                         <div key={version.id} className="relative pl-10 pb-10 border-l border-border/30 last:pb-0 last:border-transparent">
