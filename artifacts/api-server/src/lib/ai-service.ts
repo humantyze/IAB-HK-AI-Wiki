@@ -1,7 +1,6 @@
-import fs from "fs";
-import path from "path";
 import type { ChartDataPoint } from "@workspace/db";
 import { logger } from "./logger";
+import { uploadSectionImage } from "./sectionImageStorage";
 
 export interface SectionSuggestion {
   slug: string;
@@ -118,12 +117,8 @@ export async function generateSectionImage(
     }
 
     const buffer = Buffer.from(base64, "base64");
-    const imagesDir = path.join(process.cwd(), "public", "section-images");
-    await fs.promises.mkdir(imagesDir, { recursive: true });
-
     const filename = `${sectionSlug}-${Date.now()}.png`;
-    const filePath = path.join(imagesDir, filename);
-    await fs.promises.writeFile(filePath, buffer);
+    await uploadSectionImage(filename, buffer, "image/png");
 
     return `/api/section-images/${filename}`;
   } catch (err) {

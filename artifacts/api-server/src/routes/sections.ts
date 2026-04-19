@@ -1,8 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, asc, desc, isNull } from "drizzle-orm";
+import { eq, asc, desc } from "drizzle-orm";
 import multer from "multer";
-import path from "path";
-import fs from "fs";
 import { db, sectionsTable, sectionVersionsTable } from "@workspace/db";
 import {
   GetSectionBySlugParams,
@@ -11,11 +9,12 @@ import {
 import { requireAuth } from "../middlewares/auth";
 import { generateSectionImage } from "../lib/ai-service";
 import { logger } from "../lib/logger";
-
-const sectionImagesDir = path.join(process.cwd(), "public", "section-images");
-if (!fs.existsSync(sectionImagesDir)) {
-  fs.mkdirSync(sectionImagesDir, { recursive: true });
-}
+import {
+  uploadSectionImage,
+  streamSectionImage,
+  sectionImageExists,
+  extractFilenameFromUrl,
+} from "../lib/sectionImageStorage";
 
 const ALLOWED_IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
 type AllowedImageMime = (typeof ALLOWED_IMAGE_MIME_TYPES)[number];
@@ -26,17 +25,8 @@ const MIME_TO_EXT: Record<AllowedImageMime, string> = {
   "image/webp": ".webp",
 };
 
-const imageStorage = multer.diskStorage({
-  destination: sectionImagesDir,
-  filename: (_req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    const ext = MIME_TO_EXT[file.mimetype as AllowedImageMime] ?? ".png";
-    cb(null, `upload-${uniqueSuffix}${ext}`);
-  },
-});
-
 const imageUpload = multer({
-  storage: imageStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if ((ALLOWED_IMAGE_MIME_TYPES as readonly string[]).includes(file.mimetype)) {
@@ -156,23 +146,64 @@ router.get("/sections/:sectionId/versions", requireAuth, async (req, res) => {
   );
 });
 
+router.get("/section-images/:filename", async (req, res) => {
+  const { filename } = req.params;
+  if (!filename || filename.includes("..") || filename.includes("/")) {
+    res.status(400).json({ error: "Invalid filename" });
+    return;
+  }
+
+  const result = await streamSectionImage(filename);
+  if (!result) {
+    res.status(404).json({ error: "Image not found" });
+    return;
+  }
+
+  res.setHeader("Content-Type", result.contentType);
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  result.stream.pipe(res);
+});
+
 router.post("/admin/generate-images", requireAuth, async (req, res) => {
   const promptExtra = typeof req.body?.promptExtra === "string" ? req.body.promptExtra.trim() : undefined;
 
-  const rows = await db
+  const allRows = await db
     .select({
       sectionSlug: sectionsTable.slug,
       versionId: sectionVersionsTable.id,
       keyInsights: sectionVersionsTable.keyInsights,
+      imageUrl: sectionVersionsTable.imageUrl,
     })
     .from(sectionsTable)
     .innerJoin(
       sectionVersionsTable,
       eq(sectionsTable.currentVersionId, sectionVersionsTable.id),
-    )
-    .where(isNull(sectionVersionsTable.imageUrl));
+    );
 
-  if (rows.length === 0) {
+  const rowsToGenerate: Array<{ sectionSlug: string; versionId: number; keyInsights: string[] }> = [];
+
+  for (const row of allRows) {
+    if (!row.imageUrl) {
+      rowsToGenerate.push({ sectionSlug: row.sectionSlug, versionId: row.versionId, keyInsights: (row.keyInsights as string[]) ?? [] });
+      continue;
+    }
+    const filename = extractFilenameFromUrl(row.imageUrl);
+    if (!filename) {
+      rowsToGenerate.push({ sectionSlug: row.sectionSlug, versionId: row.versionId, keyInsights: (row.keyInsights as string[]) ?? [] });
+      continue;
+    }
+    const exists = await sectionImageExists(filename);
+    if (!exists) {
+      logger.info({ sectionSlug: row.sectionSlug, imageUrl: row.imageUrl }, "Stale imageUrl found, clearing for regeneration");
+      await db
+        .update(sectionVersionsTable)
+        .set({ imageUrl: null })
+        .where(eq(sectionVersionsTable.id, row.versionId));
+      rowsToGenerate.push({ sectionSlug: row.sectionSlug, versionId: row.versionId, keyInsights: (row.keyInsights as string[]) ?? [] });
+    }
+  }
+
+  if (rowsToGenerate.length === 0) {
     res.json({ generated: 0, failed: 0, skipped: 0, message: "All sections already have images." });
     return;
   }
@@ -180,14 +211,13 @@ router.post("/admin/generate-images", requireAuth, async (req, res) => {
   let generated = 0;
   let failed = 0;
 
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const keyInsights = (row.keyInsights as string[]) ?? [];
+  for (let i = 0; i < rowsToGenerate.length; i++) {
+    const row = rowsToGenerate[i];
     if (i > 0) {
       await new Promise((resolve) => setTimeout(resolve, 3000));
     }
     try {
-      const imageUrl = await generateSectionImage(row.sectionSlug, keyInsights, promptExtra);
+      const imageUrl = await generateSectionImage(row.sectionSlug, row.keyInsights, promptExtra);
       if (imageUrl) {
         await db
           .update(sectionVersionsTable)
@@ -247,22 +277,20 @@ router.post("/admin/sections/:sectionId/upload-image", requireAuth, (req, res, n
     return;
   }
 
-  const imageUrl = `/api/section-images/${req.file.filename}`;
-  const savedFilePath = path.join(sectionImagesDir, req.file.filename);
+  const ext = MIME_TO_EXT[req.file.mimetype as AllowedImageMime] ?? ".png";
+  const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+  const filename = `upload-${uniqueSuffix}${ext}`;
 
-  try {
-    await db
-      .update(sectionVersionsTable)
-      .set({ imageUrl })
-      .where(eq(sectionVersionsTable.id, section.currentVersionId));
-  } catch (err) {
-    fs.unlink(savedFilePath, (unlinkErr) => {
-      if (unlinkErr) logger.warn({ unlinkErr, savedFilePath }, "Failed to clean up uploaded image after DB error");
-    });
-    throw err;
-  }
+  await uploadSectionImage(filename, req.file.buffer, req.file.mimetype);
 
-  logger.info({ sectionId, imageUrl }, "Section image uploaded manually");
+  const imageUrl = `/api/section-images/${filename}`;
+
+  await db
+    .update(sectionVersionsTable)
+    .set({ imageUrl })
+    .where(eq(sectionVersionsTable.id, section.currentVersionId));
+
+  logger.info({ sectionId, imageUrl }, "Section image uploaded manually to GCS");
   res.json({ imageUrl });
 });
 
