@@ -105,10 +105,10 @@ function ImagePanel({ imageUrl, title }: { imageUrl: string | null; title: strin
 
   return (
     <div className="relative w-full h-full min-h-[200px] flex items-center justify-center overflow-hidden bg-muted/30">
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-secondary/4 to-accent/8" />
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-secondary/5 to-accent/10" />
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-36 h-36 rounded-full border border-primary/10" />
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full border border-primary/15" />
-      <BarChart3 className="absolute w-7 h-7 text-primary/25" />
+      <BarChart3 className="absolute w-7 h-7 text-primary/30" />
     </div>
   );
 }
@@ -152,7 +152,7 @@ function SectionCard({
       initial="enter"
       animate="center"
       exit="exit"
-      className="bg-card border border-border/70 rounded-2xl overflow-hidden relative flex flex-col lg:flex-row hover:shadow-[0_8px_32px_rgba(0,0,0,0.35)] transition-shadow duration-400"
+      className="bg-card border border-border/70 rounded-2xl overflow-hidden relative flex flex-col lg:flex-row hover:shadow-[0_8px_32px_rgba(0,0,0,0.35)] transition-shadow duration-[400ms]"
       style={{ minHeight: "480px" }}
     >
       {/* Top accent bar */}
@@ -169,7 +169,7 @@ function SectionCard({
         {/* Card Header */}
         <div className="flex items-start justify-between mb-7 relative z-10">
           <div className="flex items-start gap-4">
-            <span className="font-display font-black text-5xl text-foreground/8 select-none leading-none mt-0.5">
+            <span className="font-display font-black text-5xl text-foreground/10 select-none leading-none mt-0.5">
               {String(index + 1).padStart(2, "0")}
             </span>
             <div>
@@ -455,7 +455,7 @@ export default function VisualReport() {
                     title={s.title}
                     className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-display uppercase tracking-wider transition-all duration-200 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                       i === activeIndex
-                        ? "bg-primary/15 text-primary border border-primary/25"
+                        ? "bg-primary/10 text-primary border border-primary/20"
                         : "text-muted-foreground/50 hover:text-muted-foreground border border-transparent hover:border-border/40"
                     }`}
                   >
