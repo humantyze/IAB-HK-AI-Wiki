@@ -7,7 +7,12 @@ export function useAuth() {
   const [, setLocation] = useLocation();
 
   const authQuery = useCheckAuth({
-    query: { queryKey: getCheckAuthQueryKey(), retry: false, staleTime: 1000 * 60 * 5 }
+    query: {
+      queryKey: getCheckAuthQueryKey(),
+      retry: false,
+      staleTime: 1000 * 60 * 10,
+      gcTime: 1000 * 60 * 30,
+    }
   });
 
   const loginMutation = useLogin({

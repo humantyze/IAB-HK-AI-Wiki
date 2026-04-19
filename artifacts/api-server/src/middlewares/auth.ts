@@ -64,9 +64,9 @@ export function setAuthCookie(res: Response): void {
   const encrypted = encrypt(token);
   res.cookie(SESSION_COOKIE, encrypted, {
     httpOnly: true,
-    sameSite: "strict",
+    sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-    maxAge: 24 * 60 * 60 * 1000,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
     path: "/",
   });
 }
