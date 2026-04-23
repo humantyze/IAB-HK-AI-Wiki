@@ -26,12 +26,12 @@ interface ChartDataPoint {
 }
 
 const CHART_COLORS = [
-  "#199edb",
-  "#337ab7",
-  "#5aafe0",
-  "#1a8bbf",
-  "#2d6fa3",
-  "#4aa8d8",
+  "#D63425",
+  "#e05a4d",
+  "#b02c1f",
+  "#e87a70",
+  "#8c2219",
+  "#f09a93",
 ];
 
 const EASE_IN: [number, number, number, number] = [0.16, 1, 0.3, 1];
@@ -55,7 +55,7 @@ const slideVariants = {
 };
 
 function StatBadge({ point, index }: { point: ChartDataPoint; index: number }) {
-  const bgColors = ["#199edb", "#337ab7", "#5aafe0"];
+  const bgColors = ["#D63425", "#b02c1f", "#e05a4d"];
   const bg = bgColors[index % bgColors.length];
 
   return (
@@ -93,9 +93,9 @@ function ImagePanel({ imageUrl, title }: { imageUrl: string | null; title: strin
 
   return (
     <div className="relative w-full h-full min-h-[200px] flex items-center justify-center overflow-hidden" style={{ backgroundColor: '#f5f9fd' }}>
-      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '120px', height: '120px', borderRadius: '50%', border: '1px solid #199edb20' }} />
-      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '70px', height: '70px', borderRadius: '50%', border: '1px solid #199edb30' }} />
-      <BarChart3 style={{ width: '28px', height: '28px', color: '#199edb', opacity: 0.3 }} />
+      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '120px', height: '120px', borderRadius: '50%', border: '1px solid #D6342520' }} />
+      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '70px', height: '70px', borderRadius: '50%', border: '1px solid #D6342530' }} />
+      <BarChart3 style={{ width: '28px', height: '28px', color: '#D63425', opacity: 0.3 }} />
     </div>
   );
 }
@@ -142,7 +142,7 @@ function SectionCard({
       style={{ minHeight: "480px", boxShadow: '0 2px 16px rgba(0,0,0,0.06)' }}
     >
       {/* Top accent bar */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', backgroundColor: '#199edb' }} />
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', backgroundColor: '#D63425' }} />
 
       {/* Right panel — image */}
       <div className="order-first lg:order-last w-full h-52 lg:h-auto lg:w-[38%] flex-shrink-0 relative overflow-hidden lg:border-l lg:border-[#e5e7eb]">
@@ -188,7 +188,7 @@ function SectionCard({
           {/* Bar Chart */}
           {hasChartData && chartPoints.length >= 2 && (
             <div className="rounded-xl p-5 border border-[#e5e7eb]" style={{ backgroundColor: '#fafafa' }}>
-              <h3 style={{ fontFamily: 'Montserrat', fontWeight: 600, fontSize: '10px', color: '#199edb', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h3 style={{ fontFamily: 'Montserrat', fontWeight: 600, fontSize: '10px', color: '#D63425', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <BarChart3 className="w-3 h-3" />
                 Data Breakdown
               </h3>
@@ -222,7 +222,7 @@ function SectionCard({
                       }}
                     />
                     <Tooltip
-                      cursor={{ fill: "#199edb10" }}
+                      cursor={{ fill: "#D6342510" }}
                       contentStyle={{
                         backgroundColor: "#ffffff",
                         borderColor: "#e5e7eb",
@@ -259,7 +259,7 @@ function SectionCard({
               <ul className="space-y-3.5">
                 {section.keyInsights.slice(0, 3).map((insight, i) => (
                   <li key={i} className="flex items-start gap-3">
-                    <span style={{ width: '2px', alignSelf: 'stretch', borderRadius: '9999px', backgroundColor: '#199edb', flexShrink: 0, marginTop: '2px', minHeight: '20px', display: 'inline-block' }} />
+                    <span style={{ width: '2px', alignSelf: 'stretch', borderRadius: '9999px', backgroundColor: '#D63425', flexShrink: 0, marginTop: '2px', minHeight: '20px', display: 'inline-block' }} />
                     <span style={{ fontFamily: 'Montserrat', fontSize: '13px', color: '#4d4d4d', lineHeight: 1.6 }}>
                       {insight}
                     </span>
@@ -346,9 +346,9 @@ export default function VisualReport() {
               State of AI
             </span>
           </div>
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-[#199edb]/30" style={{ backgroundColor: '#199edb10' }}>
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#199edb', display: 'inline-block' }} />
-            <span style={{ fontFamily: 'Montserrat', fontSize: '10px', color: '#199edb', letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 600 }}>
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-[#D63425]/30" style={{ backgroundColor: '#D6342510' }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#D63425', display: 'inline-block' }} />
+            <span style={{ fontFamily: 'Montserrat', fontSize: '10px', color: '#D63425', letterSpacing: '0.15em', textTransform: 'uppercase', fontWeight: 600 }}>
               Visual Summary
             </span>
           </div>
@@ -371,7 +371,7 @@ export default function VisualReport() {
             </div>
             <h1 style={{ fontFamily: 'Montserrat', fontWeight: 800, fontSize: '32px', color: '#3b3b3b', lineHeight: 1.25, marginBottom: '12px' }}>
               State of AI in{" "}
-              <span style={{ color: '#199edb' }}>
+              <span style={{ color: '#D63425' }}>
                 Hong Kong Marketing
               </span>
             </h1>
@@ -387,7 +387,7 @@ export default function VisualReport() {
       <main className="max-w-[1400px] mx-auto px-6 pb-24 pt-10">
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
-            <div className="w-8 h-8 border-2 border-[#199edb]/20 border-t-[#199edb] rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-[#D63425]/20 border-t-[#D63425] rounded-full animate-spin" />
           </div>
         ) : total === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 gap-4">
@@ -443,9 +443,9 @@ export default function VisualReport() {
                       letterSpacing: '0.08em',
                       textTransform: 'uppercase',
                       fontWeight: 700,
-                      backgroundColor: i === activeIndex ? '#199edb10' : 'transparent',
-                      color: i === activeIndex ? '#199edb' : '#B6B6B6',
-                      border: i === activeIndex ? '1px solid #199edb30' : '1px solid transparent',
+                      backgroundColor: i === activeIndex ? '#D6342510' : 'transparent',
+                      color: i === activeIndex ? '#D63425' : '#B6B6B6',
+                      border: i === activeIndex ? '1px solid #D6342530' : '1px solid transparent',
                     }}
                   >
                     <span>{String(i + 1).padStart(2, "0")}</span>

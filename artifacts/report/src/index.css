@@ -63,8 +63,8 @@
   --popover-foreground: 0 0% 23%;
   --popover-border: 0 0% 90%;
 
-  /* Blue #199edb */
-  --primary: 199 71% 48%;
+  /* Red #D63425 */
+  --primary: 5 65% 49%;
   --primary-foreground: 0 0% 100%;
 
   /* Red #D63425 */
@@ -74,8 +74,8 @@
   --muted: 0 0% 96%;
   --muted-foreground: 0 0% 71%;
 
-  /* Alternate Blue #337ab7 */
-  --accent: 209 56% 46%;
+  /* Deeper Red #c0392b */
+  --accent: 5 62% 45%;
   --accent-foreground: 0 0% 100%;
 
   --destructive: 0 72% 54%;
@@ -83,7 +83,7 @@
 
   --border: 0 0% 88%;
   --input: 0 0% 88%;
-  --ring: 199 71% 48%;
+  --ring: 5 65% 49%;
 
   --radius: 0.5rem;
 }
