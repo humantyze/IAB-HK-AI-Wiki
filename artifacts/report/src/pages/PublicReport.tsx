@@ -50,7 +50,11 @@ export default function PublicReport() {
     <div className="min-h-screen bg-white" style={{ fontFamily: 'Montserrat, sans-serif' }}>
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white z-50 border-b border-[#e5e7eb] flex items-center px-6 justify-between">
-        <span style={{ fontFamily: 'Montserrat', fontWeight: 700, fontSize: '16px', color: '#4a4a4a', letterSpacing: '0.05em' }}>STATE OF AI</span>
+        <img
+          src={`${import.meta.env.BASE_URL}iabhk-logo.png`}
+          alt="IAB Hong Kong"
+          style={{ height: '36px', width: 'auto' }}
+        />
         <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)} style={{ color: '#D63425' }}>
           <Menu className="w-6 h-6" />
         </Button>
@@ -72,6 +76,11 @@ export default function PublicReport() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
           >
+            <img
+              src={`${import.meta.env.BASE_URL}iabhk-logo.png`}
+              alt="IAB Hong Kong"
+              style={{ height: '56px', width: 'auto', marginBottom: '28px', display: 'block' }}
+            />
             <div className="inline-flex items-center space-x-2 border border-[#D63425]/30 bg-[#D63425]/5 px-4 py-1.5 rounded-full mb-8">
               <span className="w-1.5 h-1.5 rounded-full bg-[#D63425]" />
               <span style={{ fontFamily: 'Montserrat', fontWeight: 600, fontSize: '10px', color: '#D63425', letterSpacing: '0.15em', textTransform: 'uppercase' }}>IAB Hong Kong Web Book</span>
