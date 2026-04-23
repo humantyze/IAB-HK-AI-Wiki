@@ -11,10 +11,9 @@ const data = [
 
 export function ChartPlaceholder() {
   return (
-    <div className="h-[400px] w-full mt-12 mb-12 p-6 bg-card/40 backdrop-blur-sm border border-primary/20 rounded-2xl relative overflow-hidden group">
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-secondary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
-      <h4 className="font-display font-semibold text-primary uppercase tracking-widest text-xs mb-8 flex items-center">
-        <span className="w-2 h-2 rounded-full bg-primary mr-3 animate-pulse" />
+    <div className="h-[400px] w-full mt-12 mb-12 p-6 rounded-2xl border border-[#e5e7eb]" style={{ backgroundColor: '#fafafa' }}>
+      <h4 style={{ fontFamily: 'Montserrat', fontWeight: 600, fontSize: '11px', color: '#199edb', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: '28px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#199edb', display: 'inline-block' }} />
         AI Adoption Trajectory Overview (Hong Kong)
       </h4>
       <div className="h-[300px] w-full">
@@ -22,19 +21,50 @@ export function ChartPlaceholder() {
           <AreaChart data={data}>
             <defs>
               <linearGradient id="colorAdoption" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4}/>
-                <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                <stop offset="5%" stopColor="#199edb" stopOpacity={0.15} />
+                <stop offset="95%" stopColor="#199edb" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-            <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} dy={10} />
-            <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(val) => `${val}%`} dx={-10} />
-            <Tooltip 
-              contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', color: 'hsl(var(--foreground))', borderRadius: '8px' }}
-              itemStyle={{ color: 'hsl(var(--primary))', fontFamily: 'var(--font-display)', fontWeight: 'bold' }}
-              labelStyle={{ color: 'hsl(var(--muted-foreground))', marginBottom: '8px' }}
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+            <XAxis
+              dataKey="name"
+              stroke="#B6B6B6"
+              fontSize={12}
+              tickLine={false}
+              axisLine={false}
+              dy={10}
+              tick={{ fill: '#B6B6B6', fontFamily: 'Montserrat' }}
             />
-            <Area type="monotone" dataKey="adoption" stroke="hsl(var(--primary))" strokeWidth={3} fillOpacity={1} fill="url(#colorAdoption)" />
+            <YAxis
+              stroke="#B6B6B6"
+              fontSize={12}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(val) => `${val}%`}
+              dx={-10}
+              tick={{ fill: '#B6B6B6', fontFamily: 'Montserrat' }}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#ffffff',
+                borderColor: '#e5e7eb',
+                color: '#4d4d4d',
+                borderRadius: '8px',
+                fontFamily: 'Montserrat',
+                fontSize: '13px',
+                boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+              }}
+              itemStyle={{ color: '#199edb', fontFamily: 'Montserrat', fontWeight: 600 }}
+              labelStyle={{ color: '#B6B6B6', marginBottom: '6px', fontFamily: 'Montserrat', fontSize: '11px' }}
+            />
+            <Area
+              type="monotone"
+              dataKey="adoption"
+              stroke="#199edb"
+              strokeWidth={2.5}
+              fillOpacity={1}
+              fill="url(#colorAdoption)"
+            />
           </AreaChart>
         </ResponsiveContainer>
       </div>
