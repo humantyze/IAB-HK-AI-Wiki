@@ -1,0 +1,20 @@
+Karpathy’s second brain ingests new material into a “raw” folder, then has the LLM read it end‑to‑end, extract entities and concepts, and write or update corresponding markdown pages in the wiki layer. The model revises topic summaries, adds cross‑links, and notes contradictions so each source can touch many existing pages, gradually strengthening an evolving, interlinked knowledge graph instead of answering from scratch each time.[1][2][3][4][5][6]
+
+What are you mainly hoping to use this style of second brain for—research, business intelligence, or something else?
+
+Sources
+[1] How I Took Karpathy's LLM Wiki and Built an AI-Powered Second ... https://aimaker.substack.com/p/llm-wiki-obsidian-knowledge-base-andrej-karphaty
+[2] Karpathy's LLM Wiki: The Complete Guide to His Idea File https://antigravity.codes/blog/karpathy-llm-wiki-idea-file
+[3] The Complete Guide to Karpathy's Second Brain - AI by Aakash https://www.aibyaakash.com/p/karpathy-second-brain
+[4] Karpathy's LLM Knowledge Bases: The Post-Code AI Workflow https://antigravity.codes/blog/karpathy-llm-knowledge-bases
+[5] LLM Wiki - GitHub Gist https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f
+[6] Andrej Karpathy just open-sourced a system for building ... - Instagram https://www.instagram.com/reel/DWzAdbYAe5W/
+[7] Karpathy's LLM Wiki - Full Beginner Setup Guide - YouTube https://www.youtube.com/watch?v=iXd0t60YmMw
+[8] Karpathy's LLM Knowledge Bases Turn Raw Files into Evolving Wikis https://x.com/i/trending/2042013766036926944
+[9] New plugin: LLM Wiki - turn your vault into a queryable knowledge ... https://www.reddit.com/r/ObsidianMD/comments/1shntdn/new_plugin_llm_wiki_turn_your_vault_into_a/
+[10] Build Your Second Brain With Claude Code, Karpathy's Method https://www.youtube.com/watch?v=lnsExa1UbnM
+[11] Second Brain Builder — Karpathy's LLM Wiki, Automated - Apify https://apify.com/openclawai/second-brain-builder
+[12] How to Build a Personal LLM Knowledge Base (Karpathy’s Method) https://www.youtube.com/watch?v=VRub1w-APTc
+[13] Andrej Karpathy's just shared his new set-up on X. It's literally a self ... https://www.linkedin.com/posts/charlywargnier_andrej-karpathys-just-shared-his-new-activity-7445729452837380096-2Mzu
+[14] What Is Karpathy's LLM Wiki? A Zettelkasten User's Honest Review https://yu-wenhao.com/en/blog/karpathy-zettelkasten-comparison/
+[15] What Is the Karpathy LLM Wiki Pattern? How to Build a Personal ... https://www.mindstudio.ai/blog/karpathy-llm-wiki-knowledge-base-pattern/
