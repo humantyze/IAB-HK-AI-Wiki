@@ -6,7 +6,7 @@ import { z } from "zod";
 import { format } from "date-fns";
 import { Link, useLocation } from "wouter";
 import {
-  LogOut, Upload as UploadIcon, History, GitBranch, ShieldAlert,
+  LogOut, Upload as UploadIcon, History, GitBranch, Hand,
   Paperclip, X, ImageIcon, Sparkles, CheckCircle2, AlertCircle,
   ArrowLeft, ChevronRight, UploadCloud, BookOpen, RefreshCw,
 } from "lucide-react";
@@ -295,7 +295,7 @@ export default function AdminDashboard() {
         <div className="max-w-[1600px] mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <div className="w-10 h-10 rounded-lg bg-secondary/10 flex items-center justify-center border border-secondary/20">
-              <ShieldAlert className="text-secondary w-5 h-5" />
+              <Hand className="text-secondary w-5 h-5" />
             </div>
             <div>
               <div className="font-serif font-bold text-base sm:text-lg leading-tight text-foreground/90">CONTRIBUTOR PORTAL</div>
