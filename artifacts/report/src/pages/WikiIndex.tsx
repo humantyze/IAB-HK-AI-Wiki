@@ -80,7 +80,6 @@ export default function WikiIndex() {
           </div>
           <div className="flex items-center gap-1.5 ml-2">
             <span className="text-gray-200 text-sm">|</span>
-            <BookOpen size={14} style={{ color: "#D63425" }} />
             <span className="text-sm font-semibold text-gray-700">Welcome to the Interactive Advertising Bureau Hong Kong</span>
           </div>
           <nav className="flex gap-5 ml-auto text-xs font-medium text-gray-500">
