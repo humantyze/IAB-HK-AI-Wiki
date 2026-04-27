@@ -315,6 +315,12 @@ export default function AdminDashboard() {
       </header>
 
       <main className="max-w-[1600px] mx-auto px-6 py-12 relative z-10">
+        <div className="mb-8 p-5 rounded-xl border border-border/40 bg-card/30 backdrop-blur-md text-sm text-muted-foreground leading-relaxed">
+          <span className="font-semibold text-foreground/80">How this works: </span>
+          The <span className="text-primary font-medium">Content</span> tab is where you submit new source material — whitepapers, case studies, market data, etc. The AI reads it, then suggests which report sections to update; you review and approve before anything changes.
+          {" "}The <span className="text-green-400 font-medium">Wiki</span> tab manages the public Knowledge Base — it scans the existing report sections and generates or updates individual wiki pages, one per concept, company, or topic.
+          {" "}In short: <span className="italic">Content feeds the report → Wiki turns the report into the browsable knowledge base.</span>
+        </div>
         <Tabs defaultValue="upload" className="space-y-8">
           <TabsList className="w-full bg-card/50 backdrop-blur-md border border-border/50 p-1 rounded-xl h-auto">
             <TabsTrigger value="upload" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-tight sm:tracking-[0.15em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-primary/10 data-[state=active]:text-primary transition-all">
