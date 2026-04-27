@@ -35,7 +35,7 @@ const uploadSchema = z.object({
 const confidenceConfig: Record<SectionSuggestion["confidence"], { label: string; classes: string }> = {
   high: { label: "High Match", classes: "bg-primary/10 text-primary border-primary/20" },
   medium: { label: "Medium Match", classes: "bg-secondary/10 text-secondary border-secondary/20" },
-  low: { label: "Low Match", classes: "bg-muted/30 text-muted-foreground border-border/40" },
+  low: { label: "Low Match", classes: "bg-muted/30 text-foreground/70 border-border/40" },
 };
 
 export default function AdminDashboard() {
@@ -303,11 +303,11 @@ export default function AdminDashboard() {
             </div>
           </div>
           <div className="flex items-center space-x-3 sm:space-x-6">
-            <Link href="/" className="hidden sm:block text-[11px] font-display uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
+            <Link href="/" className="hidden sm:block text-[11px] font-display uppercase tracking-widest text-foreground/70 hover:text-primary transition-colors">
               View Knowledge Base
             </Link>
             <div className="hidden sm:block w-px h-6 bg-border" />
-            <Button variant="ghost" size="sm" onClick={() => logout()} className="text-muted-foreground hover:text-destructive font-display uppercase tracking-widest text-[11px]">
+            <Button variant="ghost" size="sm" onClick={() => logout()} className="text-foreground/70 hover:text-destructive font-display uppercase tracking-widest text-[11px]">
               <LogOut className="w-3 h-3 sm:mr-2" /><span className="hidden sm:inline">Terminate Session</span>
             </Button>
           </div>
@@ -356,7 +356,7 @@ export default function AdminDashboard() {
                       variant="ghost"
                       size="sm"
                       onClick={() => { setPhase("input"); setAnalysis(null); setApprovedSlugs(new Set()); }}
-                      className="text-muted-foreground hover:text-foreground font-display uppercase tracking-widest text-[11px]"
+                      className="text-foreground/70 hover:text-foreground font-display uppercase tracking-widest text-[11px]"
                     >
                       <ArrowLeft className="w-3 h-3 mr-2" /> Back
                     </Button>
@@ -374,7 +374,7 @@ export default function AdminDashboard() {
                           name="contributorName"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-muted-foreground">Source</FormLabel>
+                              <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70">Source</FormLabel>
                               <FormControl>
                                 <Input placeholder="Enter author or organization name" className="bg-background/50 border-border/50 h-12 rounded-xl focus-visible:ring-primary/30" {...field} />
                               </FormControl>
@@ -387,7 +387,7 @@ export default function AdminDashboard() {
                           name="contentType"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-muted-foreground">Type of Content</FormLabel>
+                              <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70">Type of Content</FormLabel>
                               <Select onValueChange={field.onChange} defaultValue={field.value}>
                                 <FormControl>
                                   <SelectTrigger className="bg-background/50 border-border/50 h-12 rounded-xl focus:ring-primary/30">
@@ -413,8 +413,8 @@ export default function AdminDashboard() {
                         name="rawText"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-muted-foreground">
-                              Paste text here <span className="text-muted-foreground/50 normal-case tracking-normal font-sans text-[11px]">(Optional — attach a file below instead)</span>
+                            <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70">
+                              Paste text here <span className="text-foreground/70/50 normal-case tracking-normal font-sans text-[11px]">(Optional — attach a file below instead)</span>
                             </FormLabel>
                             <FormControl>
                               <Textarea
@@ -429,11 +429,11 @@ export default function AdminDashboard() {
                       />
 
                       <div>
-                        <label className="font-display tracking-[0.2em] uppercase text-[10px] text-muted-foreground block mb-3">Supplementary File (Optional)</label>
+                        <label className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70 block mb-3">Supplementary File (Optional)</label>
                         <div className="flex items-center gap-4">
                           <label className="flex-1 flex items-center gap-3 p-4 border border-dashed border-border/50 rounded-xl bg-background/30 hover:border-primary/30 hover:bg-background/50 transition-all cursor-pointer group">
-                            <Paperclip className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                            <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
+                            <Paperclip className="w-5 h-5 text-foreground/70 group-hover:text-primary transition-colors" />
+                            <span className="text-sm text-foreground/70 group-hover:text-foreground transition-colors">
                               {selectedFile ? selectedFile.name : "Attach PDF, TXT, CSV, DOCX, or XLSX (max 10MB)"}
                             </span>
                             <input
@@ -450,7 +450,7 @@ export default function AdminDashboard() {
                               variant="ghost"
                               size="icon"
                               onClick={() => { setSelectedFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
-                              className="text-muted-foreground hover:text-destructive"
+                              className="text-foreground/70 hover:text-destructive"
                             >
                               <X className="w-4 h-4" />
                             </Button>
@@ -491,13 +491,13 @@ export default function AdminDashboard() {
 
                     {/* Task List */}
                     <div>
-                      <h3 className="font-display tracking-[0.2em] uppercase text-[10px] text-muted-foreground mb-6 flex items-center gap-3">
+                      <h3 className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70 mb-6 flex items-center gap-3">
                         <span className="w-1.5 h-1.5 bg-primary rounded-full shadow-[0_0_8px_rgba(0,240,255,0.8)]" />
                         Integration Task List — Review &amp; Approve
                       </h3>
 
                       {analysis.suggestions.length === 0 ? (
-                        <div className="flex items-center gap-4 p-6 border border-dashed border-border/50 rounded-xl bg-background/20 text-muted-foreground">
+                        <div className="flex items-center gap-4 p-6 border border-dashed border-border/50 rounded-xl bg-background/20 text-foreground/70">
                           <AlertCircle className="w-5 h-5 shrink-0" />
                           <div>
                             <p className="font-medium text-sm">No matching sections found</p>
@@ -527,13 +527,13 @@ export default function AdminDashboard() {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-3 mb-2 flex-wrap">
-                                        <span className="font-display text-[10px] text-muted-foreground/50">TASK {String(idx + 1).padStart(2, "0")}</span>
+                                        <span className="font-display text-[10px] text-foreground/70/50">TASK {String(idx + 1).padStart(2, "0")}</span>
                                         <Badge variant="outline" className={`text-[10px] font-display tracking-wide px-2 py-0.5 border ${conf.classes}`}>
                                           {conf.label}
                                         </Badge>
                                       </div>
                                       <p className="font-medium text-sm text-foreground/90 mb-1">{suggestion.title}</p>
-                                      <p className="text-xs text-muted-foreground font-light leading-relaxed">{suggestion.reason}</p>
+                                      <p className="text-xs text-foreground/70 font-light leading-relaxed">{suggestion.reason}</p>
                                     </div>
                                   </div>
                                   <ChevronRight className={`w-4 h-4 mt-1 shrink-0 transition-colors ${approved ? "text-primary/60" : "text-border/50"}`} />
@@ -547,7 +547,7 @@ export default function AdminDashboard() {
 
                     {/* Approved count + confirm */}
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-4 border-t border-border/30">
-                      <p className="text-xs text-muted-foreground font-light">
+                      <p className="text-xs text-foreground/70 font-light">
                         <span className="text-foreground font-medium">{approvedSlugs.size}</span> of {analysis.suggestions.length} section{analysis.suggestions.length !== 1 ? "s" : ""} approved for integration
                       </p>
                       <Button
@@ -578,7 +578,7 @@ export default function AdminDashboard() {
               <CardContent className="px-4 sm:px-10 pb-6 sm:pb-10">
                 <div className="space-y-6">
                   {uploads?.length === 0 && (
-                    <div className="text-center py-20 text-muted-foreground border border-dashed border-border/50 rounded-2xl bg-background/20 font-display tracking-widest uppercase text-xs">
+                    <div className="text-center py-20 text-foreground/70 border border-dashed border-border/50 rounded-2xl bg-background/20 font-display tracking-widest uppercase text-xs">
                       No Data Payloads Found
                     </div>
                   )}
@@ -596,15 +596,15 @@ export default function AdminDashboard() {
                           >
                             {upload.status}
                           </Badge>
-                          <span className="text-xs text-muted-foreground font-mono tracking-tight opacity-70">
+                          <span className="text-xs text-foreground/70 font-mono tracking-tight opacity-70">
                             {format(new Date(upload.createdAt), "yyyy.MM.dd HH:mm:ss")}
                           </span>
                         </div>
                         <h4 className="text-lg font-serif font-bold text-foreground/90 mb-1">
-                          {upload.contentType.replace("_", " ").toUpperCase()} <span className="text-muted-foreground font-normal mx-2">|</span> {upload.contributorName || "Anonymous Source"}
+                          {upload.contentType.replace("_", " ").toUpperCase()} <span className="text-foreground/70 font-normal mx-2">|</span> {upload.contributorName || "Anonymous Source"}
                         </h4>
                         <div className="flex items-center space-x-2 mt-2">
-                          <span className="font-display text-[10px] uppercase text-muted-foreground tracking-widest">Vectors:</span>
+                          <span className="font-display text-[10px] uppercase text-foreground/70 tracking-widest">Vectors:</span>
                           <div className="flex flex-wrap gap-2">
                             {upload.targetSections.map((s) => (
                               <span key={s} className="text-[10px] px-2 py-0.5 bg-card border border-border/50 rounded text-foreground/70">{s}</span>
@@ -613,7 +613,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                       {upload.rawText && (
-                        <div className="mt-6 xl:mt-0 xl:ml-12 xl:w-[400px] text-xs text-muted-foreground line-clamp-3 font-mono leading-relaxed p-4 bg-black/20 rounded-xl border border-white/5">
+                        <div className="mt-6 xl:mt-0 xl:ml-12 xl:w-[400px] text-xs text-foreground/70 line-clamp-3 font-mono leading-relaxed p-4 bg-black/20 rounded-xl border border-white/5">
                           {upload.rawText}
                         </div>
                       )}
@@ -631,7 +631,7 @@ export default function AdminDashboard() {
               <div className="flex flex-col lg:flex-row h-full min-h-[700px]">
                 <div className="w-full lg:w-80 border-r border-border/30 bg-background/20 p-4 sm:p-8">
                   <div className="mb-6">
-                    <h4 className="font-display tracking-[0.2em] text-[10px] uppercase text-muted-foreground mb-4">Sections</h4>
+                    <h4 className="font-display tracking-[0.2em] text-[10px] uppercase text-foreground/70 mb-4">Sections</h4>
                     <Button
                       variant="outline"
                       size="sm"
@@ -645,7 +645,7 @@ export default function AdminDashboard() {
 
                     {imageProgress && imageProgress.total > 0 && (
                       <div className="mt-3 space-y-2">
-                        <div className="flex items-center justify-between text-[10px] font-display uppercase tracking-widest text-muted-foreground">
+                        <div className="flex items-center justify-between text-[10px] font-display uppercase tracking-widest text-foreground/70">
                           <span>{imageProgress.current} of {imageProgress.total} done</span>
                           <span>{Math.round((imageProgress.current / imageProgress.total) * 100)}%</span>
                         </div>
@@ -656,7 +656,7 @@ export default function AdminDashboard() {
                           />
                         </div>
                         {imageProgress.currentSectionTitle && (
-                          <p className="text-[10px] text-muted-foreground/60 truncate">
+                          <p className="text-[10px] text-foreground/70/60 truncate">
                             {imageProgress.current < imageProgress.total ? `Generating: ${imageProgress.currentSectionTitle}` : imageProgress.currentSectionTitle}
                           </p>
                         )}
@@ -665,7 +665,7 @@ export default function AdminDashboard() {
 
                     {!imageProgress && (
                       <div className="mt-3 space-y-1">
-                        <label className="font-display tracking-[0.2em] text-[10px] uppercase text-muted-foreground/60">
+                        <label className="font-display tracking-[0.2em] text-[10px] uppercase text-foreground/70/60">
                           Prompt Addition (Optional)
                         </label>
                         <Input
@@ -675,7 +675,7 @@ export default function AdminDashboard() {
                           disabled={generatingImages}
                           className="bg-background/50 border-border/50 h-9 rounded-lg text-xs focus-visible:ring-accent/30"
                         />
-                        <p className="text-[10px] text-muted-foreground/40 leading-snug">Appended to each section's image prompt.</p>
+                        <p className="text-[10px] text-foreground/70/40 leading-snug">Appended to each section's image prompt.</p>
                       </div>
                     )}
                   </div>
@@ -686,7 +686,7 @@ export default function AdminDashboard() {
                         className={`rounded-xl text-sm transition-all duration-300 border
                           ${selectedSectionId === sec.id
                             ? "bg-accent/10 border-accent/30 text-accent shadow-[inset_0_0_15px_rgba(0,150,255,0.05)]"
-                            : "border-transparent hover:bg-background/50 text-muted-foreground"}`}
+                            : "border-transparent hover:bg-background/50 text-foreground/70"}`}
                       >
                         <button
                           type="button"
@@ -731,7 +731,7 @@ export default function AdminDashboard() {
 
                 <div className="flex-1 p-4 sm:p-8 lg:p-12 overflow-y-auto">
                   {!selectedSectionId ? (
-                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground border border-dashed border-border/40 rounded-2xl bg-background/10">
+                    <div className="h-full flex flex-col items-center justify-center text-foreground/70 border border-dashed border-border/40 rounded-2xl bg-background/10">
                       <GitBranch className="w-12 h-12 mb-4 opacity-20" />
                       <p className="font-display tracking-widest text-xs uppercase">Select a section to view its history</p>
                     </div>
@@ -744,7 +744,7 @@ export default function AdminDashboard() {
                         <p className="font-display tracking-[0.2em] uppercase text-[10px] text-accent mt-3">Version Matrix</p>
                       </div>
 
-                      {versions?.length === 0 && <p className="text-muted-foreground font-light italic">No version history found for this section.</p>}
+                      {versions?.length === 0 && <p className="text-foreground/70 font-light italic">No version history found for this section.</p>}
 
                       {versions?.map((version, idx) => (
                         <div key={version.id} className="relative pl-10 pb-10 border-l border-border/30 last:pb-0 last:border-transparent">
@@ -758,7 +758,7 @@ export default function AdminDashboard() {
                             <div className="flex items-center space-x-4 mb-8">
                               <div className="font-display text-sm text-foreground/80 tracking-widest">v.{version.id}.0</div>
                               <div className="w-1 h-1 rounded-full bg-border" />
-                              <div className="text-xs text-muted-foreground font-mono tracking-tight">
+                              <div className="text-xs text-foreground/70 font-mono tracking-tight">
                                 {format(new Date(version.createdAt), "yyyy.MM.dd HH:mm:ss")}
                               </div>
                             </div>
@@ -778,7 +778,7 @@ export default function AdminDashboard() {
                               )}
                               <div>
                                 <span className="font-display tracking-[0.2em] text-[10px] uppercase text-accent mb-4 block">Content Snapshot</span>
-                                <div className="text-sm font-serif text-muted-foreground leading-loose border-l border-border/50 pl-6 py-2 bg-gradient-to-r from-background/50 to-transparent">
+                                <div className="text-sm font-serif text-foreground/70 leading-loose border-l border-border/50 pl-6 py-2 bg-gradient-to-r from-background/50 to-transparent">
                                   {version.bodyMarkdown.substring(0, 300)}...
                                 </div>
                               </div>
@@ -815,15 +815,15 @@ export default function AdminDashboard() {
                 {/* Stats row */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="rounded-xl border border-border/50 bg-background/50 p-6">
-                    <div className="text-[10px] font-display uppercase tracking-widest text-muted-foreground mb-2">Wiki Pages</div>
+                    <div className="text-[10px] font-display uppercase tracking-widest text-foreground/70 mb-2">Wiki Pages</div>
                     <div className="text-4xl font-bold font-serif text-green-400">
                       {wikiPageCount === null ? "—" : wikiPageCount}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">pages in the knowledge base</p>
+                    <p className="text-xs text-foreground/70 mt-1">pages in the knowledge base</p>
                   </div>
                   <div className="rounded-xl border border-border/50 bg-background/50 p-6 flex flex-col justify-between">
                     <div>
-                      <div className="text-[10px] font-display uppercase tracking-widest text-muted-foreground mb-2">Last Seed Result</div>
+                      <div className="text-[10px] font-display uppercase tracking-widest text-foreground/70 mb-2">Last Seed Result</div>
                       {wikiSeedResult ? (
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
@@ -840,7 +840,7 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                       ) : (
-                        <p className="text-sm text-muted-foreground">Run a seed to see results.</p>
+                        <p className="text-sm text-foreground/70">Run a seed to see results.</p>
                       )}
                     </div>
                   </div>
@@ -849,7 +849,7 @@ export default function AdminDashboard() {
                 {/* Seed action */}
                 <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-6">
                   <h3 className="font-display text-sm tracking-widest uppercase text-green-400 mb-2">Build Wiki from Existing Sections</h3>
-                  <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
+                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
                     This reads all 8 report sections and sends each one to the AI for entity extraction. New entities become wiki pages; existing pages are enriched with additional content. This may take 1–2 minutes.
                   </p>
                   <Button
@@ -873,7 +873,7 @@ export default function AdminDashboard() {
 
                 {/* View link */}
                 <div className="text-center">
-                  <Link href="/" className="text-[11px] font-display uppercase tracking-widest text-muted-foreground hover:text-green-400 transition-colors inline-flex items-center gap-2">
+                  <Link href="/" className="text-[11px] font-display uppercase tracking-widest text-foreground/70 hover:text-green-400 transition-colors inline-flex items-center gap-2">
                     <BookOpen className="w-3 h-3" />
                     View Knowledge Base
                   </Link>
