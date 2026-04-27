@@ -419,31 +419,40 @@ export default function WikiPage({ params }: WikiPageProps) {
                   const isSectionRef = src.ref.startsWith("§ ");
                   const sectionTitle = isSectionRef ? src.ref.slice(2).trim() : null;
                   const sectionSlug = sectionTitle ? sectionSlugMap[sectionTitle] : null;
-                  return (
-                    <div key={i} className="p-2.5 rounded-lg border border-gray-100 bg-gray-50">
-                      <p className="text-xs font-semibold text-gray-700 leading-snug mb-0.5">{src.label}</p>
-                      {isUrl ? (
-                        <a
-                          href={src.ref}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[10px] break-all hover:underline"
-                          style={{ color: "#D63425" }}
-                        >
-                          {src.ref}
-                        </a>
-                      ) : isSectionRef && sectionSlug ? (
-                        <Link href={`/sections/${sectionSlug}`}>
-                          <span
-                            className="text-[10px] hover:underline cursor-pointer"
+                  const isLinkable = isUrl || (isSectionRef && sectionSlug);
+
+                  if (isLinkable) {
+                    return (
+                      <div key={i} className="p-2.5 rounded-lg border border-gray-100 bg-gray-50">
+                        <p className="text-xs font-semibold text-gray-700 leading-snug mb-0.5">{src.label}</p>
+                        {isUrl ? (
+                          <a
+                            href={src.ref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] break-all hover:underline"
                             style={{ color: "#D63425" }}
                           >
-                            {sectionTitle}
-                          </span>
-                        </Link>
-                      ) : (
-                        <p className="text-[10px] text-gray-400">{src.ref}</p>
-                      )}
+                            {src.ref}
+                          </a>
+                        ) : (
+                          <Link href={`/sections/${sectionSlug}`}>
+                            <span
+                              className="text-[10px] hover:underline cursor-pointer"
+                              style={{ color: "#D63425" }}
+                            >
+                              {sectionTitle}
+                            </span>
+                          </Link>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={i}>
+                      <p className="text-xs font-semibold text-gray-700 leading-snug">{src.label}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">{src.ref}</p>
                     </div>
                   );
                 })}
