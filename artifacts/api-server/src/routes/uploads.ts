@@ -219,12 +219,14 @@ router.post("/uploads", requireAuth, (req, res, next) => {
       processedAt: updated.processedAt?.toISOString() ?? null,
     });
 
-    // Non-blocking wiki extraction — runs after response is sent
-    if (data.rawText.trim()) {
+    // Non-blocking wiki extraction — always fires after a successful upload
+    {
       const sourceLabel = data.contributorName ?? data.contentType.replace(/_/g, " ");
       const sourceRef = `Upload #${updated.id} — ${data.contentType.replace(/_/g, " ")}`;
+      const extractionText = data.rawText.trim()
+        || `Uploaded file: ${req.file?.originalname ?? "unknown"} (${data.contentType.replace(/_/g, " ")})`;
       setImmediate(() => {
-        extractWikiPages(sourceLabel, data.rawText, sourceRef).catch((err: unknown) => {
+        extractWikiPages(sourceLabel, extractionText, sourceRef).catch((err: unknown) => {
           logger.error({ err, uploadId: updated.id }, "Non-blocking wiki extraction failed");
         });
       });
