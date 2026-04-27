@@ -326,14 +326,14 @@ export default function AdminDashboard() {
             <TabsTrigger value="upload" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-tight sm:tracking-[0.15em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-primary/10 data-[state=active]:text-primary transition-all">
               <UploadIcon className="hidden sm:inline-flex w-4 h-4 sm:mr-3" />Content
             </TabsTrigger>
+            <TabsTrigger value="wiki" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-tight sm:tracking-[0.15em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-green-500/10 data-[state=active]:text-green-400 transition-all">
+              <BookOpen className="hidden sm:inline-flex w-4 h-4 sm:mr-3" />Wiki
+            </TabsTrigger>
             <TabsTrigger value="history" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-tight sm:tracking-[0.15em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-secondary/10 data-[state=active]:text-secondary transition-all">
               <History className="hidden sm:inline-flex w-4 h-4 sm:mr-3" />Upload History
             </TabsTrigger>
             <TabsTrigger value="versions" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-tight sm:tracking-[0.15em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-accent/10 data-[state=active]:text-accent transition-all">
               <GitBranch className="hidden sm:inline-flex w-4 h-4 sm:mr-3" />Image Generation
-            </TabsTrigger>
-            <TabsTrigger value="wiki" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-tight sm:tracking-[0.15em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-green-500/10 data-[state=active]:text-green-400 transition-all">
-              <BookOpen className="hidden sm:inline-flex w-4 h-4 sm:mr-3" />Wiki
             </TabsTrigger>
           </TabsList>
 
