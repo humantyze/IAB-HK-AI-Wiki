@@ -98,16 +98,19 @@ router.post("/uploads/analyze", requireAuth, (req, res, next) => {
     .from(sectionsTable);
 
   let textToAnalyse = rawText.trim();
-  if (!textToAnalyse && req.file) {
+  if (req.file) {
     if (req.file.mimetype === "application/pdf") {
       try {
-        textToAnalyse = await extractTextOnly(req.file.path);
+        const pdfText = await extractTextOnly(req.file.path);
         logger.info({ filename: req.file.originalname }, "Extracted text from PDF for analysis");
+        textToAnalyse = textToAnalyse
+          ? `${textToAnalyse}\n\n---\n\n${pdfText}`
+          : pdfText;
       } catch (err) {
         logger.warn({ err, filename: req.file.originalname }, "PDF text extraction failed — falling back to filename");
-        textToAnalyse = `Uploaded file: ${req.file.originalname}`;
+        if (!textToAnalyse) textToAnalyse = `Uploaded file: ${req.file.originalname}`;
       }
-    } else {
+    } else if (!textToAnalyse) {
       textToAnalyse = `Uploaded file: ${req.file.originalname}`;
     }
   }
@@ -169,16 +172,19 @@ router.post("/uploads", requireAuth, (req, res, next) => {
 
   const filePath = req.file ? req.file.filename : null;
 
-  // Extract text from PDF if no raw text was provided
+  // Build effective text: pasted input + PDF extraction (both combined when present)
   let effectiveText = data.rawText.trim();
-  if (!effectiveText && req.file?.mimetype === "application/pdf") {
+  if (req.file?.mimetype === "application/pdf") {
     try {
       logger.info({ filename: req.file.originalname }, "Extracting text from PDF");
-      effectiveText = await extractTextOnly(req.file.path);
-      logger.info({ filename: req.file.originalname, chars: effectiveText.length }, "PDF text extraction complete");
+      const pdfText = await extractTextOnly(req.file.path);
+      logger.info({ filename: req.file.originalname, chars: pdfText.length }, "PDF text extraction complete");
+      effectiveText = effectiveText
+        ? `${effectiveText}\n\n---\n\n${pdfText}`
+        : pdfText;
     } catch (err) {
       logger.error({ err, filename: req.file.originalname }, "PDF text extraction failed — using filename as fallback");
-      effectiveText = `Uploaded file: ${req.file.originalname}`;
+      if (!effectiveText) effectiveText = `Uploaded file: ${req.file.originalname}`;
     }
   }
 
