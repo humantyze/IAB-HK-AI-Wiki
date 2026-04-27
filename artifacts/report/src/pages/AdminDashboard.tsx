@@ -805,7 +805,7 @@ export default function AdminDashboard() {
                       Knowledge Base
                     </CardTitle>
                     <CardDescription className="text-sm sm:text-base mt-2 font-light text-foreground/70">
-                      Build the wiki from existing report sections. The AI reads each section and extracts distinct entities, concepts, statistics, and organisations into individual wiki pages.
+                      Monitor and maintain the public Knowledge Base. Wiki pages are created automatically each time you upload a PDF — this rebuild tool is only needed for maintenance or recovery.
                     </CardDescription>
                   </div>
                 </div>
@@ -823,7 +823,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="rounded-xl border border-border/50 bg-background/50 p-6 flex flex-col justify-between">
                     <div>
-                      <div className="text-[10px] font-display uppercase tracking-widest text-foreground/70 mb-2">Last Seed Result</div>
+                      <div className="text-[10px] font-display uppercase tracking-widest text-foreground/70 mb-2">Last Rebuild Result</div>
                       {wikiSeedResult ? (
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
@@ -848,9 +848,9 @@ export default function AdminDashboard() {
 
                 {/* Seed action */}
                 <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-6">
-                  <h3 className="font-display text-sm tracking-widest uppercase text-green-400 mb-2">Build Wiki from Existing Sections</h3>
+                  <h3 className="font-display text-sm tracking-widest uppercase text-green-400 mb-2">Rebuild Wiki from Report Sections</h3>
                   <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
-                    This reads all 8 report sections and sends each one to the AI for entity extraction. New entities become wiki pages; existing pages are enriched with additional content. This may take 1–2 minutes.
+                    Use this if wiki pages are out of sync with the report — for example after manually editing a section, or to recover deleted pages. It re-reads all 8 compiled report sections and regenerates wiki pages from them. This may take 1–2 minutes.
                   </p>
                   <Button
                     onClick={handleWikiSeed}
@@ -865,7 +865,7 @@ export default function AdminDashboard() {
                     ) : (
                       <>
                         <BookOpen className="w-4 h-4 mr-2" />
-                        Build Wiki from Sections
+                        Rebuild Wiki from Sections
                       </>
                     )}
                   </Button>
