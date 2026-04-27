@@ -1,4 +1,6 @@
 import type { ChartDataPoint } from "@workspace/db";
+import { db, wikiPagesTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import { uploadSectionImage } from "./sectionImageStorage";
 
@@ -200,6 +202,129 @@ JSON schema:
   } catch (err) {
     logger.error({ err }, "Failed to analyse sections");
     return { summary: "", suggestions: [], taskList: [] };
+  }
+}
+
+export interface WikiPageExtract {
+  slug: string;
+  title: string;
+  body_markdown: string;
+  tags: string[];
+  related_slugs: string[];
+}
+
+export async function extractWikiPages(
+  sourceLabel: string,
+  rawText: string,
+  sourceRef: string,
+): Promise<{ created: number; updated: number }> {
+  const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+
+  if (!baseUrl || !apiKey) {
+    logger.warn({ sourceLabel }, "OpenAI env vars not set; skipping wiki extraction");
+    return { created: 0, updated: 0 };
+  }
+
+  try {
+    const { default: OpenAI } = await import("openai");
+    const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 120_000 });
+
+    const systemPrompt = `You are a knowledge extraction assistant for a report called "State of AI in Hong Kong's Marketing Industry".
+
+Your task: read the provided text and extract distinct named entities, concepts, statistics, tools, organisations, regulations, and trends that deserve their own wiki page. Each wiki page should be focused and atomic — one clear concept per page.
+
+For each entity/concept return:
+- slug: kebab-case unique identifier (e.g. "ai-expectation-gap", "hkpc-survey-2025")
+- title: human-readable title
+- body_markdown: 200-600 words of concise, factual markdown content about this entity. Use ## and ### headings, bullet points, and bold for key terms.
+- tags: 1-3 tags from this list only: ["Organizations", "Statistics", "Tools & Platforms", "Regulatory", "Trends", "Case Studies", "Frameworks"]
+- related_slugs: slugs of other wiki pages in this same batch that are clearly related (can be empty array)
+
+Rules:
+- Extract 3-12 wiki pages per source — focus on the most significant and distinct entities
+- Do NOT extract generic concepts (e.g. "artificial intelligence", "marketing") — only specific named entities, studies, tools, statistics, or frameworks referenced in the text
+- body_markdown must be factual and grounded in the provided text; do not hallucinate
+- Return ONLY valid JSON with no markdown fences
+
+JSON schema:
+{ "wikiPages": [ { "slug": "...", "title": "...", "body_markdown": "...", "tags": [...], "related_slugs": [...] } ] }`;
+
+    const userPrompt = `Source: ${sourceLabel}\n\nText:\n${rawText.substring(0, 6000)}`;
+
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.3,
+    });
+
+    const raw = response.choices[0]?.message?.content ?? "{}";
+    const parsed = JSON.parse(raw) as { wikiPages?: WikiPageExtract[] };
+    const pages = parsed.wikiPages ?? [];
+
+    let created = 0;
+    let updated = 0;
+
+    for (const page of pages) {
+      if (!page.slug || !page.title) continue;
+
+      const [existing] = await db
+        .select()
+        .from(wikiPagesTable)
+        .where(eq(wikiPagesTable.slug, page.slug))
+        .limit(1);
+
+      if (existing) {
+        const existingSources = (existing.sources as Array<{ label: string; ref: string }>) ?? [];
+        const alreadyCited = existingSources.some((s) => s.ref === sourceRef);
+        const newSources = alreadyCited
+          ? existingSources
+          : [...existingSources, { label: sourceLabel, ref: sourceRef }];
+
+        const mergedBody = existing.bodyMarkdown.includes(page.body_markdown.slice(0, 50))
+          ? existing.bodyMarkdown
+          : `${existing.bodyMarkdown}\n\n---\n\n*Additional content from ${sourceLabel}:*\n\n${page.body_markdown}`;
+
+        const existingTags = (existing.tags as string[]) ?? [];
+        const mergedTags = [...new Set([...existingTags, ...page.tags])];
+
+        const existingRelated = (existing.relatedSlugs as string[]) ?? [];
+        const mergedRelated = [...new Set([...existingRelated, ...page.related_slugs])];
+
+        await db
+          .update(wikiPagesTable)
+          .set({
+            bodyMarkdown: mergedBody,
+            tags: mergedTags,
+            relatedSlugs: mergedRelated,
+            sources: newSources,
+            updatedAt: new Date(),
+          })
+          .where(eq(wikiPagesTable.slug, page.slug));
+
+        updated++;
+      } else {
+        await db.insert(wikiPagesTable).values({
+          slug: page.slug,
+          title: page.title,
+          bodyMarkdown: page.body_markdown,
+          tags: page.tags,
+          relatedSlugs: page.related_slugs,
+          sources: [{ label: sourceLabel, ref: sourceRef }],
+        });
+        created++;
+      }
+    }
+
+    logger.info({ sourceLabel, created, updated }, "Wiki extraction complete");
+    return { created, updated };
+  } catch (err) {
+    logger.error({ err, sourceLabel }, "Wiki extraction failed");
+    return { created: 0, updated: 0 };
   }
 }
 

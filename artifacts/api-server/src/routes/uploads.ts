@@ -6,7 +6,7 @@ import fs from "fs";
 import { z } from "zod";
 import { db, uploadsTable, sectionsTable, sectionVersionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
-import { processUpload, analyzeSections } from "../lib/ai-service";
+import { processUpload, analyzeSections, extractWikiPages } from "../lib/ai-service";
 import { logger } from "../lib/logger";
 
 const UploadFormSchema = z.object({
@@ -218,6 +218,17 @@ router.post("/uploads", requireAuth, (req, res, next) => {
       createdAt: updated.createdAt.toISOString(),
       processedAt: updated.processedAt?.toISOString() ?? null,
     });
+
+    // Non-blocking wiki extraction — runs after response is sent
+    if (data.rawText.trim()) {
+      const sourceLabel = data.contributorName ?? data.contentType.replace(/_/g, " ");
+      const sourceRef = `Upload #${updated.id} — ${data.contentType.replace(/_/g, " ")}`;
+      setImmediate(() => {
+        extractWikiPages(sourceLabel, data.rawText, sourceRef).catch((err: unknown) => {
+          logger.error({ err, uploadId: updated.id }, "Non-blocking wiki extraction failed");
+        });
+      });
+    }
   } catch (err) {
     logger.error({ err, uploadId: uploadRecord.id }, "Failed to process upload");
     await db

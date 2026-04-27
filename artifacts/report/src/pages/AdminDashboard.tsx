@@ -8,7 +8,7 @@ import { Link, useLocation } from "wouter";
 import {
   LogOut, Upload as UploadIcon, History, GitBranch, ShieldAlert,
   Paperclip, X, ImageIcon, Sparkles, CheckCircle2, AlertCircle,
-  ArrowLeft, ChevronRight, UploadCloud,
+  ArrowLeft, ChevronRight, UploadCloud, BookOpen, RefreshCw,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
@@ -66,15 +66,59 @@ export default function AdminDashboard() {
   const [phase, setPhase] = useState<"input" | "review">("input");
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [approvedSlugs, setApprovedSlugs] = useState<Set<string>>(new Set());
+  const [wikiPageCount, setWikiPageCount] = useState<number | null>(null);
+  const [wikiSeeding, setWikiSeeding] = useState(false);
+  const [wikiSeedResult, setWikiSeedResult] = useState<{ pagesCreated: number; pagesUpdated: number } | null>(null);
 
   const form = useForm<z.infer<typeof uploadSchema>>({
     resolver: zodResolver(uploadSchema),
     defaultValues: { contentType: "market_data", contributorName: "", rawText: "" },
   });
 
+  const fetchWikiCount = async () => {
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/wiki`, { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json() as unknown[];
+        setWikiPageCount(data.length);
+      }
+    } catch {
+      // silently ignore
+    }
+  };
+
+  const handleWikiSeed = async () => {
+    setWikiSeeding(true);
+    setWikiSeedResult(null);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/wiki/seed`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json() as { pagesCreated: number; pagesUpdated: number };
+        setWikiSeedResult(data);
+        await fetchWikiCount();
+        toast({ title: "Wiki Built", description: `${data.pagesCreated} pages created, ${data.pagesUpdated} updated.` });
+      } else {
+        toast({ title: "Seed Failed", description: "Wiki seed encountered an error.", variant: "destructive" });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Request failed";
+      toast({ title: "Seed Failed", description: message, variant: "destructive" });
+    } finally {
+      setWikiSeeding(false);
+    }
+  };
+
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       setLocation("/admin/login");
+    }
+    if (!authLoading && isAuthenticated) {
+      fetchWikiCount();
     }
   }, [authLoading, isAuthenticated, setLocation]);
 
@@ -260,7 +304,7 @@ export default function AdminDashboard() {
           </div>
           <div className="flex items-center space-x-3 sm:space-x-6">
             <Link href="/" className="hidden sm:block text-[11px] font-display uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
-              View Public Report
+              View Knowledge Base
             </Link>
             <div className="hidden sm:block w-px h-6 bg-border" />
             <Button variant="ghost" size="sm" onClick={() => logout()} className="text-muted-foreground hover:text-destructive font-display uppercase tracking-widest text-[11px]">
@@ -281,6 +325,9 @@ export default function AdminDashboard() {
             </TabsTrigger>
             <TabsTrigger value="versions" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-tight sm:tracking-[0.15em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-accent/10 data-[state=active]:text-accent transition-all">
               <GitBranch className="hidden sm:inline-flex w-4 h-4 sm:mr-3" />Image Generation
+            </TabsTrigger>
+            <TabsTrigger value="wiki" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-tight sm:tracking-[0.15em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-green-500/10 data-[state=active]:text-green-400 transition-all">
+              <BookOpen className="hidden sm:inline-flex w-4 h-4 sm:mr-3" />Wiki
             </TabsTrigger>
           </TabsList>
 
@@ -737,6 +784,95 @@ export default function AdminDashboard() {
                   )}
                 </div>
               </div>
+            </Card>
+          </TabsContent>
+
+          {/* WIKI TAB */}
+          <TabsContent value="wiki" className="mt-8 outline-none">
+            <Card className="border-green-500/20 shadow-[0_10px_50px_rgba(0,200,100,0.03)] bg-card/40 backdrop-blur-md rounded-2xl overflow-hidden">
+              <div className="h-1 w-full bg-gradient-to-r from-green-500 to-transparent" />
+              <CardHeader className="pb-4 sm:pb-8 pt-6 sm:pt-10 px-4 sm:px-10">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="font-serif text-xl sm:text-3xl font-bold flex items-center gap-3">
+                      <BookOpen className="w-6 h-6 text-green-400" />
+                      Knowledge Base
+                    </CardTitle>
+                    <CardDescription className="text-sm sm:text-base mt-2 font-light">
+                      Build the wiki from existing report sections. The AI reads each section and extracts distinct entities, concepts, statistics, and organisations into individual wiki pages.
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent className="px-4 sm:px-10 pb-6 sm:pb-10 space-y-8">
+                {/* Stats row */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="rounded-xl border border-border/50 bg-background/50 p-6">
+                    <div className="text-[10px] font-display uppercase tracking-widest text-muted-foreground mb-2">Wiki Pages</div>
+                    <div className="text-4xl font-bold font-serif text-green-400">
+                      {wikiPageCount === null ? "—" : wikiPageCount}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">pages in the knowledge base</p>
+                  </div>
+                  <div className="rounded-xl border border-border/50 bg-background/50 p-6 flex flex-col justify-between">
+                    <div>
+                      <div className="text-[10px] font-display uppercase tracking-widest text-muted-foreground mb-2">Last Seed Result</div>
+                      {wikiSeedResult ? (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-green-400" />
+                            <span className="text-sm text-foreground/80">
+                              <strong>{wikiSeedResult.pagesCreated}</strong> pages created
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <RefreshCw className="w-4 h-4 text-blue-400" />
+                            <span className="text-sm text-foreground/80">
+                              <strong>{wikiSeedResult.pagesUpdated}</strong> pages updated
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Run a seed to see results.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Seed action */}
+                <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-6">
+                  <h3 className="font-display text-sm tracking-widest uppercase text-green-400 mb-2">Build Wiki from Existing Sections</h3>
+                  <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
+                    This reads all 8 report sections and sends each one to the AI for entity extraction. New entities become wiki pages; existing pages are enriched with additional content. This may take 1–2 minutes.
+                  </p>
+                  <Button
+                    onClick={handleWikiSeed}
+                    disabled={wikiSeeding}
+                    className="font-display uppercase tracking-widest text-[11px] bg-green-600 hover:bg-green-700 text-white border-none"
+                  >
+                    {wikiSeeding ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        Building Wiki…
+                      </>
+                    ) : (
+                      <>
+                        <BookOpen className="w-4 h-4 mr-2" />
+                        Build Wiki from Sections
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {/* View link */}
+                <div className="text-center">
+                  <Link href="/" className="text-[11px] font-display uppercase tracking-widest text-muted-foreground hover:text-green-400 transition-colors inline-flex items-center gap-2">
+                    <BookOpen className="w-3 h-3" />
+                    View Knowledge Base
+                  </Link>
+                </div>
+              </CardContent>
             </Card>
           </TabsContent>
         </Tabs>

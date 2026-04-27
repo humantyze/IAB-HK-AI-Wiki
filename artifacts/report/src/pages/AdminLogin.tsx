@@ -81,7 +81,7 @@ export default function AdminLogin() {
         
         <div className="mt-8 text-center">
           <Link href="/" className="text-muted-foreground hover:text-foreground text-xs font-display uppercase tracking-widest transition-colors">
-            ← Return to Public Report
+            ← Return to Knowledge Base
           </Link>
         </div>
       </motion.div>
