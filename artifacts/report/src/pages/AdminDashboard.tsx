@@ -413,7 +413,7 @@ export default function AdminDashboard() {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70">
-                              Paste text here <span className="text-foreground/50 normal-case tracking-normal font-sans text-[11px]">(Optional if uploading a PDF — text and images are extracted automatically)</span>
+                              Paste text here <span className="text-foreground/50 normal-case tracking-normal font-sans text-[11px]">(Optional if uploading a PDF — content is read automatically)</span>
                             </FormLabel>
                             <FormControl>
                               <Textarea
@@ -429,7 +429,7 @@ export default function AdminDashboard() {
 
                       <div>
                         <label className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70 block mb-3">
-                          File <span className="normal-case tracking-normal font-sans text-[11px] text-foreground/50">(PDFs are fully parsed — text and charts extracted automatically)</span>
+                          File <span className="normal-case tracking-normal font-sans text-[11px] text-foreground/50">(PDFs are read automatically — no need to paste text manually)</span>
                         </label>
                         <div className="flex items-center gap-4">
                           <label className="flex-1 flex items-center gap-3 p-4 border border-dashed border-border/50 rounded-xl bg-background/30 hover:border-primary/30 hover:bg-background/50 transition-all cursor-pointer group">

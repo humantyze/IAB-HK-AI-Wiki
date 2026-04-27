@@ -7,7 +7,7 @@ import { z } from "zod";
 import { db, uploadsTable, sectionsTable, sectionVersionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { processUpload, analyzeSections, extractWikiPages } from "../lib/ai-service";
-import { extractPdfContent, extractTextOnly } from "../lib/pdf-extractor";
+import { extractTextOnly } from "../lib/pdf-extractor";
 import { logger } from "../lib/logger";
 
 const UploadFormSchema = z.object({
@@ -169,25 +169,15 @@ router.post("/uploads", requireAuth, (req, res, next) => {
 
   const filePath = req.file ? req.file.filename : null;
 
-  // Extract content from PDF if no raw text was provided
+  // Extract text from PDF if no raw text was provided
   let effectiveText = data.rawText.trim();
-  let visualDescriptions: string[] = [];
   if (!effectiveText && req.file?.mimetype === "application/pdf") {
     try {
-      logger.info({ filename: req.file.originalname }, "Extracting content from PDF");
-      const extracted = await extractPdfContent(
-        req.file.path,
-        process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-        process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-      );
-      effectiveText = extracted.combinedContent;
-      visualDescriptions = extracted.visualDescriptions;
-      logger.info(
-        { filename: req.file.originalname, chars: effectiveText.length, visualPages: visualDescriptions.length },
-        "PDF extraction complete",
-      );
+      logger.info({ filename: req.file.originalname }, "Extracting text from PDF");
+      effectiveText = await extractTextOnly(req.file.path);
+      logger.info({ filename: req.file.originalname, chars: effectiveText.length }, "PDF text extraction complete");
     } catch (err) {
-      logger.error({ err, filename: req.file.originalname }, "PDF extraction failed — using filename as fallback");
+      logger.error({ err, filename: req.file.originalname }, "PDF text extraction failed — using filename as fallback");
       effectiveText = `Uploaded file: ${req.file.originalname}`;
     }
   }
