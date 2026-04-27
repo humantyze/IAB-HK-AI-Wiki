@@ -86,7 +86,7 @@ export default function WikiIndex() {
           <nav className="flex gap-5 ml-auto text-xs font-medium text-gray-500">
             <Link href="/admin/login" className="flex items-center gap-1.5 hover:text-gray-800 transition-colors">
               <Lock size={11} />
-              <span>Admin</span>
+              <span>Contributor Access</span>
             </Link>
           </nav>
         </div>
