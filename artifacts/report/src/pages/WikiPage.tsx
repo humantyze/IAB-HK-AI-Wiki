@@ -56,7 +56,7 @@ function renderMarkdown(markdown: string): React.ReactNode[] {
 
   const inlineRender = (text: string) => {
     const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|\[([^\]]+)\]\(([^)]+)\))/g);
-    return parts.map((part, j) => {
+    return parts.filter((part): part is string => part != null).map((part, j) => {
       if (part.startsWith("**") && part.endsWith("**")) {
         return <strong key={j} className="font-semibold text-gray-800">{part.slice(2, -2)}</strong>;
       }
