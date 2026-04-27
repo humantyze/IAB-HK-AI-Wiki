@@ -437,7 +437,7 @@ export default function WikiPage({ params }: WikiPageProps) {
                             className="text-[10px] hover:underline cursor-pointer"
                             style={{ color: "#D63425" }}
                           >
-                            {src.ref}
+                            {sectionTitle}
                           </span>
                         </Link>
                       ) : (
