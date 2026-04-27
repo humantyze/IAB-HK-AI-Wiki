@@ -345,7 +345,7 @@ export default function AdminDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle className="font-serif text-xl sm:text-3xl font-bold">Content Addition Panel</CardTitle>
-                    <CardDescription className="text-sm sm:text-base mt-2 font-light">
+                    <CardDescription className="text-sm sm:text-base mt-2 font-light text-foreground/70">
                       {phase === "input"
                         ? "Submit intelligence, research, or market data. The AI will analyse the content and suggest which report sections to update."
                         : "Review the AI-generated integration plan below. Approve or remove sections, then confirm to integrate."}
@@ -414,7 +414,7 @@ export default function AdminDashboard() {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70">
-                              Paste text here <span className="text-foreground/70/50 normal-case tracking-normal font-sans text-[11px]">(Optional — attach a file below instead)</span>
+                              Paste text here <span className="text-foreground/50 normal-case tracking-normal font-sans text-[11px]">(Optional — attach a file below instead)</span>
                             </FormLabel>
                             <FormControl>
                               <Textarea
@@ -527,7 +527,7 @@ export default function AdminDashboard() {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-3 mb-2 flex-wrap">
-                                        <span className="font-display text-[10px] text-foreground/70/50">TASK {String(idx + 1).padStart(2, "0")}</span>
+                                        <span className="font-display text-[10px] text-foreground/50">TASK {String(idx + 1).padStart(2, "0")}</span>
                                         <Badge variant="outline" className={`text-[10px] font-display tracking-wide px-2 py-0.5 border ${conf.classes}`}>
                                           {conf.label}
                                         </Badge>
@@ -573,7 +573,7 @@ export default function AdminDashboard() {
               <div className="h-1 w-full bg-gradient-to-r from-secondary to-transparent" />
               <CardHeader className="pb-4 sm:pb-8 pt-6 sm:pt-10 px-4 sm:px-10">
                 <CardTitle className="font-serif text-xl sm:text-3xl font-bold">Processing Log</CardTitle>
-                <CardDescription className="text-base mt-2 font-light">Status of all data payloads submitted for AI synthesis.</CardDescription>
+                <CardDescription className="text-base mt-2 font-light text-foreground/70">Status of all data payloads submitted for AI synthesis.</CardDescription>
               </CardHeader>
               <CardContent className="px-4 sm:px-10 pb-6 sm:pb-10">
                 <div className="space-y-6">
@@ -656,7 +656,7 @@ export default function AdminDashboard() {
                           />
                         </div>
                         {imageProgress.currentSectionTitle && (
-                          <p className="text-[10px] text-foreground/70/60 truncate">
+                          <p className="text-[10px] text-foreground/60 truncate">
                             {imageProgress.current < imageProgress.total ? `Generating: ${imageProgress.currentSectionTitle}` : imageProgress.currentSectionTitle}
                           </p>
                         )}
@@ -665,7 +665,7 @@ export default function AdminDashboard() {
 
                     {!imageProgress && (
                       <div className="mt-3 space-y-1">
-                        <label className="font-display tracking-[0.2em] text-[10px] uppercase text-foreground/70/60">
+                        <label className="font-display tracking-[0.2em] text-[10px] uppercase text-foreground/60">
                           Prompt Addition (Optional)
                         </label>
                         <Input
@@ -675,7 +675,7 @@ export default function AdminDashboard() {
                           disabled={generatingImages}
                           className="bg-background/50 border-border/50 h-9 rounded-lg text-xs focus-visible:ring-accent/30"
                         />
-                        <p className="text-[10px] text-foreground/70/40 leading-snug">Appended to each section's image prompt.</p>
+                        <p className="text-[10px] text-foreground/60 leading-snug">Appended to each section's image prompt.</p>
                       </div>
                     )}
                   </div>
@@ -804,7 +804,7 @@ export default function AdminDashboard() {
                       <BookOpen className="w-6 h-6 text-green-400" />
                       Knowledge Base
                     </CardTitle>
-                    <CardDescription className="text-sm sm:text-base mt-2 font-light">
+                    <CardDescription className="text-sm sm:text-base mt-2 font-light text-foreground/70">
                       Build the wiki from existing report sections. The AI reads each section and extracts distinct entities, concepts, statistics, and organisations into individual wiki pages.
                     </CardDescription>
                   </div>
