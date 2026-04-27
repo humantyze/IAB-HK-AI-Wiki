@@ -317,9 +317,8 @@ export default function AdminDashboard() {
       <main className="max-w-[1600px] mx-auto px-6 py-12 relative z-10">
         <div className="mb-8 p-5 rounded-xl border border-border/40 bg-card/30 backdrop-blur-md text-sm text-foreground/80 leading-relaxed">
           <span className="font-semibold text-foreground/80">How this works: </span>
-          The <span className="text-primary font-medium">Content</span> tab is where you submit new source material — whitepapers, case studies, market data, etc. The AI reads it, then suggests which report sections to update; you review and approve before anything changes.
-          {" "}The <span className="text-green-400 font-medium">Wiki</span> tab manages the public Knowledge Base — it scans the existing report sections and generates or updates individual wiki pages, one per concept, company, or topic.
-          {" "}In short: <span className="italic">Content feeds the database → Wiki turns the database into the browsable knowledge base.</span>
+          The <span className="text-primary font-medium">Content</span> tab is where you submit new source material — whitepapers, case studies, market data, etc. The AI reads it, suggests which report sections to update, and you approve before anything changes. <span className="font-medium text-foreground/90">Wiki pages are created automatically as part of this process</span> — you do not need to do anything extra.
+          {" "}The <span className="text-green-400 font-medium">Wiki</span> tab is for monitoring and occasional maintenance only. The rebuild tool re-reads the compiled report sections and regenerates wiki pages from them — use it if pages have gone out of sync after a manual section edit, or to recover deleted pages. <span className="font-medium text-foreground/90">Avoid running it repeatedly:</span> each run can append additional content to existing pages, and running it multiple times may cause pages to accumulate redundant sections.
         </div>
         <Tabs defaultValue="upload" className="space-y-8">
           <TabsList className="w-full bg-card/50 backdrop-blur-md border border-border/50 p-1 rounded-xl h-auto">
