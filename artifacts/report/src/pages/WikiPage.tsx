@@ -341,7 +341,7 @@ export default function WikiPage({ params }: WikiPageProps) {
 
         {/* Sidebar */}
         <aside className="w-56 flex-shrink-0">
-          <div className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto">
+          <div className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto space-y-0">
 
           {/* On this page — TOC */}
           {headings.length > 0 && (
