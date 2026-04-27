@@ -341,10 +341,11 @@ export default function WikiPage({ params }: WikiPageProps) {
 
         {/* Sidebar */}
         <aside className="w-56 flex-shrink-0">
+          <div className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto">
 
           {/* On this page — TOC */}
           {headings.length > 0 && (
-            <div className="mb-8 sticky top-24">
+            <div className="mb-8">
               <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3 flex items-center gap-1.5">
                 <AlignLeft size={10} />
                 On This Page
@@ -461,6 +462,8 @@ export default function WikiPage({ params }: WikiPageProps) {
                 <span>All Wiki Pages</span>
               </span>
             </Link>
+          </div>
+
           </div>
         </aside>
       </div>
