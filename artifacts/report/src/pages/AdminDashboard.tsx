@@ -413,11 +413,11 @@ export default function AdminDashboard() {
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70">
-                              Paste text here <span className="text-foreground/50 normal-case tracking-normal font-sans text-[11px]">(Optional — attach a file below instead)</span>
+                              Paste text here <span className="text-foreground/50 normal-case tracking-normal font-sans text-[11px]">(Optional if uploading a PDF — text and images are extracted automatically)</span>
                             </FormLabel>
                             <FormControl>
                               <Textarea
-                                placeholder="Paste raw data, reports, or transcriptions here for AI synthesis..."
+                                placeholder="Paste raw data, reports, or transcriptions here — or leave blank and attach a PDF below to let the AI read it directly..."
                                 className="min-h-[300px] bg-background/30 border-border/50 rounded-xl font-mono text-sm p-6 focus-visible:ring-primary/30 leading-relaxed resize-y"
                                 {...field}
                               />
@@ -428,7 +428,9 @@ export default function AdminDashboard() {
                       />
 
                       <div>
-                        <label className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70 block mb-3">Supplementary File (Optional)</label>
+                        <label className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70 block mb-3">
+                          File <span className="normal-case tracking-normal font-sans text-[11px] text-foreground/50">(PDFs are fully parsed — text and charts extracted automatically)</span>
+                        </label>
                         <div className="flex items-center gap-4">
                           <label className="flex-1 flex items-center gap-3 p-4 border border-dashed border-border/50 rounded-xl bg-background/30 hover:border-primary/30 hover:bg-background/50 transition-all cursor-pointer group">
                             <Paperclip className="w-5 h-5 text-foreground/70 group-hover:text-primary transition-colors" />

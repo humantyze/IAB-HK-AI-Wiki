@@ -7,6 +7,7 @@ import { z } from "zod";
 import { db, uploadsTable, sectionsTable, sectionVersionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import { processUpload, analyzeSections, extractWikiPages } from "../lib/ai-service";
+import { extractPdfContent, extractTextOnly } from "../lib/pdf-extractor";
 import { logger } from "../lib/logger";
 
 const UploadFormSchema = z.object({
@@ -96,7 +97,20 @@ router.post("/uploads/analyze", requireAuth, (req, res, next) => {
     .select({ slug: sectionsTable.slug, title: sectionsTable.title })
     .from(sectionsTable);
 
-  const textToAnalyse = rawText.trim() || `Uploaded file: ${req.file?.originalname ?? "unknown"}`;
+  let textToAnalyse = rawText.trim();
+  if (!textToAnalyse && req.file) {
+    if (req.file.mimetype === "application/pdf") {
+      try {
+        textToAnalyse = await extractTextOnly(req.file.path);
+        logger.info({ filename: req.file.originalname }, "Extracted text from PDF for analysis");
+      } catch (err) {
+        logger.warn({ err, filename: req.file.originalname }, "PDF text extraction failed — falling back to filename");
+        textToAnalyse = `Uploaded file: ${req.file.originalname}`;
+      }
+    } else {
+      textToAnalyse = `Uploaded file: ${req.file.originalname}`;
+    }
+  }
 
   try {
     const result = await analyzeSections(textToAnalyse, contentType, allSections);
@@ -155,13 +169,36 @@ router.post("/uploads", requireAuth, (req, res, next) => {
 
   const filePath = req.file ? req.file.filename : null;
 
+  // Extract content from PDF if no raw text was provided
+  let effectiveText = data.rawText.trim();
+  let visualDescriptions: string[] = [];
+  if (!effectiveText && req.file?.mimetype === "application/pdf") {
+    try {
+      logger.info({ filename: req.file.originalname }, "Extracting content from PDF");
+      const extracted = await extractPdfContent(
+        req.file.path,
+        process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+        process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+      );
+      effectiveText = extracted.combinedContent;
+      visualDescriptions = extracted.visualDescriptions;
+      logger.info(
+        { filename: req.file.originalname, chars: effectiveText.length, visualPages: visualDescriptions.length },
+        "PDF extraction complete",
+      );
+    } catch (err) {
+      logger.error({ err, filename: req.file.originalname }, "PDF extraction failed — using filename as fallback");
+      effectiveText = `Uploaded file: ${req.file.originalname}`;
+    }
+  }
+
   const [uploadRecord] = await db
     .insert(uploadsTable)
     .values({
       contributorName: data.contributorName ?? null,
       contentType: data.contentType,
       targetSections: data.targetSections,
-      rawText: data.rawText,
+      rawText: effectiveText,
       filePath,
       status: "pending",
     })
@@ -169,7 +206,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
 
   try {
     const results = await processUpload(
-      data.rawText,
+      effectiveText,
       data.targetSections,
       data.contentType,
     );
@@ -223,10 +260,8 @@ router.post("/uploads", requireAuth, (req, res, next) => {
     {
       const sourceLabel = data.contributorName ?? data.contentType.replace(/_/g, " ");
       const sourceRef = `Upload #${updated.id} — ${data.contentType.replace(/_/g, " ")}`;
-      const extractionText = data.rawText.trim()
-        || `Uploaded file: ${req.file?.originalname ?? "unknown"} (${data.contentType.replace(/_/g, " ")})`;
       setImmediate(() => {
-        extractWikiPages(sourceLabel, extractionText, sourceRef).catch((err: unknown) => {
+        extractWikiPages(sourceLabel, effectiveText, sourceRef).catch((err: unknown) => {
           logger.error({ err, uploadId: updated.id }, "Non-blocking wiki extraction failed");
         });
       });
