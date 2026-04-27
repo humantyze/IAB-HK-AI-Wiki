@@ -153,6 +153,24 @@ function renderMarkdown(markdown: string): React.ReactNode[] {
   return nodes;
 }
 
+function useSectionSlugMap(): Record<string, string> {
+  const [slugMap, setSlugMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const baseUrl = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+    fetch(`${baseUrl}/api/sections`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((data: Array<{ title: string; slug: string }>) => {
+        const map: Record<string, string> = {};
+        data.forEach((s) => { map[s.title] = s.slug; });
+        setSlugMap(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  return slugMap;
+}
+
 function useWikiPage(slug: string) {
   const [page, setPage] = useState<WikiPageData | null>(null);
   const [related, setRelated] = useState<RelatedPage[]>([]);
@@ -196,6 +214,7 @@ interface WikiPageProps {
 export default function WikiPage({ params }: WikiPageProps) {
   const { slug } = params;
   const { page, related, isLoading, notFound } = useWikiPage(slug);
+  const sectionSlugMap = useSectionSlugMap();
   const [activeHeading, setActiveHeading] = useState<string>("");
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -396,6 +415,9 @@ export default function WikiPage({ params }: WikiPageProps) {
               <div className="space-y-2">
                 {page.sources.map((src, i) => {
                   const isUrl = /^https?:\/\//i.test(src.ref);
+                  const isSectionRef = src.ref.startsWith("§ ");
+                  const sectionTitle = isSectionRef ? src.ref.slice(2).trim() : null;
+                  const sectionSlug = sectionTitle ? sectionSlugMap[sectionTitle] : null;
                   return (
                     <div key={i} className="p-2.5 rounded-lg border border-gray-100 bg-gray-50">
                       <p className="text-xs font-semibold text-gray-700 leading-snug mb-0.5">{src.label}</p>
@@ -409,6 +431,15 @@ export default function WikiPage({ params }: WikiPageProps) {
                         >
                           {src.ref}
                         </a>
+                      ) : isSectionRef && sectionSlug ? (
+                        <Link href={`/sections/${sectionSlug}`}>
+                          <span
+                            className="text-[10px] hover:underline cursor-pointer"
+                            style={{ color: "#D63425" }}
+                          >
+                            {src.ref}
+                          </span>
+                        </Link>
                       ) : (
                         <p className="text-[10px] text-gray-400">{src.ref}</p>
                       )}

@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import WikiIndex from "@/pages/WikiIndex";
 import WikiPage from "@/pages/WikiPage";
+import SectionPage from "@/pages/SectionPage";
 import AdminLogin from "@/pages/AdminLogin";
 import AdminDashboard from "@/pages/AdminDashboard";
 
@@ -15,6 +16,7 @@ function Router() {
     <Switch>
       <Route path="/" component={WikiIndex} />
       <Route path="/wiki/:slug" component={WikiPage} />
+      <Route path="/sections/:slug" component={SectionPage} />
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin" component={AdminDashboard} />
       <Route component={NotFound} />
