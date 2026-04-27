@@ -170,7 +170,7 @@ function useWikiPage(slug: string) {
         return r.json() as Promise<WikiPageData>;
       })
       .then((data) => {
-        if (!data) return;
+        if (!data) return undefined;
         setPage(data);
 
         if (data.relatedSlugs?.length > 0) {
@@ -181,6 +181,7 @@ function useWikiPage(slug: string) {
               setRelated(related);
             });
         }
+        return undefined;
       })
       .finally(() => setIsLoading(false));
   }, [slug]);

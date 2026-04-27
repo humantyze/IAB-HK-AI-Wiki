@@ -169,7 +169,7 @@ export default function AdminDashboard() {
         file: selectedFile,
       });
       toast({ title: "Integration Complete", description: `Content successfully integrated into ${targetSections.length} section${targetSections.length > 1 ? "s" : ""}.` });
-      form.reset({ targetSections: [], rawText: "", contentType: values.contentType, contributorName: values.contributorName });
+      form.reset({ rawText: "", contentType: values.contentType, contributorName: values.contributorName });
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       setPhase("input");
