@@ -299,7 +299,7 @@ export default function AdminDashboard() {
             </div>
             <div>
               <div className="font-serif font-bold text-base sm:text-lg leading-tight text-foreground/90">CONTRIBUTOR PORTAL</div>
-              <div className="font-display text-[10px] uppercase tracking-widest text-secondary/70">Level 3 Access Verified</div>
+              <div className="font-display text-[10px] uppercase tracking-widest text-secondary/70">Only IAB HK access allowed</div>
             </div>
           </div>
           <div className="flex items-center space-x-3 sm:space-x-6">
