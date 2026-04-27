@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, asc } from "drizzle-orm";
 import { db, wikiPagesTable, sectionsTable, sectionVersionsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
-import { extractWikiPages } from "../lib/ai-service";
+import { extractWikiPages, synthesizeWikiGaps } from "../lib/ai-service";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -76,13 +76,29 @@ router.post("/wiki/seed", requireAuth, async (_req, res) => {
     let pagesCreated = 0;
     let pagesUpdated = 0;
 
-    for (const row of rows) {
-      if (!row.bodyMarkdown) continue;
-
+    // Phase 1: per-section direct extraction
+    const validSections = rows.filter((r) => r.bodyMarkdown);
+    for (const row of validSections) {
       const sourceRef = `§ ${row.title}`;
-      const result = await extractWikiPages(row.title, row.bodyMarkdown, sourceRef);
+      const result = await extractWikiPages(row.title, row.bodyMarkdown as string, sourceRef);
       pagesCreated += result.created;
       pagesUpdated += result.updated;
+    }
+
+    // Phase 2: cross-section synthesis for topics not yet covered
+    const allPages = await db
+      .select({ title: wikiPagesTable.title })
+      .from(wikiPagesTable);
+    const existingTitles = allPages.map((p) => p.title);
+
+    const sectionSummaries = validSections.map((r) => ({
+      title: r.title,
+      bodyMarkdown: r.bodyMarkdown as string,
+    }));
+
+    if (sectionSummaries.length > 0) {
+      const synthesis = await synthesizeWikiGaps(sectionSummaries, existingTitles);
+      pagesCreated += synthesis.created;
     }
 
     res.json({ pagesCreated, pagesUpdated });

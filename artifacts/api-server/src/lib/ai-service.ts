@@ -250,10 +250,10 @@ Rules:
 JSON schema:
 { "wikiPages": [ { "slug": "...", "title": "...", "body_markdown": "...", "tags": [...], "related_slugs": [...] } ] }`;
 
-    const userPrompt = `Source: ${sourceLabel}\n\nText:\n${rawText.substring(0, 6000)}`;
+    const userPrompt = `Source: ${sourceLabel}\n\nText:\n${rawText}`;
 
     const response = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -325,6 +325,96 @@ JSON schema:
   } catch (err) {
     logger.error({ err, sourceLabel }, "Wiki extraction failed");
     return { created: 0, updated: 0 };
+  }
+}
+
+export async function synthesizeWikiGaps(
+  sectionSummaries: Array<{ title: string; bodyMarkdown: string }>,
+  existingPageTitles: string[],
+): Promise<{ created: number }> {
+  const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+
+  if (!baseUrl || !apiKey) return { created: 0 };
+
+  try {
+    const { default: OpenAI } = await import("openai");
+    const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 120_000 });
+
+    const sectionOverview = sectionSummaries
+      .map((s) => `### ${s.title}\n${s.bodyMarkdown.slice(0, 1500)}`)
+      .join("\n\n---\n\n");
+
+    const alreadyExtracted = existingPageTitles.map((t) => `- ${t}`).join("\n");
+
+    const systemPrompt = `You are a knowledge synthesis assistant for a report called "State of AI in Hong Kong's Marketing Industry".
+
+You have been given:
+1. Summaries of all report sections
+2. A list of wiki pages already extracted from those sections
+
+Your task: identify 3-8 important cross-cutting topics, themes, comparisons, or frameworks that are implied or discussed across multiple sections but are NOT yet represented as dedicated wiki pages. Synthesise new wiki pages for these gaps.
+
+For each new page return:
+- slug: kebab-case unique identifier
+- title: human-readable title
+- body_markdown: 200-600 words of factual, synthesised markdown content drawing on information across the sections. Use ## and ### headings and bullet points.
+- tags: 1-3 tags from: ["Organizations", "Statistics", "Tools & Platforms", "Regulatory", "Trends", "Case Studies", "Frameworks"]
+- related_slugs: empty array (cross-references will be built later)
+
+Rules:
+- Do NOT duplicate any page from the "Already extracted" list
+- Synthesise only topics that genuinely emerge from the provided section content
+- Do not hallucinate statistics or claims not supported by the provided text
+- Return ONLY valid JSON with no markdown fences
+
+JSON schema:
+{ "wikiPages": [ { "slug": "...", "title": "...", "body_markdown": "...", "tags": [...], "related_slugs": [] } ] }`;
+
+    const userPrompt = `Already extracted wiki pages:\n${alreadyExtracted}\n\n---\n\nSection content:\n${sectionOverview}`;
+
+    const response = await client.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.4,
+    });
+
+    const raw = response.choices[0]?.message?.content ?? "{}";
+    const parsed = JSON.parse(raw) as { wikiPages?: WikiPageExtract[] };
+    const pages = parsed.wikiPages ?? [];
+
+    let created = 0;
+    for (const page of pages) {
+      if (!page.slug || !page.title) continue;
+
+      const [existing] = await db
+        .select({ id: wikiPagesTable.id })
+        .from(wikiPagesTable)
+        .where(eq(wikiPagesTable.slug, page.slug))
+        .limit(1);
+
+      if (!existing) {
+        await db.insert(wikiPagesTable).values({
+          slug: page.slug,
+          title: page.title,
+          bodyMarkdown: page.body_markdown,
+          tags: page.tags,
+          relatedSlugs: [],
+          sources: [{ label: "Synthesis — cross-section analysis", ref: "wiki-seed-synthesis" }],
+        });
+        created++;
+      }
+    }
+
+    logger.info({ created }, "Wiki gap synthesis complete");
+    return { created };
+  } catch (err) {
+    logger.error({ err }, "Wiki gap synthesis failed");
+    return { created: 0 };
   }
 }
 
