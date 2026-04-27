@@ -71,11 +71,13 @@ export default function WikiIndex() {
       <header className="border-b border-gray-100 bg-white sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 lg:px-8 py-4 flex items-center gap-6">
           <div className="flex items-center gap-2">
-            <img
-              src={`${(import.meta.env.BASE_URL as string)}iabhk-logo.png`}
-              alt="IAB Hong Kong"
-              style={{ height: "32px", width: "auto" }}
-            />
+            <a href="https://iabhongkong.com/" target="_blank" rel="noopener noreferrer">
+              <img
+                src={`${(import.meta.env.BASE_URL as string)}iabhk-logo.png`}
+                alt="IAB Hong Kong"
+                style={{ height: "32px", width: "auto" }}
+              />
+            </a>
           </div>
           <div className="flex items-center gap-1.5 ml-2">
             <span className="text-gray-200 text-sm">|</span>
