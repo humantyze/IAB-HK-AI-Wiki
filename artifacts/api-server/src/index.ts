@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { seedWikiIfEmpty } from "./lib/wiki-seed";
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +23,8 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  seedWikiIfEmpty().catch((e) => {
+    logger.error({ err: e }, "Unexpected error during wiki auto-seed");
+  });
 });

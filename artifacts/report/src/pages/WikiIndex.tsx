@@ -32,8 +32,11 @@ function useWikiPages() {
   useEffect(() => {
     const baseUrl = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
     fetch(`${baseUrl}/api/wiki`, { credentials: "include" })
-      .then((r) => r.json() as Promise<WikiPageSummary[]>)
-      .then((pages) => { setData(pages); setIsLoading(false); })
+      .then((r) => r.json())
+      .then((result: unknown) => {
+        setData(Array.isArray(result) ? (result as WikiPageSummary[]) : []);
+        setIsLoading(false);
+      })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : "Failed to load");
         setIsLoading(false);
@@ -96,8 +99,8 @@ export default function WikiIndex() {
         <h1 className="text-3xl font-bold text-gray-800 mb-3" style={{ letterSpacing: "-0.5px" }}>
           Knowledge Base
         </h1>
-        <p className="text-sm text-gray-500 max-w-xl leading-relaxed">
-          Every entity, concept, statistic, and organisation extracted from the report and uploaded research — automatically maintained by AI.
+        <p className="text-sm text-gray-500 max-w-2xl leading-relaxed">
+          Welcome to the iAB Hong Kong State of AI Knowledge Base — an initiative of the 2026 AI and Technology Committee. This platform is designed as a living knowledge resource inspired by the "Second Brain" concept popularized by Andrej Karpathy. As new material is submitted, our language model reviews it in full, identifies key entities and ideas, and creates or updates relevant wiki pages. It also refines topic summaries, builds cross-links across related subjects, and flags inconsistencies, helping each new source strengthen an evolving, interconnected knowledge graph.
         </p>
 
         {/* Search */}
