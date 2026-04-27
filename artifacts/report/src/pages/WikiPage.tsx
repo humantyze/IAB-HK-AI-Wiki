@@ -394,12 +394,27 @@ export default function WikiPage({ params }: WikiPageProps) {
                 Sources
               </h3>
               <div className="space-y-2">
-                {page.sources.map((src, i) => (
-                  <div key={i} className="p-2.5 rounded-lg border border-gray-100 bg-gray-50">
-                    <p className="text-xs font-semibold text-gray-700 leading-snug mb-0.5">{src.label}</p>
-                    <p className="text-[10px] text-gray-400">{src.ref}</p>
-                  </div>
-                ))}
+                {page.sources.map((src, i) => {
+                  const isUrl = /^https?:\/\//i.test(src.ref);
+                  return (
+                    <div key={i} className="p-2.5 rounded-lg border border-gray-100 bg-gray-50">
+                      <p className="text-xs font-semibold text-gray-700 leading-snug mb-0.5">{src.label}</p>
+                      {isUrl ? (
+                        <a
+                          href={src.ref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] break-all hover:underline"
+                          style={{ color: "#D63425" }}
+                        >
+                          {src.ref}
+                        </a>
+                      ) : (
+                        <p className="text-[10px] text-gray-400">{src.ref}</p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
