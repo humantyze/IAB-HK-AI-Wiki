@@ -66,7 +66,6 @@ export default function WikiIndex() {
   return (
     <div className="min-h-screen bg-white" style={{ fontFamily: "'Montserrat', sans-serif" }}>
       <div style={{ backgroundColor: "#D63425" }} className="h-1 w-full" />
-
       {/* Header */}
       <header className="border-b border-gray-100 bg-white sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 lg:px-8 py-4 flex items-center gap-6">
@@ -82,7 +81,7 @@ export default function WikiIndex() {
           <div className="flex items-center gap-1.5 ml-2">
             <span className="text-gray-200 text-sm">|</span>
             <BookOpen size={14} style={{ color: "#D63425" }} />
-            <span className="text-sm font-semibold text-gray-700">Knowledge Base</span>
+            <span className="text-sm font-semibold text-gray-700">Welcome to the Interactive Advertising Bureau Hong Kong</span>
           </div>
           <nav className="flex gap-5 ml-auto text-xs font-medium text-gray-500">
             <Link href="/admin/login" className="flex items-center gap-1.5 hover:text-gray-800 transition-colors">
@@ -92,7 +91,6 @@ export default function WikiIndex() {
           </nav>
         </div>
       </header>
-
       {/* Hero */}
       <div className="max-w-6xl mx-auto px-6 lg:px-8 pt-12 pb-8">
         <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: "#D63425" }}>
@@ -135,7 +133,6 @@ export default function WikiIndex() {
           ))}
         </div>
       </div>
-
       {/* Count row */}
       <div className="max-w-6xl mx-auto px-6 lg:px-8">
         <div className="border-t border-gray-100 pt-4 pb-2 flex items-center justify-between">
@@ -149,7 +146,6 @@ export default function WikiIndex() {
           )}
         </div>
       </div>
-
       {/* Card grid */}
       <div className="max-w-6xl mx-auto px-6 lg:px-8 pb-20">
         {isLoading ? (
@@ -208,7 +204,6 @@ export default function WikiIndex() {
           </div>
         )}
       </div>
-
       {/* Footer */}
       <footer className="border-t border-gray-100 py-8 px-6 bg-[#fafafa]">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
