@@ -49,8 +49,8 @@ router.get("/wiki", async (_req, res) => {
 
 router.post("/wiki/search", async (req, res) => {
   const { query } = req.body as { query?: unknown };
-  if (!query || typeof query !== "string" || query.trim().length < 2) {
-    res.status(400).json({ error: "Query must be at least 2 characters" });
+  if (!query || typeof query !== "string" || query.trim().length < 3) {
+    res.status(400).json({ error: "Query must be at least 3 characters" });
     return;
   }
 
@@ -91,13 +91,22 @@ router.post("/wiki/search", async (req, res) => {
       max_tokens: 256,
     });
 
-    const raw = (response.choices[0]?.message?.content ?? "[]").trim().replace(/^```(?:json)?\n?|```$/g, "");
-    let rankedSlugs: string[] = [];
+    const rawContent = (response.choices[0]?.message?.content ?? "").trim().replace(/^```(?:json)?\n?|```$/g, "");
+
+    let rankedSlugs: string[] | null = null;
     try {
-      const parsed: unknown = JSON.parse(raw);
-      rankedSlugs = Array.isArray(parsed) ? (parsed as unknown[]).filter((s): s is string => typeof s === "string") : [];
+      const parsed: unknown = JSON.parse(rawContent);
+      if (Array.isArray(parsed)) {
+        rankedSlugs = (parsed as unknown[]).filter((s): s is string => typeof s === "string");
+      }
     } catch {
-      rankedSlugs = [];
+      rankedSlugs = null;
+    }
+
+    if (rankedSlugs === null) {
+      logger.warn({ query: query.trim() }, "Wiki AI search — malformed LLM output, returning unranked");
+      res.json({ ranked: false, pages: allPages });
+      return;
     }
 
     const slugMap = new Map(allPages.map((p) => [p.slug, p]));
