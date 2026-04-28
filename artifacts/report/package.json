@@ -75,6 +75,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "react-force-graph-2d": "^1.27.1",
     "react-markdown": "^10.1.0"
   }
 }

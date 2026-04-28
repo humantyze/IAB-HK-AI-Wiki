@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
-import { Search, BookOpen, Clock, ChevronRight, Lock, Sparkles } from "lucide-react";
+import { Search, BookOpen, Clock, ChevronRight, Lock, Sparkles, LayoutGrid, Network } from "lucide-react";
+import WikiGraph from "../components/WikiGraph";
 
 interface WikiPageSummary {
   id: number;
@@ -53,6 +54,7 @@ export default function WikiIndex() {
   const [aiResults, setAiResults] = useState<WikiPageSummary[] | null>(null);
   const [searchFallbackPages, setSearchFallbackPages] = useState<WikiPageSummary[] | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [viewMode, setViewMode] = useState<"grid" | "graph">("grid");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -212,21 +214,49 @@ export default function WikiIndex() {
               {activeTag !== "All" ? ` · ${activeTag}` : ""}
             </span>
           )}
-          {usingAI && !isSearching && (
-            <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "#D63425" }}>
-              <Sparkles size={10} />
-              AI ranked
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            {usingAI && !isSearching && (
+              <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "#D63425" }}>
+                <Sparkles size={10} />
+                AI ranked
+              </span>
+            )}
+            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setViewMode("grid")}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors"
+                style={viewMode === "grid" ? { backgroundColor: "#D63425", color: "#fff" } : { backgroundColor: "#fff", color: "#6b7280" }}
+                title="Grid view"
+              >
+                <LayoutGrid size={13} />
+                <span>Grid</span>
+              </button>
+              <button
+                onClick={() => setViewMode("graph")}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors border-l border-gray-200"
+                style={viewMode === "graph" ? { backgroundColor: "#D63425", color: "#fff" } : { backgroundColor: "#fff", color: "#6b7280" }}
+                title="Graph view"
+              >
+                <Network size={13} />
+                <span>Graph</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Card grid */}
+      {/* Card grid or Graph view */}
       <div className="max-w-6xl mx-auto px-6 lg:px-8 pb-20">
         {isLoading ? (
           <div className="flex items-center justify-center py-24">
             <div className="w-8 h-8 border-2 border-[#D63425]/20 border-t-[#D63425] rounded-full animate-spin" />
           </div>
+        ) : viewMode === "graph" ? (
+          <WikiGraph
+            pages={filtered}
+            allPages={pages ?? []}
+            activeTag={activeTag}
+          />
         ) : filtered.length === 0 ? (
           <div className="text-center py-20 text-gray-400">
             <BookOpen size={32} className="mx-auto mb-3 opacity-30" />
