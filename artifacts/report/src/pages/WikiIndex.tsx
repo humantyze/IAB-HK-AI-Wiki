@@ -51,6 +51,7 @@ export default function WikiIndex() {
   const [query, setQuery] = useState("");
   const [activeTag, setActiveTag] = useState("All");
   const [aiResults, setAiResults] = useState<WikiPageSummary[] | null>(null);
+  const [searchFallbackPages, setSearchFallbackPages] = useState<WikiPageSummary[] | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -63,6 +64,7 @@ export default function WikiIndex() {
 
     if (query.trim().length < 3) {
       setAiResults(null);
+      setSearchFallbackPages(null);
       setIsSearching(false);
       return;
     }
@@ -81,12 +83,20 @@ export default function WikiIndex() {
         });
         if (!r.ok) throw new Error("Search failed");
         const result = await r.json() as { ranked: boolean; pages: WikiPageSummary[] };
-        // Only use AI results when the server confirmed successful ranking
-        setAiResults(result.ranked && Array.isArray(result.pages) ? result.pages : null);
+        if (result.ranked && Array.isArray(result.pages)) {
+          setAiResults(result.pages);
+          setSearchFallbackPages(null);
+        } else {
+          // Use server-provided unranked pages as the client-side filter base,
+          // so the fallback works even if the initial page-list load failed.
+          setAiResults(null);
+          setSearchFallbackPages(Array.isArray(result.pages) ? result.pages : null);
+        }
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
-          // Fallback — clear AI results so client-side substring filter kicks in
+          // Network/parse error — clear both so client filter uses initial load data
           setAiResults(null);
+          setSearchFallbackPages(null);
         }
       } finally {
         if (abortRef.current === controller) {
@@ -101,7 +111,7 @@ export default function WikiIndex() {
     };
   }, [query, baseUrl]);
 
-  const basePages = aiResults !== null ? aiResults : (pages ?? []);
+  const basePages = aiResults !== null ? aiResults : (searchFallbackPages ?? pages ?? []);
 
   const filtered = basePages.filter((p) => {
     const matchesTag = activeTag === "All" || p.tags.includes(activeTag);
