@@ -15,7 +15,6 @@ interface WikiPageSummary {
 interface WikiGraphProps {
   pages: WikiPageSummary[];
   allPages: WikiPageSummary[];
-  activeTag: string;
 }
 
 const TAG_HEX: Record<string, string> = {
@@ -43,7 +42,7 @@ type NodeDatum = {
   y?: number;
 };
 
-export default function WikiGraph({ pages, allPages, activeTag }: WikiGraphProps) {
+export default function WikiGraph({ pages, allPages }: WikiGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(800);
   const [, navigate] = useLocation();
@@ -69,7 +68,8 @@ export default function WikiGraph({ pages, allPages, activeTag }: WikiGraphProps
       slug: p.slug,
       title: p.title,
       tags: p.tags,
-      active: activeTag === "All" || activeSlugSet.has(p.slug),
+      // active iff the page is in the current filtered set (handles both tag + search)
+      active: activeSlugSet.has(p.slug),
     }));
 
     const seenLinks = new Set<string>();
@@ -85,7 +85,7 @@ export default function WikiGraph({ pages, allPages, activeTag }: WikiGraphProps
       }
     }
     return { nodes, links };
-  }, [allPages, activeTag, activeSlugSet]);
+  }, [allPages, activeSlugSet]);
 
   const getNodeColor = useCallback((node: NodeDatum): string => {
     if (!node.active) return FADED_NODE_COLOR;
@@ -96,9 +96,10 @@ export default function WikiGraph({ pages, allPages, activeTag }: WikiGraphProps
   const getLinkColor = useCallback((link: { source: NodeDatum | string; target: NodeDatum | string }): string => {
     const src = typeof link.source === "string" ? link.source : link.source.slug;
     const tgt = typeof link.target === "string" ? link.target : link.target.slug;
-    const active = activeTag === "All" || (activeSlugSet.has(src) && activeSlugSet.has(tgt));
+    // A link is active only when both endpoints are in the current filtered set
+    const active = activeSlugSet.has(src) && activeSlugSet.has(tgt);
     return active ? LINK_COLOR_ACTIVE : LINK_COLOR_FADED;
-  }, [activeTag, activeSlugSet]);
+  }, [activeSlugSet]);
 
   const handleNodeClick = useCallback((node: NodeDatum) => {
     navigate(`/wiki/${node.slug}`);

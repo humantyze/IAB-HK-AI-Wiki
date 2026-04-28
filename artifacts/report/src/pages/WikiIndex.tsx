@@ -255,7 +255,6 @@ export default function WikiIndex() {
           <WikiGraph
             pages={filtered}
             allPages={pages ?? []}
-            activeTag={activeTag}
           />
         ) : filtered.length === 0 ? (
           <div className="text-center py-20 text-gray-400">
