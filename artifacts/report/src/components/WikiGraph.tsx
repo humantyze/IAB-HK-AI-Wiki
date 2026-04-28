@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback, useMemo, useState } from "react";
 import ForceGraph2D from "react-force-graph-2d";
 import { useLocation } from "wouter";
+import { forceX, forceY } from "d3-force";
 
 interface WikiPageSummary {
   id: number;
@@ -26,32 +27,53 @@ const TAG_HEX: Record<string, string> = {
   "Case Studies": "#eab308",
   "Frameworks": "#9ca3af",
 };
+
+const TAGS_ORDERED = [
+  "Organizations",
+  "Statistics",
+  "Tools & Platforms",
+  "Regulatory",
+  "Trends",
+  "Case Studies",
+  "Frameworks",
+];
+
 const DEFAULT_NODE_COLOR = "#6b7280";
-const FADED_NODE_COLOR = "#d1d5db";
+const FADED_NODE_COLOR = "#e5e7eb";
 const LINK_COLOR_ACTIVE = "#94a3b8";
-const LINK_COLOR_FADED = "#e2e8f0";
-const GRAPH_HEIGHT = 600;
+const LINK_COLOR_FADED = "#f1f5f9";
+const GRAPH_HEIGHT = 620;
+const MIN_RADIUS = 3.5;
+const MAX_RADIUS = 11;
+
+const CLUSTER_R = 160;
+const CLUSTER_CENTERS: Record<string, { x: number; y: number }> = {};
+TAGS_ORDERED.forEach((tag, i) => {
+  const angle = (2 * Math.PI * i) / TAGS_ORDERED.length - Math.PI / 2;
+  CLUSTER_CENTERS[tag] = {
+    x: CLUSTER_R * Math.cos(angle),
+    y: CLUSTER_R * Math.sin(angle),
+  };
+});
 
 type NodeDatum = {
   id: string;
   slug: string;
   title: string;
   tags: string[];
-  active: boolean;
   x?: number;
   y?: number;
 };
 
 export default function WikiGraph({ pages, allPages }: WikiGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const graphRef = useRef<any>(null);
   const [containerWidth, setContainerWidth] = useState(800);
   const [, navigate] = useLocation();
 
   useEffect(() => {
     const measure = () => {
-      if (containerRef.current) {
-        setContainerWidth(containerRef.current.clientWidth);
-      }
+      if (containerRef.current) setContainerWidth(containerRef.current.clientWidth);
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -59,19 +81,14 @@ export default function WikiGraph({ pages, allPages }: WikiGraphProps) {
     return () => ro.disconnect();
   }, []);
 
-  const activeSlugSet = useMemo(() => new Set(pages.map((p) => p.slug)), [pages]);
-
-  const { nodes, links } = useMemo(() => {
+  const { graphData, degreeMap, maxDegree } = useMemo(() => {
     const slugSet = new Set(allPages.map((p) => p.slug));
     const nodes: NodeDatum[] = allPages.map((p) => ({
       id: p.slug,
       slug: p.slug,
       title: p.title,
       tags: p.tags,
-      // active iff the page is in the current filtered set (handles both tag + search)
-      active: activeSlugSet.has(p.slug),
     }));
-
     const seenLinks = new Set<string>();
     const links: { source: string; target: string }[] = [];
     for (const p of allPages) {
@@ -84,52 +101,117 @@ export default function WikiGraph({ pages, allPages }: WikiGraphProps) {
         }
       }
     }
-    return { nodes, links };
-  }, [allPages, activeSlugSet]);
+    const degreeMap: Record<string, number> = {};
+    for (const link of links) {
+      degreeMap[link.source] = (degreeMap[link.source] ?? 0) + 1;
+      degreeMap[link.target] = (degreeMap[link.target] ?? 0) + 1;
+    }
+    const maxDegree = Math.max(1, ...Object.values(degreeMap));
+    return { graphData: { nodes, links }, degreeMap, maxDegree };
+  }, [allPages]);
 
-  const getNodeColor = useCallback((node: NodeDatum): string => {
-    if (!node.active) return FADED_NODE_COLOR;
-    const tag = node.tags[0];
+  const activeSlugSet = useMemo(() => new Set(pages.map((p) => p.slug)), [pages]);
+  const activeSlugSetRef = useRef(activeSlugSet);
+  activeSlugSetRef.current = activeSlugSet;
+
+  const forcesAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!containerWidth || forcesAppliedRef.current) return;
+    forcesAppliedRef.current = true;
+    const applyTimer = setTimeout(() => {
+      if (!graphRef.current) return;
+      graphRef.current.d3Force(
+        "x",
+        forceX<NodeDatum>((node) => CLUSTER_CENTERS[node.tags[0]]?.x ?? 0).strength(0.25),
+      );
+      graphRef.current.d3Force(
+        "y",
+        forceY<NodeDatum>((node) => CLUSTER_CENTERS[node.tags[0]]?.y ?? 0).strength(0.25),
+      );
+      graphRef.current.d3ReheatSimulation?.();
+      const zoomTimer = setTimeout(() => {
+        graphRef.current?.zoom(2.5, 800);
+      }, 1400);
+      return () => clearTimeout(zoomTimer);
+    }, 120);
+    return () => clearTimeout(applyTimer);
+  }, [containerWidth]);
+
+  const getRadius = useCallback(
+    (slug: string): number => {
+      const degree = degreeMap[slug] ?? 0;
+      return MIN_RADIUS + (MAX_RADIUS - MIN_RADIUS) * (degree / maxDegree);
+    },
+    [degreeMap, maxDegree],
+  );
+
+  const getNodeColor = useCallback((slug: string, tags: string[]): string => {
+    if (!activeSlugSetRef.current.has(slug)) return FADED_NODE_COLOR;
+    const tag = tags[0];
     return tag ? (TAG_HEX[tag] ?? DEFAULT_NODE_COLOR) : DEFAULT_NODE_COLOR;
   }, []);
 
-  const getLinkColor = useCallback((link: { source: NodeDatum | string; target: NodeDatum | string }): string => {
-    const src = typeof link.source === "string" ? link.source : link.source.slug;
-    const tgt = typeof link.target === "string" ? link.target : link.target.slug;
-    // A link is active only when both endpoints are in the current filtered set
-    const active = activeSlugSet.has(src) && activeSlugSet.has(tgt);
-    return active ? LINK_COLOR_ACTIVE : LINK_COLOR_FADED;
-  }, [activeSlugSet]);
+  const getLinkColor = useCallback(
+    (link: { source: NodeDatum | string; target: NodeDatum | string }): string => {
+      const src = typeof link.source === "string" ? link.source : link.source.slug;
+      const tgt = typeof link.target === "string" ? link.target : link.target.slug;
+      return activeSlugSetRef.current.has(src) && activeSlugSetRef.current.has(tgt)
+        ? LINK_COLOR_ACTIVE
+        : LINK_COLOR_FADED;
+    },
+    [],
+  );
 
-  const handleNodeClick = useCallback((node: NodeDatum) => {
-    navigate(`/wiki/${node.slug}`);
-  }, [navigate]);
+  const handleNodeClick = useCallback(
+    (node: NodeDatum) => navigate(`/wiki/${node.slug}`),
+    [navigate],
+  );
 
-  const paintNode = useCallback((
-    node: NodeDatum,
-    ctx: CanvasRenderingContext2D,
-    globalScale: number,
-  ) => {
-    const radius = Math.max(5 / globalScale, 2);
-    ctx.beginPath();
-    ctx.arc(node.x ?? 0, node.y ?? 0, radius, 0, 2 * Math.PI, false);
-    ctx.fillStyle = getNodeColor(node);
-    ctx.fill();
+  const nodeCanvasObjectMode = useCallback(() => "replace" as const, []);
+  const nodeLabel = useCallback((node: object) => (node as NodeDatum).title, []);
 
-    if (globalScale >= 1.5) {
-      const fontSize = Math.max(9 / globalScale, 3);
+  const paintNode = useCallback(
+    (node: NodeDatum, ctx: CanvasRenderingContext2D, globalScale: number) => {
+      const radius = getRadius(node.slug);
+      const isActive = activeSlugSetRef.current.has(node.slug);
+      const color = isActive
+        ? (node.tags[0] ? (TAG_HEX[node.tags[0]] ?? DEFAULT_NODE_COLOR) : DEFAULT_NODE_COLOR)
+        : FADED_NODE_COLOR;
+
+      ctx.beginPath();
+      ctx.arc(node.x ?? 0, node.y ?? 0, radius, 0, 2 * Math.PI, false);
+      ctx.fillStyle = color;
+      ctx.fill();
+
+      const baseFontSize = 10;
+      const fontSize = Math.max(baseFontSize / globalScale, 2.5);
+      const maxChars = globalScale < 1.2 ? 15 : globalScale < 2 ? 22 : 50;
+      const label =
+        node.title.length > maxChars
+          ? node.title.slice(0, maxChars - 1) + "…"
+          : node.title;
+
       ctx.font = `${fontSize}px Montserrat, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillStyle = node.active ? "#374151" : "#9ca3af";
-      ctx.fillText(node.title, node.x ?? 0, (node.y ?? 0) + radius + 1.5 / globalScale);
+      ctx.fillStyle = isActive ? "#374151" : "#d1d5db";
+      ctx.fillText(label, node.x ?? 0, (node.y ?? 0) + radius + 1.5 / globalScale);
+    },
+    [getRadius],
+  );
+
+  const legendTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    for (const page of allPages) {
+      if (page.tags[0] && TAG_HEX[page.tags[0]]) tagSet.add(page.tags[0]);
     }
-  }, [getNodeColor]);
+    return TAGS_ORDERED.filter((t) => tagSet.has(t));
+  }, [allPages]);
 
   return (
     <div
       ref={containerRef}
-      className="w-full"
+      className="w-full relative"
       style={{
         height: `${GRAPH_HEIGHT}px`,
         borderRadius: "12px",
@@ -140,22 +222,74 @@ export default function WikiGraph({ pages, allPages }: WikiGraphProps) {
     >
       {containerWidth > 0 && (
         <ForceGraph2D
-          graphData={{ nodes, links }}
+          ref={graphRef}
+          graphData={graphData}
           width={containerWidth}
           height={GRAPH_HEIGHT}
           backgroundColor="#fafafa"
-          nodeLabel={(node) => (node as NodeDatum).title}
-          nodeColor={(node) => getNodeColor(node as NodeDatum)}
-          nodeCanvasObject={(node, ctx, scale) => paintNode(node as NodeDatum, ctx, scale)}
-          nodeCanvasObjectMode={() => "replace"}
-          linkColor={(link) => getLinkColor(link as { source: NodeDatum | string; target: NodeDatum | string })}
+          nodeLabel={nodeLabel}
+          nodeCanvasObject={(node, ctx, scale) =>
+            paintNode(node as NodeDatum, ctx, scale)
+          }
+          nodeCanvasObjectMode={nodeCanvasObjectMode}
+          linkColor={(link) =>
+            getLinkColor(
+              link as { source: NodeDatum | string; target: NodeDatum | string },
+            )
+          }
           linkWidth={0.8}
           onNodeClick={(node) => handleNodeClick(node as NodeDatum)}
           enableNodeDrag
           enableZoomInteraction
-          cooldownTicks={120}
+          cooldownTicks={150}
+          autoPauseRedraw={false}
         />
       )}
+
+      <div
+        style={{
+          position: "absolute",
+          bottom: 12,
+          left: 12,
+          background: "rgba(255,255,255,0.92)",
+          border: "1px solid #f3f4f6",
+          borderRadius: 8,
+          padding: "8px 10px",
+          fontSize: 10,
+          lineHeight: "1.75",
+          backdropFilter: "blur(4px)",
+          pointerEvents: "none",
+          zIndex: 10,
+          fontFamily: "'Montserrat', sans-serif",
+        }}
+      >
+        {legendTags.map((tag) => (
+          <div key={tag} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span
+              style={{
+                display: "inline-block",
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: TAG_HEX[tag],
+                flexShrink: 0,
+              }}
+            />
+            <span style={{ color: "#374151" }}>{tag}</span>
+          </div>
+        ))}
+        <div
+          style={{
+            borderTop: "1px solid #f3f4f6",
+            marginTop: 5,
+            paddingTop: 4,
+            color: "#9ca3af",
+            fontStyle: "italic",
+          }}
+        >
+          Scroll to zoom · Drag to pan · Click to open
+        </div>
+      </div>
     </div>
   );
 }
