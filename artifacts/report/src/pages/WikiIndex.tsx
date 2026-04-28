@@ -75,10 +75,11 @@ export default function WikiIndex() {
           body: JSON.stringify({ query: query.trim() }),
         });
         if (!r.ok) throw new Error("Search failed");
-        const result = await r.json() as WikiPageSummary[];
-        setAiResults(Array.isArray(result) ? result : null);
+        const result = await r.json() as { ranked: boolean; pages: WikiPageSummary[] };
+        // Only use AI results when the server confirmed successful ranking
+        setAiResults(result.ranked && Array.isArray(result.pages) ? result.pages : null);
       } catch {
-        // Fallback — clear AI results so client-side filter kicks in
+        // Fallback — clear AI results so client-side substring filter kicks in
         setAiResults(null);
       } finally {
         setIsSearching(false);

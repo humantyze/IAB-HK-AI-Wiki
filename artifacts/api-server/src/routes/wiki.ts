@@ -60,7 +60,7 @@ router.post("/wiki/search", async (req, res) => {
   const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
 
   if (!baseUrl || !apiKey) {
-    res.json(allPages);
+    res.json({ ranked: false, pages: allPages });
     return;
   }
 
@@ -84,11 +84,11 @@ router.post("/wiki/search", async (req, res) => {
         },
         {
           role: "user",
-          content: `Query: "${query.trim()}"\n\nAvailable pages:\n${pageList}\n\nReturn up to 15 slugs ranked by relevance.`,
+          content: `Query: "${query.trim()}"\n\nAvailable pages:\n${pageList}\n\nReturn up to 10 slugs ranked by relevance.`,
         },
       ],
       temperature: 0,
-      max_completion_tokens: 512,
+      max_tokens: 256,
     });
 
     const raw = (response.choices[0]?.message?.content ?? "[]").trim().replace(/^```(?:json)?\n?|```$/g, "");
@@ -101,15 +101,13 @@ router.post("/wiki/search", async (req, res) => {
     }
 
     const slugMap = new Map(allPages.map((p) => [p.slug, p]));
-    const ranked = rankedSlugs.flatMap((slug) => { const p = slugMap.get(slug); return p ? [p] : []; });
-    const rankedSet = new Set(rankedSlugs);
-    const unranked = allPages.filter((p) => !rankedSet.has(p.slug));
+    const ranked = rankedSlugs.slice(0, 10).flatMap((slug) => { const p = slugMap.get(slug); return p ? [p] : []; });
 
     logger.info({ query: query.trim(), ranked: ranked.length }, "Wiki AI search complete");
-    res.json([...ranked, ...unranked]);
+    res.json({ ranked: true, pages: ranked });
   } catch (err) {
-    logger.error({ err }, "Wiki AI search failed — returning unranked pages");
-    res.json(allPages);
+    logger.error({ err }, "Wiki AI search failed — client will use local fallback");
+    res.json({ ranked: false, pages: allPages });
   }
 });
 
