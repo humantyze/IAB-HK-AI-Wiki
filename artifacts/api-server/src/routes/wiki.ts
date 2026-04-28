@@ -5,9 +5,29 @@ import { requireAuth } from "../middlewares/auth";
 import { runWikiSeed } from "../lib/wiki-seed";
 import { logger } from "../lib/logger";
 
+function formatPageSummary(p: {
+  id: number;
+  slug: string;
+  title: string;
+  tags: unknown;
+  relatedSlugs: unknown;
+  updatedAt: Date;
+  bodyMarkdown: unknown;
+}) {
+  return {
+    id: p.id,
+    slug: p.slug,
+    title: p.title,
+    tags: (p.tags as string[]) ?? [],
+    relatedSlugs: (p.relatedSlugs as string[]) ?? [],
+    updatedAt: p.updatedAt.toISOString(),
+    excerpt: (p.bodyMarkdown as string).replace(/^#+\s.*/gm, "").replace(/[*_`]/g, "").trim().slice(0, 200),
+  };
+}
+
 const router: IRouter = Router();
 
-router.get("/wiki", async (_req, res) => {
+async function fetchAllPageSummaries() {
   const pages = await db
     .select({
       id: wikiPagesTable.id,
@@ -20,18 +40,77 @@ router.get("/wiki", async (_req, res) => {
     })
     .from(wikiPagesTable)
     .orderBy(asc(wikiPagesTable.title));
+  return pages.map(formatPageSummary);
+}
 
-  res.json(
-    pages.map((p) => ({
-      id: p.id,
-      slug: p.slug,
-      title: p.title,
-      tags: (p.tags as string[]) ?? [],
-      relatedSlugs: (p.relatedSlugs as string[]) ?? [],
-      updatedAt: p.updatedAt.toISOString(),
-      excerpt: (p.bodyMarkdown as string).replace(/^#+\s.*/gm, "").replace(/[*_`]/g, "").trim().slice(0, 200),
-    })),
-  );
+router.get("/wiki", async (_req, res) => {
+  res.json(await fetchAllPageSummaries());
+});
+
+router.post("/wiki/search", async (req, res) => {
+  const { query } = req.body as { query?: unknown };
+  if (!query || typeof query !== "string" || query.trim().length < 2) {
+    res.status(400).json({ error: "Query must be at least 2 characters" });
+    return;
+  }
+
+  const allPages = await fetchAllPageSummaries();
+
+  const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+
+  if (!baseUrl || !apiKey) {
+    res.json(allPages);
+    return;
+  }
+
+  try {
+    const { default: OpenAI } = await import("openai");
+    const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 20_000 });
+
+    const pageList = allPages
+      .map((p, i) => `${i + 1}. slug:"${p.slug}" | title:"${p.title}" | tags:[${p.tags.join(", ")}] | excerpt:"${p.excerpt.slice(0, 120)}"`)
+      .join("\n");
+
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a semantic search assistant for a wiki about AI in Hong Kong's marketing industry. " +
+            "Given a user query, return the slugs of the most relevant wiki pages in ranked order (most relevant first). " +
+            "Return ONLY a JSON array of slug strings, e.g. [\"slug-one\",\"slug-two\"]. No markdown, no explanation.",
+        },
+        {
+          role: "user",
+          content: `Query: "${query.trim()}"\n\nAvailable pages:\n${pageList}\n\nReturn up to 15 slugs ranked by relevance.`,
+        },
+      ],
+      temperature: 0,
+      max_completion_tokens: 512,
+    });
+
+    const raw = (response.choices[0]?.message?.content ?? "[]").trim().replace(/^```(?:json)?\n?|```$/g, "");
+    let rankedSlugs: string[] = [];
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      rankedSlugs = Array.isArray(parsed) ? (parsed as unknown[]).filter((s): s is string => typeof s === "string") : [];
+    } catch {
+      rankedSlugs = [];
+    }
+
+    const slugMap = new Map(allPages.map((p) => [p.slug, p]));
+    const ranked = rankedSlugs.flatMap((slug) => { const p = slugMap.get(slug); return p ? [p] : []; });
+    const rankedSet = new Set(rankedSlugs);
+    const unranked = allPages.filter((p) => !rankedSet.has(p.slug));
+
+    logger.info({ query: query.trim(), ranked: ranked.length }, "Wiki AI search complete");
+    res.json([...ranked, ...unranked]);
+  } catch (err) {
+    logger.error({ err }, "Wiki AI search failed — returning unranked pages");
+    res.json(allPages);
+  }
 });
 
 router.get("/wiki/:slug", async (req, res) => {

@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
-import { Search, BookOpen, Clock, ChevronRight, Lock } from "lucide-react";
+import { Search, BookOpen, Clock, ChevronRight, Lock, Sparkles } from "lucide-react";
 
 interface WikiPageSummary {
   id: number;
@@ -50,13 +50,55 @@ export default function WikiIndex() {
   const { data: pages, isLoading } = useWikiPages();
   const [query, setQuery] = useState("");
   const [activeTag, setActiveTag] = useState("All");
+  const [aiResults, setAiResults] = useState<WikiPageSummary[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const filtered = (pages ?? []).filter((p) => {
+  const baseUrl = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (query.trim().length < 3) {
+      setAiResults(null);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const r = await fetch(`${baseUrl}/api/wiki/search`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ query: query.trim() }),
+        });
+        if (!r.ok) throw new Error("Search failed");
+        const result = await r.json() as WikiPageSummary[];
+        setAiResults(Array.isArray(result) ? result : null);
+      } catch {
+        // Fallback — clear AI results so client-side filter kicks in
+        setAiResults(null);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 400);
+
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [query, baseUrl]);
+
+  const basePages = aiResults !== null ? aiResults : (pages ?? []);
+
+  const filtered = basePages.filter((p) => {
     const matchesTag = activeTag === "All" || p.tags.includes(activeTag);
+    if (aiResults !== null) return matchesTag;
     const q = query.toLowerCase();
     const matchesQuery = !q || p.title.toLowerCase().includes(q) || p.excerpt.toLowerCase().includes(q);
     return matchesTag && matchesQuery;
   });
+
+  const usingAI = aiResults !== null && query.trim().length >= 3;
 
   const formatDate = (iso: string) => {
     const d = new Date(iso);
@@ -105,15 +147,20 @@ export default function WikiIndex() {
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="Search concepts, companies, statistics…"
+            placeholder="Ask anything — e.g. 'how are HK marketers using AI?'"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-gray-400 text-gray-700 placeholder-gray-400"
+            className="w-full pl-9 pr-10 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-gray-400 text-gray-700 placeholder-gray-400"
           />
+          {isSearching && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-[#D63425]/20 border-t-[#D63425] rounded-full animate-spin" />
+          )}
         </div>
+      </div>
 
-        {/* Tag filters */}
-        <div className="flex flex-wrap gap-2 mt-4">
+      {/* Tag filters + count row */}
+      <div className="max-w-6xl mx-auto px-6 lg:px-8">
+        <div className="flex flex-wrap gap-2 mb-4">
           {ALL_TAGS.map((tag) => (
             <button
               key={tag}
@@ -129,9 +176,7 @@ export default function WikiIndex() {
             </button>
           ))}
         </div>
-      </div>
-      {/* Count row */}
-      <div className="max-w-6xl mx-auto px-6 lg:px-8">
+
         <div className="border-t border-gray-100 pt-4 pb-2 flex items-center justify-between">
           {isLoading ? (
             <span className="text-xs text-gray-400">Loading…</span>
@@ -141,8 +186,15 @@ export default function WikiIndex() {
               {activeTag !== "All" ? ` · ${activeTag}` : ""}
             </span>
           )}
+          {usingAI && !isSearching && (
+            <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "#D63425" }}>
+              <Sparkles size={10} />
+              AI ranked
+            </span>
+          )}
         </div>
       </div>
+
       {/* Card grid */}
       <div className="max-w-6xl mx-auto px-6 lg:px-8 pb-20">
         {isLoading ? (
