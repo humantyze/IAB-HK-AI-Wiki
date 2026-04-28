@@ -80,24 +80,25 @@ router.post("/wiki/search", async (req, res) => {
           content:
             "You are a semantic search assistant for a wiki about AI in Hong Kong's marketing industry. " +
             "Given a user query, return the slugs of the most relevant wiki pages in ranked order (most relevant first). " +
-            "Return ONLY a JSON array of slug strings, e.g. [\"slug-one\",\"slug-two\"]. No markdown, no explanation.",
+            'Respond with a JSON object in exactly this shape: {"slugs":["slug-one","slug-two"]}. No markdown, no explanation.',
         },
         {
           role: "user",
-          content: `Query: "${query.trim()}"\n\nAvailable pages:\n${pageList}\n\nReturn up to 10 slugs ranked by relevance.`,
+          content: `Query: "${query.trim()}"\n\nAvailable pages:\n${pageList}\n\nReturn up to 10 slugs ranked by relevance as {"slugs":[...]}.`,
         },
       ],
+      response_format: { type: "json_object" },
       temperature: 0,
       max_tokens: 256,
     });
 
-    const rawContent = (response.choices[0]?.message?.content ?? "").trim().replace(/^```(?:json)?\n?|```$/g, "");
+    const rawContent = (response.choices[0]?.message?.content ?? "").trim();
 
     let rankedSlugs: string[] | null = null;
     try {
-      const parsed: unknown = JSON.parse(rawContent);
-      if (Array.isArray(parsed)) {
-        rankedSlugs = (parsed as unknown[]).filter((s): s is string => typeof s === "string");
+      const parsed = JSON.parse(rawContent) as { slugs?: unknown };
+      if (Array.isArray(parsed.slugs)) {
+        rankedSlugs = (parsed.slugs as unknown[]).filter((s): s is string => typeof s === "string");
       }
     } catch {
       rankedSlugs = null;
