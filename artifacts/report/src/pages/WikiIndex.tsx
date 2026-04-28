@@ -131,7 +131,13 @@ export default function WikiIndex() {
 
   const filteredSlugsKey = filtered.map((p) => p.slug).sort().join(",");
 
+  const graphFirstPopulated = useRef(false);
   useEffect(() => {
+    if (!graphFirstPopulated.current && filtered.length > 0) {
+      graphFirstPopulated.current = true;
+      setGraphFilteredPages(filtered);
+      return;
+    }
     if (graphDebounceRef.current) clearTimeout(graphDebounceRef.current);
     graphDebounceRef.current = setTimeout(() => {
       setGraphFilteredPages(filtered);

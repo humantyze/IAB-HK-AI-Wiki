@@ -118,6 +118,7 @@ export default function WikiGraph({ pages, allPages }: WikiGraphProps) {
   useEffect(() => {
     if (!containerWidth || forcesAppliedRef.current) return;
     forcesAppliedRef.current = true;
+    let zoomTimer: ReturnType<typeof setTimeout> | null = null;
     const applyTimer = setTimeout(() => {
       if (!graphRef.current) return;
       graphRef.current.d3Force(
@@ -129,12 +130,14 @@ export default function WikiGraph({ pages, allPages }: WikiGraphProps) {
         forceY<NodeObject<NodeDatum>>((node) => CLUSTER_CENTERS[node.tags[0]]?.y ?? 0).strength(0.25),
       );
       graphRef.current.d3ReheatSimulation();
-      const zoomTimer = setTimeout(() => {
+      zoomTimer = setTimeout(() => {
         graphRef.current?.zoom(2.5, 800);
       }, 1400);
-      return () => clearTimeout(zoomTimer);
     }, 120);
-    return () => clearTimeout(applyTimer);
+    return () => {
+      clearTimeout(applyTimer);
+      if (zoomTimer !== null) clearTimeout(zoomTimer);
+    };
   }, [containerWidth]);
 
   const getRadius = useCallback(
