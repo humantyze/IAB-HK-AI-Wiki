@@ -62,9 +62,12 @@ export default function WikiIndex() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (abortRef.current) abortRef.current.abort();
 
+    // Clear stale ranked results immediately so the UI shows the client-side
+    // substring filter while the debounce timer and AI request are in flight.
+    setAiResults(null);
+    setSearchFallbackPages(null);
+
     if (query.trim().length < 3) {
-      setAiResults(null);
-      setSearchFallbackPages(null);
       setIsSearching(false);
       return;
     }
