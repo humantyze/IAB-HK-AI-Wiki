@@ -1,5 +1,5 @@
 import { useRef, useEffect, useCallback, useMemo, useState } from "react";
-import ForceGraph2D from "react-force-graph-2d";
+import ForceGraph2D, { ForceGraphMethods, NodeObject } from "react-force-graph-2d";
 import { useLocation } from "wouter";
 import { forceX, forceY } from "d3-force";
 
@@ -67,7 +67,7 @@ type NodeDatum = {
 
 export default function WikiGraph({ pages, allPages }: WikiGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const graphRef = useRef<any>(null);
+  const graphRef = useRef<ForceGraphMethods<NodeDatum> | undefined>(undefined);
   const [containerWidth, setContainerWidth] = useState(800);
   const [, navigate] = useLocation();
 
@@ -122,13 +122,13 @@ export default function WikiGraph({ pages, allPages }: WikiGraphProps) {
       if (!graphRef.current) return;
       graphRef.current.d3Force(
         "x",
-        forceX<NodeDatum>((node) => CLUSTER_CENTERS[node.tags[0]]?.x ?? 0).strength(0.25),
+        forceX<NodeObject<NodeDatum>>((node) => CLUSTER_CENTERS[node.tags[0]]?.x ?? 0).strength(0.25),
       );
       graphRef.current.d3Force(
         "y",
-        forceY<NodeDatum>((node) => CLUSTER_CENTERS[node.tags[0]]?.y ?? 0).strength(0.25),
+        forceY<NodeObject<NodeDatum>>((node) => CLUSTER_CENTERS[node.tags[0]]?.y ?? 0).strength(0.25),
       );
-      graphRef.current.d3ReheatSimulation?.();
+      graphRef.current.d3ReheatSimulation();
       const zoomTimer = setTimeout(() => {
         graphRef.current?.zoom(2.5, 800);
       }, 1400);
@@ -202,11 +202,11 @@ export default function WikiGraph({ pages, allPages }: WikiGraphProps) {
 
   const legendTags = useMemo(() => {
     const tagSet = new Set<string>();
-    for (const page of allPages) {
+    for (const page of pages) {
       if (page.tags[0] && TAG_HEX[page.tags[0]]) tagSet.add(page.tags[0]);
     }
     return TAGS_ORDERED.filter((t) => tagSet.has(t));
-  }, [allPages]);
+  }, [pages]);
 
   return (
     <div

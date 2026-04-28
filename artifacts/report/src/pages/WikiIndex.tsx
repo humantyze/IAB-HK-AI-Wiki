@@ -55,7 +55,9 @@ export default function WikiIndex() {
   const [searchFallbackPages, setSearchFallbackPages] = useState<WikiPageSummary[] | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "graph">("grid");
+  const [graphFilteredPages, setGraphFilteredPages] = useState<WikiPageSummary[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const graphDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const baseUrl = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
@@ -118,6 +120,7 @@ export default function WikiIndex() {
 
   const basePages = aiResults !== null ? aiResults : (searchFallbackPages ?? pages ?? []);
 
+
   const filtered = basePages.filter((p) => {
     const matchesTag = activeTag === "All" || p.tags.includes(activeTag);
     if (aiResults !== null) return matchesTag;
@@ -125,6 +128,19 @@ export default function WikiIndex() {
     const matchesQuery = !q || p.title.toLowerCase().includes(q) || p.excerpt.toLowerCase().includes(q);
     return matchesTag && matchesQuery;
   });
+
+  const filteredSlugsKey = filtered.map((p) => p.slug).sort().join(",");
+
+  useEffect(() => {
+    if (graphDebounceRef.current) clearTimeout(graphDebounceRef.current);
+    graphDebounceRef.current = setTimeout(() => {
+      setGraphFilteredPages(filtered);
+    }, 400);
+    return () => {
+      if (graphDebounceRef.current) clearTimeout(graphDebounceRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredSlugsKey]);
 
   const usingAI = aiResults !== null && query.trim().length >= 3;
 
@@ -253,7 +269,7 @@ export default function WikiIndex() {
           </div>
         ) : viewMode === "graph" ? (
           <WikiGraph
-            pages={filtered}
+            pages={graphFilteredPages}
             allPages={pages ?? []}
           />
         ) : filtered.length === 0 ? (
