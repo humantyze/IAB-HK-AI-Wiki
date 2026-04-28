@@ -110,7 +110,17 @@ router.post("/wiki/search", async (req, res) => {
     }
 
     const slugMap = new Map(allPages.map((p) => [p.slug, p]));
-    const ranked = rankedSlugs.slice(0, 10).flatMap((slug) => { const p = slugMap.get(slug); return p ? [p] : []; });
+    const seenSlugs = new Set<string>();
+    const ranked = rankedSlugs
+      .filter((slug) => { if (seenSlugs.has(slug)) return false; seenSlugs.add(slug); return true; })
+      .slice(0, 10)
+      .flatMap((slug) => { const p = slugMap.get(slug); return p ? [p] : []; });
+
+    if (ranked.length === 0) {
+      logger.info({ query: query.trim() }, "Wiki AI search — no valid slugs resolved, returning unranked");
+      res.json({ ranked: false, pages: allPages });
+      return;
+    }
 
     logger.info({ query: query.trim(), ranked: ranked.length }, "Wiki AI search complete");
     res.json({ ranked: true, pages: ranked });

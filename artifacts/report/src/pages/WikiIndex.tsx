@@ -53,11 +53,13 @@ export default function WikiIndex() {
   const [aiResults, setAiResults] = useState<WikiPageSummary[] | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const baseUrl = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (abortRef.current) abortRef.current.abort();
 
     if (query.trim().length < 3) {
       setAiResults(null);
@@ -67,26 +69,36 @@ export default function WikiIndex() {
 
     setIsSearching(true);
     debounceRef.current = setTimeout(async () => {
+      const controller = new AbortController();
+      abortRef.current = controller;
       try {
         const r = await fetch(`${baseUrl}/api/wiki/search`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
+          signal: controller.signal,
           body: JSON.stringify({ query: query.trim() }),
         });
         if (!r.ok) throw new Error("Search failed");
         const result = await r.json() as { ranked: boolean; pages: WikiPageSummary[] };
         // Only use AI results when the server confirmed successful ranking
         setAiResults(result.ranked && Array.isArray(result.pages) ? result.pages : null);
-      } catch {
-        // Fallback — clear AI results so client-side substring filter kicks in
-        setAiResults(null);
+      } catch (err) {
+        if ((err as Error).name !== "AbortError") {
+          // Fallback — clear AI results so client-side substring filter kicks in
+          setAiResults(null);
+        }
       } finally {
-        setIsSearching(false);
+        if (abortRef.current === controller) {
+          setIsSearching(false);
+        }
       }
     }, 400);
 
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (abortRef.current) abortRef.current.abort();
+    };
   }, [query, baseUrl]);
 
   const basePages = aiResults !== null ? aiResults : (pages ?? []);
