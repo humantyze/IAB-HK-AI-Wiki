@@ -49,6 +49,7 @@ export function useAnalyzeUpload() {
 }
 
 interface UploadData {
+  uploaderName?: string;
   contributorName?: string;
   contentType: string;
   targetSections: string[];
@@ -61,6 +62,7 @@ export function useSubmitUpload() {
   return useMutation({
     mutationFn: async (data: UploadData) => {
       const formData = new FormData();
+      if (data.uploaderName) formData.append("uploaderName", data.uploaderName);
       if (data.contributorName) formData.append("contributorName", data.contributorName);
       formData.append("contentType", data.contentType);
       formData.append("targetSections", JSON.stringify(data.targetSections));

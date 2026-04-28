@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 
 export const uploadsTable = pgTable("uploads", {
   id: serial("id").primaryKey(),
+  uploaderName: text("uploader_name"),
   contributorName: text("contributor_name"),
   contentType: text("content_type").notNull(),
   targetSections: jsonb("target_sections").notNull().$type<string[]>().default([]),

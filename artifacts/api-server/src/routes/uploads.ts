@@ -11,6 +11,7 @@ import { extractTextOnly } from "../lib/pdf-extractor";
 import { logger } from "../lib/logger";
 
 const UploadFormSchema = z.object({
+  uploaderName: z.string().optional(),
   contributorName: z.string().optional(),
   contentType: z.enum(["whitepaper", "case_study", "market_data", "regulation_update", "trend_insight"]),
   targetSections: z.array(z.string()).min(1, "At least one target section is required"),
@@ -64,6 +65,7 @@ router.get("/uploads", requireAuth, async (_req, res) => {
   res.json(
     uploads.map((u) => ({
       id: u.id,
+      uploaderName: u.uploaderName,
       contributorName: u.contributorName,
       contentType: u.contentType,
       targetSections: u.targetSections,
@@ -191,6 +193,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
   const [uploadRecord] = await db
     .insert(uploadsTable)
     .values({
+      uploaderName: data.uploaderName ?? null,
       contributorName: data.contributorName ?? null,
       contentType: data.contentType,
       targetSections: data.targetSections,
@@ -242,6 +245,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
 
     res.status(201).json({
       id: updated.id,
+      uploaderName: updated.uploaderName,
       contributorName: updated.contributorName,
       contentType: updated.contentType,
       targetSections: updated.targetSections,
@@ -277,6 +281,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
 
     res.status(500).json({
       id: errUpload.id,
+      uploaderName: errUpload.uploaderName,
       contributorName: errUpload.contributorName,
       contentType: errUpload.contentType,
       targetSections: errUpload.targetSections,

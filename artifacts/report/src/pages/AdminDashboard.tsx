@@ -27,6 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 
 const uploadSchema = z.object({
+  uploaderName: z.string().optional(),
   contributorName: z.string().optional(),
   contentType: z.enum(["whitepaper", "case_study", "market_data", "regulation_update", "trend_insight"]),
   rawText: z.string().optional(),
@@ -72,7 +73,7 @@ export default function AdminDashboard() {
 
   const form = useForm<z.infer<typeof uploadSchema>>({
     resolver: zodResolver(uploadSchema),
-    defaultValues: { contentType: "market_data", contributorName: "", rawText: "" },
+    defaultValues: { uploaderName: "", contentType: "market_data", contributorName: "", rawText: "" },
   });
 
   const fetchWikiCount = async () => {
@@ -169,7 +170,7 @@ export default function AdminDashboard() {
         file: selectedFile,
       });
       toast({ title: "Integration Complete", description: `Content successfully integrated into ${targetSections.length} section${targetSections.length > 1 ? "s" : ""}.` });
-      form.reset({ rawText: "", contentType: values.contentType, contributorName: values.contributorName });
+      form.reset({ uploaderName: values.uploaderName, rawText: "", contentType: values.contentType, contributorName: values.contributorName });
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       setPhase("input");
@@ -367,6 +368,19 @@ export default function AdminDashboard() {
                 {phase === "input" && (
                   <Form {...form}>
                     <form onSubmit={form.handleSubmit(handleAnalyze)} className="space-y-10">
+                      <FormField
+                        control={form.control}
+                        name="uploaderName"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70">Uploader</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Your name or team name" className="bg-background/50 border-border/50 h-12 rounded-xl focus-visible:ring-primary/30" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
                         <FormField
                           control={form.control}
@@ -604,6 +618,11 @@ export default function AdminDashboard() {
                         <h4 className="text-lg font-serif font-bold text-foreground/90 mb-1">
                           {upload.contentType.replace("_", " ").toUpperCase()} <span className="text-foreground/70 font-normal mx-2">|</span> {upload.contributorName || "Anonymous Source"}
                         </h4>
+                        {(upload as unknown as { uploaderName?: string }).uploaderName && (
+                          <p className="text-xs text-foreground/50 font-display uppercase tracking-widest mt-0.5">
+                            Uploaded by {(upload as unknown as { uploaderName?: string }).uploaderName}
+                          </p>
+                        )}
                         <div className="flex items-center space-x-2 mt-2">
                           <span className="font-display text-[10px] uppercase text-foreground/70 tracking-widest">Vectors:</span>
                           <div className="flex flex-wrap gap-2">
