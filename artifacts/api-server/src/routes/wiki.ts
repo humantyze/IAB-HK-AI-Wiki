@@ -79,26 +79,31 @@ router.post("/wiki/search", async (req, res) => {
           role: "system",
           content:
             "You are a semantic search assistant for a wiki about AI in Hong Kong's marketing industry. " +
-            "Given a user query, return the slugs of the most relevant wiki pages in ranked order (most relevant first). " +
-            'Respond with a JSON object in exactly this shape: {"slugs":["slug-one","slug-two"]}. No markdown, no explanation.',
+            "Given a user query, return the slugs of the most relevant wiki pages in ranked order (most relevant first), " +
+            "and a short 2–4 sentence plain-English summary that directly answers or contextualises the query using insights from those top pages. " +
+            'Respond with a JSON object in exactly this shape: {"slugs":["slug-one","slug-two"],"summary":"Your summary here."}. No markdown, no explanation outside the JSON.',
         },
         {
           role: "user",
-          content: `Query: "${query.trim()}"\n\nAvailable pages:\n${pageList}\n\nReturn up to 10 slugs ranked by relevance as {"slugs":[...]}.`,
+          content: `Query: "${query.trim()}"\n\nAvailable pages:\n${pageList}\n\nReturn up to 10 slugs ranked by relevance plus a 2–4 sentence summary as {"slugs":[...],"summary":"..."}.`,
         },
       ],
       response_format: { type: "json_object" },
       temperature: 0,
-      max_tokens: 256,
+      max_tokens: 512,
     });
 
     const rawContent = (response.choices[0]?.message?.content ?? "").trim();
 
     let rankedSlugs: string[] | null = null;
+    let aiSummary: string | undefined;
     try {
-      const parsed = JSON.parse(rawContent) as { slugs?: unknown };
+      const parsed = JSON.parse(rawContent) as { slugs?: unknown; summary?: unknown };
       if (Array.isArray(parsed.slugs)) {
         rankedSlugs = (parsed.slugs as unknown[]).filter((s): s is string => typeof s === "string");
+      }
+      if (typeof parsed.summary === "string" && parsed.summary.trim().length > 0) {
+        aiSummary = parsed.summary.trim();
       }
     } catch {
       rankedSlugs = null;
@@ -124,7 +129,7 @@ router.post("/wiki/search", async (req, res) => {
     }
 
     logger.info({ query: query.trim(), ranked: ranked.length }, "Wiki AI search complete");
-    res.json({ ranked: true, pages: ranked });
+    res.json({ ranked: true, pages: ranked, ...(aiSummary ? { summary: aiSummary } : {}) });
   } catch (err) {
     logger.error({ err }, "Wiki AI search failed — client will use local fallback");
     res.json({ ranked: false, pages: allPages });

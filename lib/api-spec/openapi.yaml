@@ -382,3 +382,18 @@ components:
         - contentType
         - targetSections
         - rawText
+    WikiSearchResponse:
+      type: object
+      properties:
+        ranked:
+          type: boolean
+        pages:
+          type: array
+          items:
+            type: object
+        summary:
+          type: string
+          description: Short AI-generated answer contextualising the query (only present when ranked is true)
+      required:
+        - ranked
+        - pages

@@ -52,6 +52,7 @@ export default function WikiIndex() {
   const [query, setQuery] = useState("");
   const [activeTag, setActiveTag] = useState("All");
   const [aiResults, setAiResults] = useState<WikiPageSummary[] | null>(null);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [searchFallbackPages, setSearchFallbackPages] = useState<WikiPageSummary[] | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "graph">("grid");
@@ -69,6 +70,7 @@ export default function WikiIndex() {
     // Clear stale ranked results immediately so the UI shows the client-side
     // substring filter while the debounce timer and AI request are in flight.
     setAiResults(null);
+    setAiSummary(null);
     setSearchFallbackPages(null);
 
     if (query.trim().length < 3) {
@@ -89,20 +91,23 @@ export default function WikiIndex() {
           body: JSON.stringify({ query: query.trim() }),
         });
         if (!r.ok) throw new Error("Search failed");
-        const result = await r.json() as { ranked: boolean; pages: WikiPageSummary[] };
+        const result = await r.json() as { ranked: boolean; pages: WikiPageSummary[]; summary?: string };
         if (result.ranked && Array.isArray(result.pages)) {
           setAiResults(result.pages);
+          setAiSummary(result.summary && result.summary.trim().length > 0 ? result.summary.trim() : null);
           setSearchFallbackPages(null);
         } else {
           // Use server-provided unranked pages as the client-side filter base,
           // so the fallback works even if the initial page-list load failed.
           setAiResults(null);
+          setAiSummary(null);
           setSearchFallbackPages(Array.isArray(result.pages) ? result.pages : null);
         }
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
           // Network/parse error — clear both so client filter uses initial load data
           setAiResults(null);
+          setAiSummary(null);
           setSearchFallbackPages(null);
         }
       } finally {
@@ -266,6 +271,16 @@ export default function WikiIndex() {
           </div>
         </div>
       </div>
+
+      {/* AI summary panel */}
+      {usingAI && aiSummary && !isSearching && (
+        <div className="max-w-6xl mx-auto px-6 lg:px-8 mb-4">
+          <div className="rounded-xl border border-[#D63425]/15 bg-[#fff8f7] px-5 py-4 flex gap-3">
+            <Sparkles size={15} className="mt-0.5 shrink-0" style={{ color: "#D63425" }} />
+            <p className="text-sm text-gray-700 leading-relaxed">{aiSummary}</p>
+          </div>
+        </div>
+      )}
 
       {/* Card grid or Graph view */}
       <div className="max-w-6xl mx-auto px-6 lg:px-8 pb-20">
