@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import { Search, BookOpen, Clock, ChevronRight, Lock, Sparkles, LayoutGrid, Network } from "lucide-react";
 import WikiGraph from "../components/WikiGraph";
@@ -45,6 +45,39 @@ function useWikiPages() {
   }, []);
 
   return { data, isLoading, error };
+}
+
+function parseSummaryWithLinks(summary: string, knownSlugs: Set<string>): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  const markerRegex = /\[\[([^\]|]+)\|([^\]]+)\]\]/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = markerRegex.exec(summary)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(summary.slice(lastIndex, match.index));
+    }
+    const displayText = match[1].trim();
+    const slug = match[2].trim();
+    if (knownSlugs.has(slug)) {
+      parts.push(
+        <Link
+          key={`${slug}-${match.index}`}
+          href={`/wiki/${slug}`}
+          className="font-semibold underline underline-offset-2 decoration-[#D63425]/40 hover:decoration-[#D63425] transition-colors"
+          style={{ color: "#D63425" }}
+        >
+          {displayText}
+        </Link>
+      );
+    } else {
+      parts.push(displayText);
+    }
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < summary.length) {
+    parts.push(summary.slice(lastIndex));
+  }
+  return parts;
 }
 
 export default function WikiIndex() {
@@ -277,7 +310,16 @@ export default function WikiIndex() {
         <div className="max-w-6xl mx-auto px-6 lg:px-8 mb-4">
           <div className="rounded-xl border border-[#D63425]/15 bg-[#fff8f7] px-5 py-4 flex gap-3">
             <Sparkles size={15} className="mt-0.5 shrink-0" style={{ color: "#D63425" }} />
-            <p className="text-sm text-gray-700 leading-relaxed">{aiSummary}</p>
+            <p className="text-sm text-gray-700 leading-relaxed">
+              {parseSummaryWithLinks(
+                aiSummary,
+                new Set([
+                  ...(pages ?? []).map((p) => p.slug),
+                  ...(aiResults ?? []).map((p) => p.slug),
+                  ...(searchFallbackPages ?? []).map((p) => p.slug),
+                ])
+              )}
+            </p>
           </div>
         </div>
       )}
