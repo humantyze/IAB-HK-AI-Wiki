@@ -16,6 +16,8 @@ tags:
     description: Content upload operations
   - name: auth
     description: Authentication operations
+  - name: wiki
+    description: Wiki knowledge base operations
 paths:
   /healthz:
     get:
@@ -142,6 +144,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthStatus"
+  /wiki/search:
+    post:
+      operationId: searchWiki
+      tags: [wiki]
+      summary: AI-ranked wiki search
+      description: Searches wiki pages semantically. Returns ranked pages and an optional AI-generated summary when AI credentials are available, otherwise returns all pages unranked.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query:
+                  type: string
+                  minLength: 3
+              required:
+                - query
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WikiSearchResponse"
+        "400":
+          description: Query too short
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /uploads:
     get:
       operationId: listUploads
