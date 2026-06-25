@@ -88,3 +88,87 @@ export function useSubmitUpload() {
     },
   });
 }
+
+export interface DeleteUploadResult {
+  deleted: boolean;
+  sectionsReverted: number;
+  versionsDeleted: number;
+}
+
+export function useDeleteUpload() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (uploadId: number): Promise<DeleteUploadResult> => {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/uploads/${uploadId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Delete failed" }));
+        throw new Error(err.error || "Delete failed");
+      }
+      return res.json() as Promise<DeleteUploadResult>;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/uploads"] });
+      qc.invalidateQueries({ queryKey: ["/api/sections"] });
+      qc.invalidateQueries({ queryKey: ["/api/wiki"] });
+    },
+  });
+}
+
+export interface RegressPreview {
+  sectionsAffected: number;
+  wikiPagesRemoved: number;
+  uploadsRemoved: number;
+  versionsRemoved: number;
+}
+
+export function useRegressPreview() {
+  return useMutation({
+    mutationFn: async (targetDate: string): Promise<RegressPreview> => {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/admin/regress/preview?targetDate=${encodeURIComponent(targetDate)}`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Preview failed" }));
+        throw new Error(err.error || "Preview failed");
+      }
+      return res.json() as Promise<RegressPreview>;
+    },
+  });
+}
+
+export interface RegressResult {
+  sectionsReverted: number;
+  versionsDeleted: number;
+  wikiPagesDeleted: number;
+  uploadsDeleted: number;
+}
+
+export function useRegress() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (targetDate: string): Promise<RegressResult> => {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/admin/regress`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetDate }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Regression failed" }));
+        throw new Error(err.error || "Regression failed");
+      }
+      return res.json() as Promise<RegressResult>;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/uploads"] });
+      qc.invalidateQueries({ queryKey: ["/api/sections"] });
+      qc.invalidateQueries({ queryKey: ["/api/wiki"] });
+    },
+  });
+}

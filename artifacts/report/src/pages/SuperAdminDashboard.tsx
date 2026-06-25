@@ -3,13 +3,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Link, useLocation } from "wouter";
 import {
-  LogOut, History, GitBranch, Settings,
+  LogOut, History, Settings,
   ImageIcon, CheckCircle2, UploadCloud, BookOpen, RefreshCw, AlertCircle,
+  Trash2, RotateCcw, Calendar, X,
 } from "lucide-react";
 
 import { useSuperAuth } from "@/hooks/use-super-auth";
 import { useSections, useSectionVersions } from "@/hooks/use-sections";
-import { useUploads } from "@/hooks/use-uploads";
+import { useUploads, useDeleteUpload, useRegressPreview, useRegress } from "@/hooks/use-uploads";
 import { getListSectionsQueryKey } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -18,12 +19,20 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export default function SuperAdminDashboard() {
   const { isAuthenticated, isLoading: authLoading, logout } = useSuperAuth();
   const [, setLocation] = useLocation();
   const { data: sections } = useSections();
-  const { data: uploads } = useUploads();
+  const { data: uploads, refetch: refetchUploads } = useUploads();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -43,6 +52,20 @@ export default function SuperAdminDashboard() {
   const [wikiPageCount, setWikiPageCount] = useState<number | null>(null);
   const [wikiSeeding, setWikiSeeding] = useState(false);
   const [wikiSeedResult, setWikiSeedResult] = useState<{ pagesCreated: number; pagesUpdated: number } | null>(null);
+
+  const deleteUpload = useDeleteUpload();
+  const regressPreview = useRegressPreview();
+  const regress = useRegress();
+
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [regressDate, setRegressDate] = useState("");
+  const [regressPreviewData, setRegressPreviewData] = useState<{
+    sectionsAffected: number;
+    wikiPagesRemoved: number;
+    uploadsRemoved: number;
+    versionsRemoved: number;
+  } | null>(null);
+  const [regressConfirmOpen, setRegressConfirmOpen] = useState(false);
 
   const fetchWikiCount = async () => {
     try {
@@ -196,6 +219,57 @@ export default function SuperAdminDashboard() {
     }
   };
 
+  const handleDeleteUpload = async (uploadId: number) => {
+    try {
+      const result = await deleteUpload.mutateAsync(uploadId);
+      setDeleteConfirmId(null);
+      toast({
+        title: "Contribution Deleted",
+        description: `${result.sectionsReverted} section(s) reverted, ${result.versionsDeleted} version(s) removed.`,
+      });
+      await refetchUploads();
+      await queryClient.invalidateQueries({ queryKey: getListSectionsQueryKey() });
+      fetchWikiCount();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Delete failed";
+      toast({ title: "Delete Failed", description: message, variant: "destructive" });
+    }
+  };
+
+  const handleRegressPreview = async () => {
+    if (!regressDate) {
+      toast({ title: "Date Required", description: "Please select a target date.", variant: "destructive" });
+      return;
+    }
+    try {
+      const preview = await regressPreview.mutateAsync(new Date(regressDate).toISOString());
+      setRegressPreviewData(preview);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Preview failed";
+      toast({ title: "Preview Failed", description: message, variant: "destructive" });
+    }
+  };
+
+  const handleRegressConfirm = async () => {
+    if (!regressDate) return;
+    try {
+      const result = await regress.mutateAsync(new Date(regressDate).toISOString());
+      setRegressConfirmOpen(false);
+      setRegressPreviewData(null);
+      setRegressDate("");
+      fetchWikiCount();
+      toast({
+        title: "Regression Complete",
+        description: `${result.sectionsReverted} section(s) reverted · ${result.versionsDeleted} version(s) removed · ${result.wikiPagesDeleted} wiki page(s) deleted · ${result.uploadsDeleted} upload(s) removed.`,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Regression failed";
+      toast({ title: "Regression Failed", description: message, variant: "destructive" });
+    }
+  };
+
+  const deleteTarget = deleteConfirmId !== null ? uploads?.find((u) => u.id === deleteConfirmId) : null;
+
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
       <div className="absolute top-0 left-0 w-full h-full bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:3rem_3rem] opacity-30 pointer-events-none z-0" />
@@ -226,14 +300,17 @@ export default function SuperAdminDashboard() {
       <main className="max-w-[1600px] mx-auto px-6 py-12 relative z-10">
         <Tabs defaultValue="wiki" className="space-y-8">
           <TabsList className="w-full bg-card/50 backdrop-blur-md border border-border/50 p-1 rounded-xl h-auto">
-            <TabsTrigger value="wiki" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-tight sm:tracking-[0.15em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-green-500/10 data-[state=active]:text-green-400 transition-all">
-              <BookOpen className="hidden sm:inline-flex w-4 h-4 sm:mr-3" />Wiki
+            <TabsTrigger value="wiki" className="flex-1 py-3 px-2 sm:px-4 rounded-lg font-display tracking-tight sm:tracking-[0.12em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-green-500/10 data-[state=active]:text-green-400 transition-all">
+              <BookOpen className="hidden sm:inline-flex w-4 h-4 sm:mr-2" />Wiki
             </TabsTrigger>
-            <TabsTrigger value="history" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-tight sm:tracking-[0.15em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-secondary/10 data-[state=active]:text-secondary transition-all">
-              <History className="hidden sm:inline-flex w-4 h-4 sm:mr-3" />Upload History
+            <TabsTrigger value="history" className="flex-1 py-3 px-2 sm:px-4 rounded-lg font-display tracking-tight sm:tracking-[0.12em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-secondary/10 data-[state=active]:text-secondary transition-all">
+              <History className="hidden sm:inline-flex w-4 h-4 sm:mr-2" />Contributions
             </TabsTrigger>
-            <TabsTrigger value="images" className="flex-1 py-3 px-2 sm:px-6 rounded-lg font-display tracking-tight sm:tracking-[0.15em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-accent/10 data-[state=active]:text-accent transition-all">
-              <ImageIcon className="hidden sm:inline-flex w-4 h-4 sm:mr-3" />Image Generation
+            <TabsTrigger value="regress" className="flex-1 py-3 px-2 sm:px-4 rounded-lg font-display tracking-tight sm:tracking-[0.12em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-amber-500/10 data-[state=active]:text-amber-400 transition-all">
+              <RotateCcw className="hidden sm:inline-flex w-4 h-4 sm:mr-2" />Regress
+            </TabsTrigger>
+            <TabsTrigger value="images" className="flex-1 py-3 px-2 sm:px-4 rounded-lg font-display tracking-tight sm:tracking-[0.12em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-accent/10 data-[state=active]:text-accent transition-all">
+              <ImageIcon className="hidden sm:inline-flex w-4 h-4 sm:mr-2" />Images
             </TabsTrigger>
           </TabsList>
 
@@ -322,19 +399,21 @@ export default function SuperAdminDashboard() {
             </Card>
           </TabsContent>
 
-          {/* HISTORY TAB */}
+          {/* CONTRIBUTIONS / HISTORY TAB */}
           <TabsContent value="history" className="mt-8 outline-none">
             <Card className="border-secondary/20 shadow-[0_10px_50px_rgba(255,0,255,0.03)] bg-card/40 backdrop-blur-md rounded-2xl overflow-hidden">
               <div className="h-1 w-full bg-gradient-to-r from-secondary to-transparent" />
               <CardHeader className="pb-4 sm:pb-8 pt-6 sm:pt-10 px-4 sm:px-10">
-                <CardTitle className="font-serif text-xl sm:text-3xl font-bold">Processing Log</CardTitle>
-                <CardDescription className="text-base mt-2 font-light text-foreground/70">Status of all data payloads submitted for AI synthesis.</CardDescription>
+                <CardTitle className="font-serif text-xl sm:text-3xl font-bold">Contributions</CardTitle>
+                <CardDescription className="text-base mt-2 font-light text-foreground/70">
+                  All data payloads submitted for AI synthesis. Deleting a contribution rolls back any sections it updated and removes its wiki sources.
+                </CardDescription>
               </CardHeader>
               <CardContent className="px-4 sm:px-10 pb-6 sm:pb-10">
                 <div className="space-y-6">
                   {uploads?.length === 0 && (
                     <div className="text-center py-20 text-foreground/70 border border-dashed border-border/50 rounded-2xl bg-background/20 font-display tracking-widest uppercase text-xs">
-                      No Data Payloads Found
+                      No Contributions Found
                     </div>
                   )}
                   {uploads?.map((upload) => (
@@ -354,9 +433,10 @@ export default function SuperAdminDashboard() {
                           <span className="text-xs text-foreground/70 font-mono tracking-tight opacity-70">
                             {format(new Date(upload.createdAt), "yyyy.MM.dd HH:mm:ss")}
                           </span>
+                          <span className="text-xs text-foreground/40 font-mono">#{upload.id}</span>
                         </div>
                         <h4 className="text-lg font-serif font-bold text-foreground/90 mb-1">
-                          {upload.contentType.replace("_", " ").toUpperCase()} <span className="text-foreground/70 font-normal mx-2">|</span> {upload.contributorName || "Anonymous Source"}
+                          {upload.contentType.replace(/_/g, " ").toUpperCase()} <span className="text-foreground/70 font-normal mx-2">|</span> {upload.contributorName || "Anonymous Source"}
                         </h4>
                         {(upload as unknown as { uploaderName?: string }).uploaderName && (
                           <p className="text-xs text-foreground/50 font-display uppercase tracking-widest mt-0.5">
@@ -364,7 +444,7 @@ export default function SuperAdminDashboard() {
                           </p>
                         )}
                         <div className="flex items-center space-x-2 mt-2">
-                          <span className="font-display text-[10px] uppercase text-foreground/70 tracking-widest">Vectors:</span>
+                          <span className="font-display text-[10px] uppercase text-foreground/70 tracking-widest">Sections:</span>
                           <div className="flex flex-wrap gap-2">
                             {upload.targetSections.map((s) => (
                               <span key={s} className="text-[10px] px-2 py-0.5 bg-card border border-border/50 rounded text-foreground/70">{s}</span>
@@ -372,13 +452,118 @@ export default function SuperAdminDashboard() {
                           </div>
                         </div>
                       </div>
-                      {upload.rawText && (
-                        <div className="mt-6 xl:mt-0 xl:ml-12 xl:w-[400px] text-xs text-foreground/70 line-clamp-3 font-mono leading-relaxed p-4 bg-black/20 rounded-xl border border-white/5">
-                          {upload.rawText}
-                        </div>
-                      )}
+
+                      <div className="flex items-center gap-4 mt-6 xl:mt-0 xl:ml-8">
+                        {upload.rawText && (
+                          <div className="hidden xl:block xl:w-[320px] text-xs text-foreground/70 line-clamp-3 font-mono leading-relaxed p-4 bg-black/20 rounded-xl border border-white/5">
+                            {upload.rawText}
+                          </div>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDeleteConfirmId(upload.id)}
+                          className="shrink-0 text-foreground/40 hover:text-destructive hover:bg-destructive/10 border border-transparent hover:border-destructive/20 rounded-xl h-9 px-3 transition-all"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* REGRESS TAB */}
+          <TabsContent value="regress" className="mt-8 outline-none">
+            <Card className="border-amber-500/20 shadow-[0_10px_50px_rgba(255,180,0,0.03)] bg-card/40 backdrop-blur-md rounded-2xl overflow-hidden">
+              <div className="h-1 w-full bg-gradient-to-r from-amber-500 to-transparent" />
+              <CardHeader className="pb-4 sm:pb-8 pt-6 sm:pt-10 px-4 sm:px-10">
+                <CardTitle className="font-serif text-xl sm:text-3xl font-bold flex items-center gap-3">
+                  <RotateCcw className="w-6 h-6 text-amber-400" />
+                  Regress to Date
+                </CardTitle>
+                <CardDescription className="text-base mt-2 font-light text-foreground/70">
+                  Roll back the entire report to the state it was in at a chosen date. All sections will revert to their most recent version on or before that date; wiki pages and contributions created after that date will be permanently removed.
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="px-4 sm:px-10 pb-6 sm:pb-10 space-y-8">
+                <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-5">
+                  <div className="flex gap-3">
+                    <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                    <p className="text-xs text-foreground/70 leading-relaxed">
+                      <span className="font-medium text-destructive">This action is irreversible.</span> All contributions, section versions, and wiki pages created after the chosen date will be permanently deleted. Use the preview to review the impact before confirming.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-6 space-y-6">
+                  <div>
+                    <label className="font-display text-[10px] uppercase tracking-widest text-amber-400 block mb-3">
+                      Target Date
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/40 pointer-events-none" />
+                        <Input
+                          type="date"
+                          value={regressDate}
+                          onChange={(e) => {
+                            setRegressDate(e.target.value);
+                            setRegressPreviewData(null);
+                          }}
+                          max={new Date().toISOString().split("T")[0]}
+                          className="pl-10 bg-background/50 border-amber-500/30 focus:border-amber-500/60 text-foreground/90 font-mono w-52"
+                        />
+                      </div>
+                      <Button
+                        onClick={handleRegressPreview}
+                        disabled={!regressDate || regressPreview.isPending}
+                        variant="outline"
+                        className="font-display uppercase tracking-[0.15em] text-[11px] border-amber-500/30 text-amber-400 hover:bg-amber-500/10 rounded-xl h-10 px-5"
+                      >
+                        {regressPreview.isPending
+                          ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Previewing…</>
+                          : "Preview Impact"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {regressPreviewData && (
+                    <div className="space-y-4">
+                      <div className="font-display text-[10px] uppercase tracking-widest text-foreground/60 mb-3">Impact Preview</div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {[
+                          { label: "Sections Reverted", value: regressPreviewData.sectionsAffected, color: "text-amber-400" },
+                          { label: "Versions Removed", value: regressPreviewData.versionsRemoved, color: "text-orange-400" },
+                          { label: "Wiki Pages Deleted", value: regressPreviewData.wikiPagesRemoved, color: "text-red-400" },
+                          { label: "Contributions Deleted", value: regressPreviewData.uploadsRemoved, color: "text-destructive" },
+                        ].map(({ label, value, color }) => (
+                          <div key={label} className="rounded-lg border border-border/40 bg-background/40 p-4 text-center">
+                            <div className={`text-3xl font-bold font-serif ${color}`}>{value}</div>
+                            <div className="text-[10px] font-display uppercase tracking-widest text-foreground/50 mt-1">{label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {regressPreviewData.sectionsAffected === 0 && regressPreviewData.wikiPagesRemoved === 0 && regressPreviewData.uploadsRemoved === 0 ? (
+                        <div className="flex items-center gap-2 p-4 rounded-lg bg-green-500/5 border border-green-500/20">
+                          <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                          <p className="text-sm text-foreground/70">No changes — the report is already at or before this date.</p>
+                        </div>
+                      ) : (
+                        <Button
+                          onClick={() => setRegressConfirmOpen(true)}
+                          className="font-display uppercase tracking-[0.15em] text-[11px] bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/30 rounded-xl h-11 px-6"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 mr-2" />
+                          Regress to {regressDate}
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -426,126 +611,136 @@ export default function SuperAdminDashboard() {
                     {!imageProgress && (
                       <div className="mt-3 space-y-1">
                         <label className="font-display tracking-[0.2em] text-[10px] uppercase text-foreground/60">
-                          Prompt Addition (Optional)
+                          Style Prompt (optional)
                         </label>
                         <Input
                           value={promptExtra}
                           onChange={(e) => setPromptExtra(e.target.value)}
-                          placeholder="e.g. bold, vibrant colors"
-                          disabled={generatingImages}
-                          className="bg-background/50 border-border/50 h-9 rounded-lg text-xs focus-visible:ring-accent/30"
+                          placeholder="e.g. neon, minimalist, watercolor"
+                          className="bg-background/50 border-accent/20 focus:border-accent/50 text-foreground/90 text-xs h-9 rounded-lg"
                         />
-                        <p className="text-[10px] text-foreground/60 leading-snug">Appended to each section's image prompt.</p>
                       </div>
                     )}
                   </div>
-                  <div className="space-y-3">
-                    {sections?.sort((a, b) => a.displayOrder - b.displayOrder).map((sec) => (
-                      <div
-                        key={sec.id}
-                        className={`rounded-xl text-sm transition-all duration-300 border
-                          ${selectedSectionId === sec.id
-                            ? "bg-accent/10 border-accent/30 text-accent shadow-[inset_0_0_15px_rgba(0,150,255,0.05)]"
-                            : "border-transparent hover:bg-background/50 text-foreground/70"}`}
+
+                  <div className="space-y-1">
+                    <h4 className="font-display tracking-[0.2em] text-[10px] uppercase text-foreground/70 mb-3">Select Section</h4>
+                    {sections?.map((section) => (
+                      <button
+                        key={section.id}
+                        onClick={() => setSelectedSectionId(section.id === selectedSectionId ? null : section.id)}
+                        className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-display tracking-wide transition-all border ${
+                          selectedSectionId === section.id
+                            ? "bg-accent/10 text-accent border-accent/30"
+                            : "text-foreground/60 border-transparent hover:bg-card/50 hover:text-foreground/80"
+                        }`}
                       >
-                        <button
-                          type="button"
-                          onClick={() => setSelectedSectionId(sec.id)}
-                          className="w-full text-left px-4 pt-4 pb-2"
-                        >
-                          <div className="font-display text-[10px] opacity-50 mb-1">SECTION {sec.displayOrder}</div>
-                          <div className="font-medium leading-tight">{sec.title}</div>
-                        </button>
-                        <div className="px-4 pb-3 flex items-center gap-2">
-                          <label className={`flex items-center gap-1.5 cursor-pointer text-[10px] font-display uppercase tracking-widest px-3 py-1.5 rounded-lg border transition-all
-                            ${uploadingSectionId === sec.id
-                              ? "border-accent/20 text-accent/50 pointer-events-none"
-                              : "border-accent/30 text-accent/70 hover:text-accent hover:bg-accent/10"}`}
-                          >
-                            {uploadingSectionId === sec.id
-                              ? <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                              : <UploadCloud className="w-3 h-3" />}
-                            {uploadingSectionId === sec.id ? "Uploading…" : "Upload Image"}
-                            <input
-                              type="file"
-                              className="hidden"
-                              accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
-                              disabled={uploadingSectionId !== null}
-                              onChange={(e) => {
-                                handleImageUpload(sec.id, e.target.files?.[0]);
-                                e.target.value = "";
-                              }}
-                            />
-                          </label>
-                          {(sec.imageUrl || imageProgress?.completedSlugs.has(sec.slug)) && (
-                            <span
-                              className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0"
-                              title="Image set"
-                            />
-                          )}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate">{section.title}</span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {section.imageUrl ? (
+                              <CheckCircle2 className={`w-3 h-3 ${selectedSectionId === section.id ? "text-accent" : "text-green-500/70"}`} />
+                            ) : (
+                              <UploadCloud className={`w-3 h-3 ${selectedSectionId === section.id ? "text-accent/70" : "text-foreground/30"}`} />
+                            )}
+                            {imageProgress?.completedSlugs.has(section.slug) && (
+                              <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                            )}
+                            {imageProgress?.failedSlugs.has(section.slug) && (
+                              <div className="w-1.5 h-1.5 rounded-full bg-destructive" />
+                            )}
+                          </div>
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
 
-                <div className="flex-1 p-4 sm:p-8 lg:p-12 overflow-y-auto">
-                  {!selectedSectionId ? (
-                    <div className="h-full flex flex-col items-center justify-center text-foreground/70 border border-dashed border-border/40 rounded-2xl bg-background/10">
-                      <GitBranch className="w-12 h-12 mb-4 opacity-20" />
-                      <p className="font-display tracking-widest text-xs uppercase">Select a section to view its version history</p>
+                <div className="flex-1 p-4 sm:p-10 overflow-y-auto">
+                  {!selectedSectionId && (
+                    <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-40">
+                      <div className="w-20 h-20 rounded-2xl border border-dashed border-accent/30 flex items-center justify-center">
+                        <ImageIcon className="w-8 h-8 text-accent/50" />
+                      </div>
+                      <p className="font-display text-xs uppercase tracking-widest text-foreground/70">Select a section to manage its image</p>
                     </div>
-                  ) : (
-                    <div className="space-y-10">
+                  )}
+
+                  {selectedSectionId && (
+                    <div>
                       <div className="mb-10">
                         <h3 className="font-serif text-3xl font-bold text-foreground/90">
                           {sections?.find((s) => s.id === selectedSectionId)?.title}
                         </h3>
-                        <p className="font-display tracking-[0.2em] uppercase text-[10px] text-accent mt-3">Version Matrix</p>
+                        <p className="font-display tracking-[0.2em] uppercase text-[10px] text-accent mt-3">Image Management</p>
                       </div>
 
-                      {versions?.length === 0 && <p className="text-foreground/70 font-light italic">No version history found for this section.</p>}
+                      <div className="space-y-6">
+                        {sections?.find((s) => s.id === selectedSectionId)?.imageUrl && (
+                          <div>
+                            <div className="font-display tracking-[0.15em] text-[10px] uppercase text-foreground/60 mb-3">Current Image</div>
+                            <img
+                              src={sections.find((s) => s.id === selectedSectionId)?.imageUrl ?? ""}
+                              alt="Section"
+                              className="rounded-xl border border-border/30 max-w-full max-h-64 object-cover"
+                            />
+                          </div>
+                        )}
 
-                      {versions?.map((version, idx) => (
-                        <div key={version.id} className="relative pl-10 pb-10 border-l border-border/30 last:pb-0 last:border-transparent">
-                          <div className="absolute left-0 top-0 w-3 h-3 -translate-x-[6.5px] rounded-full bg-background border-2 border-accent" />
-                          <div className="bg-card/50 border border-border/40 rounded-2xl p-8 relative overflow-hidden group hover:border-accent/30 transition-colors">
-                            {idx === 0 && (
-                              <div className="absolute top-0 right-0 bg-accent text-accent-foreground text-[9px] font-display uppercase tracking-widest px-4 py-1.5 rounded-bl-xl shadow-[0_0_15px_rgba(0,150,255,0.3)]">
-                                Active State
-                              </div>
-                            )}
-                            <div className="flex items-center space-x-4 mb-8">
-                              <div className="font-display text-sm text-foreground/80 tracking-widest">v.{version.id}.0</div>
-                              <div className="w-1 h-1 rounded-full bg-border" />
-                              <div className="text-xs text-foreground/70 font-mono tracking-tight">
-                                {format(new Date(version.createdAt), "yyyy.MM.dd HH:mm:ss")}
-                              </div>
-                            </div>
-                            <div className="space-y-8">
-                              {version.keyInsights && version.keyInsights.length > 0 && (
-                                <div>
-                                  <span className="font-display tracking-[0.2em] text-[10px] uppercase text-accent mb-4 block">Extracted Insights</span>
-                                  <ul className="space-y-2">
-                                    {version.keyInsights.map((ki, i) => (
-                                      <li key={i} className="flex items-start text-sm text-foreground/70 leading-relaxed">
-                                        <span className="text-accent/50 mr-3 mt-0.5 select-none">›</span>
-                                        {ki}
-                                      </li>
-                                    ))}
-                                  </ul>
+                        <div className="rounded-xl border border-accent/20 bg-accent/5 p-6">
+                          <div className="font-display tracking-[0.15em] text-[10px] uppercase text-accent mb-3">Upload Custom Image</div>
+                          <p className="text-sm text-foreground/70 mb-4">PNG, JPEG, or WebP · max 10 MB</p>
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            id={`img-upload-${selectedSectionId}`}
+                            className="hidden"
+                            onChange={(e) => handleImageUpload(selectedSectionId, e.target.files?.[0])}
+                          />
+                          <Button
+                            asChild
+                            variant="outline"
+                            disabled={uploadingSectionId === selectedSectionId}
+                            className="border-accent/30 text-accent hover:bg-accent/10 font-display uppercase tracking-widest text-[10px] h-10"
+                          >
+                            <label htmlFor={`img-upload-${selectedSectionId}`} className="cursor-pointer">
+                              {uploadingSectionId === selectedSectionId
+                                ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Uploading…</>
+                                : <><UploadCloud className="w-3.5 h-3.5 mr-2" />Choose Image</>}
+                            </label>
+                          </Button>
+                        </div>
+
+                        <div className="rounded-xl border border-border/40 bg-background/30 p-6">
+                          <div className="font-display tracking-[0.15em] text-[10px] uppercase text-foreground/60 mb-3">Version Matrix</div>
+                          {versions?.length === 0 && <p className="text-foreground/70 font-light italic text-sm">No version history found for this section.</p>}
+                          <div className="space-y-4">
+                            {versions?.map((version, idx) => (
+                              <div key={version.id} className="relative pl-8 pb-4 border-l border-border/30 last:pb-0 last:border-transparent">
+                                <div className="absolute left-0 top-0 w-2.5 h-2.5 -translate-x-[5px] rounded-full bg-background border-2 border-accent" />
+                                <div className="bg-card/50 border border-border/40 rounded-xl p-5">
+                                  {idx === 0 && (
+                                    <span className="inline-block mb-2 text-[9px] font-display uppercase tracking-widest bg-accent/10 text-accent px-2 py-0.5 rounded">Active</span>
+                                  )}
+                                  <div className="flex items-center gap-3 mb-3">
+                                    <div className="font-display text-sm text-foreground/80">v.{version.id}.0</div>
+                                    <div className="text-xs text-foreground/50 font-mono">{format(new Date(version.createdAt), "yyyy.MM.dd HH:mm")}</div>
+                                  </div>
+                                  {version.keyInsights && version.keyInsights.length > 0 && (
+                                    <ul className="space-y-1">
+                                      {version.keyInsights.slice(0, 3).map((ki, i) => (
+                                        <li key={i} className="flex items-start text-xs text-foreground/60 leading-relaxed">
+                                          <span className="text-accent/40 mr-2 mt-0.5">›</span>{ki}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
                                 </div>
-                              )}
-                              <div>
-                                <span className="font-display tracking-[0.2em] text-[10px] uppercase text-accent mb-4 block">Content Snapshot</span>
-                                <div className="text-sm font-serif text-foreground/70 leading-loose border-l border-border/50 pl-6 py-2 bg-gradient-to-r from-background/50 to-transparent">
-                                  {version.bodyMarkdown.substring(0, 300)}...
-                                </div>
                               </div>
-                            </div>
+                            ))}
                           </div>
                         </div>
-                      ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -554,6 +749,92 @@ export default function SuperAdminDashboard() {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* DELETE CONTRIBUTION DIALOG */}
+      <Dialog open={deleteConfirmId !== null} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null); }}>
+        <DialogContent className="bg-card border-border/50 rounded-2xl max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl">Delete Contribution?</DialogTitle>
+            <DialogDescription className="text-foreground/70 mt-2 leading-relaxed">
+              This will permanently remove contribution <span className="font-mono text-foreground/90">#{deleteTarget?.id}</span>
+              {deleteTarget && (
+                <> ({deleteTarget.contentType.replace(/_/g, " ")} by {deleteTarget.contributorName || "Anonymous"})</>
+              )}, roll back any sections it updated to their previous version, and clean up its wiki sources.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-foreground/70 flex gap-2">
+            <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+            This action cannot be undone.
+          </div>
+          <DialogFooter className="gap-3">
+            <Button
+              variant="ghost"
+              onClick={() => setDeleteConfirmId(null)}
+              className="font-display uppercase tracking-widest text-[11px] text-foreground/60"
+            >
+              <X className="w-3.5 h-3.5 mr-1" />Cancel
+            </Button>
+            <Button
+              onClick={() => deleteConfirmId !== null && handleDeleteUpload(deleteConfirmId)}
+              disabled={deleteUpload.isPending}
+              className="font-display uppercase tracking-widest text-[11px] bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/30 rounded-xl"
+            >
+              {deleteUpload.isPending
+                ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Deleting…</>
+                : <><Trash2 className="w-3.5 h-3.5 mr-2" />Delete Contribution</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* REGRESS CONFIRM DIALOG */}
+      <Dialog open={regressConfirmOpen} onOpenChange={setRegressConfirmOpen}>
+        <DialogContent className="bg-card border-border/50 rounded-2xl max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl">Confirm Regression</DialogTitle>
+            <DialogDescription className="text-foreground/70 mt-2 leading-relaxed">
+              You are about to roll back the entire report to <span className="font-mono text-foreground/90">{regressDate}</span>.
+            </DialogDescription>
+          </DialogHeader>
+          {regressPreviewData && (
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: "Sections Reverted", value: regressPreviewData.sectionsAffected },
+                { label: "Versions Removed", value: regressPreviewData.versionsRemoved },
+                { label: "Wiki Pages Deleted", value: regressPreviewData.wikiPagesRemoved },
+                { label: "Contributions Deleted", value: regressPreviewData.uploadsRemoved },
+              ].map(({ label, value }) => (
+                <div key={label} className="rounded-lg border border-border/40 bg-background/40 p-3 text-center">
+                  <div className="text-2xl font-bold font-serif text-destructive">{value}</div>
+                  <div className="text-[9px] font-display uppercase tracking-widest text-foreground/50 mt-0.5">{label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-foreground/70 flex gap-2">
+            <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+            This cannot be undone. All affected data will be permanently deleted.
+          </div>
+          <DialogFooter className="gap-3">
+            <Button
+              variant="ghost"
+              onClick={() => setRegressConfirmOpen(false)}
+              className="font-display uppercase tracking-widest text-[11px] text-foreground/60"
+            >
+              <X className="w-3.5 h-3.5 mr-1" />Cancel
+            </Button>
+            <Button
+              onClick={handleRegressConfirm}
+              disabled={regress.isPending}
+              className="font-display uppercase tracking-widest text-[11px] bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/30 rounded-xl"
+            >
+              {regress.isPending
+                ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Reverting…</>
+                : <><RotateCcw className="w-3.5 h-3.5 mr-2" />Confirm Regression</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

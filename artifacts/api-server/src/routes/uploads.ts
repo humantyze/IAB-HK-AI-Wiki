@@ -1,10 +1,10 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, inArray } from "drizzle-orm";
+import { eq, desc, inArray, and, ne } from "drizzle-orm";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { z } from "zod";
-import { db, uploadsTable, sectionsTable, sectionVersionsTable } from "@workspace/db";
+import { db, uploadsTable, sectionsTable, sectionVersionsTable, wikiPagesTable } from "@workspace/db";
 import { requireAuth, requireSuperAuth } from "../middlewares/auth";
 import { processUpload, analyzeSections, extractWikiPages } from "../lib/ai-service";
 import { extractTextOnly } from "../lib/pdf-extractor";
@@ -294,4 +294,98 @@ router.post("/uploads", requireAuth, (req, res, next) => {
   }
 });
 
+router.delete("/uploads/:id", requireSuperAuth, async (req, res) => {
+  const uploadId = parseInt(req.params.id, 10);
+  if (isNaN(uploadId)) {
+    res.status(400).json({ error: "Invalid upload ID" });
+    return;
+  }
+
+  const [upload] = await db
+    .select()
+    .from(uploadsTable)
+    .where(eq(uploadsTable.id, uploadId))
+    .limit(1);
+
+  if (!upload) {
+    res.status(404).json({ error: "Upload not found" });
+    return;
+  }
+
+  const affectedVersions = await db
+    .select()
+    .from(sectionVersionsTable)
+    .where(eq(sectionVersionsTable.createdByUploadId, uploadId));
+
+  const affectedSectionIds = [...new Set(affectedVersions.map((v) => v.sectionId))];
+
+  for (const sectionId of affectedSectionIds) {
+    const [currentSection] = await db
+      .select({ currentVersionId: sectionsTable.currentVersionId })
+      .from(sectionsTable)
+      .where(eq(sectionsTable.id, sectionId))
+      .limit(1);
+
+    const deletingVersionIds = affectedVersions
+      .filter((v) => v.sectionId === sectionId)
+      .map((v) => v.id);
+
+    const isCurrentBeingDeleted =
+      currentSection?.currentVersionId !== null &&
+      currentSection?.currentVersionId !== undefined &&
+      deletingVersionIds.includes(currentSection.currentVersionId);
+
+    if (isCurrentBeingDeleted) {
+      const [prevVersion] = await db
+        .select({ id: sectionVersionsTable.id })
+        .from(sectionVersionsTable)
+        .where(and(
+          eq(sectionVersionsTable.sectionId, sectionId),
+          ne(sectionVersionsTable.createdByUploadId, uploadId),
+        ))
+        .orderBy(desc(sectionVersionsTable.createdAt))
+        .limit(1);
+
+      await db
+        .update(sectionsTable)
+        .set({ currentVersionId: prevVersion?.id ?? null })
+        .where(eq(sectionsTable.id, sectionId));
+    }
+  }
+
+  if (affectedVersions.length > 0) {
+    await db
+      .delete(sectionVersionsTable)
+      .where(eq(sectionVersionsTable.createdByUploadId, uploadId));
+  }
+
+  const allWikiPages = await db.select().from(wikiPagesTable);
+  for (const page of allWikiPages) {
+    const sources = (page.sources as Array<{ label: string; ref: string }>) ?? [];
+    const filtered = sources.filter((s) => {
+      const match = s.ref.match(/^Upload #(\d+)/);
+      if (!match) return true;
+      return Number(match[1]) !== uploadId;
+    });
+    if (filtered.length !== sources.length) {
+      if (filtered.length === 0) {
+        await db.delete(wikiPagesTable).where(eq(wikiPagesTable.id, page.id));
+      } else {
+        await db.update(wikiPagesTable).set({ sources: filtered }).where(eq(wikiPagesTable.id, page.id));
+      }
+    }
+  }
+
+  await db.delete(uploadsTable).where(eq(uploadsTable.id, uploadId));
+
+  logger.info({ uploadId, sectionsReverted: affectedSectionIds.length, versionsDeleted: affectedVersions.length }, "Upload deleted and sections reverted");
+
+  res.json({
+    deleted: true,
+    sectionsReverted: affectedSectionIds.length,
+    versionsDeleted: affectedVersions.length,
+  });
+});
+
 export default router;
+
