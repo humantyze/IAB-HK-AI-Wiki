@@ -397,7 +397,7 @@ export default function AdminDashboard() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70">
-                          Paste text here <span className="text-foreground/50 normal-case tracking-normal font-sans text-[11px]">(Optional if uploading a PDF — content is read automatically)</span>
+                          Paste text here <span className="text-foreground/50 normal-case tracking-normal font-sans text-[11px]">(Optional if uploading a file — content is read automatically)</span>
                         </FormLabel>
                         <FormControl>
                           <Textarea
@@ -413,7 +413,7 @@ export default function AdminDashboard() {
 
                   <div>
                     <label className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70 block mb-3">
-                      Attach PDF <span className="text-foreground/50 normal-case tracking-normal font-sans text-[11px]">(Optional — text above takes priority)</span>
+                      Attach file <span className="text-foreground/50 normal-case tracking-normal font-sans text-[11px]">(Optional — text above takes priority)</span>
                     </label>
                     {selectedFile ? (
                       <div className="flex items-center gap-3 p-4 border border-primary/30 rounded-xl bg-primary/5">
@@ -428,14 +428,15 @@ export default function AdminDashboard() {
                         </button>
                       </div>
                     ) : (
-                      <label className="flex items-center justify-center gap-3 h-16 border border-dashed border-border/50 rounded-xl bg-background/20 hover:bg-background/40 hover:border-primary/30 transition-all cursor-pointer group">
+                      <label className="flex flex-col items-center justify-center gap-1 h-20 border border-dashed border-border/50 rounded-xl bg-background/20 hover:bg-background/40 hover:border-primary/30 transition-all cursor-pointer group">
                         <UploadIcon className="w-4 h-4 text-foreground/50 group-hover:text-primary transition-colors" />
-                        <span className="text-sm text-foreground/50 group-hover:text-foreground/80 transition-colors font-display uppercase tracking-widest text-[10px]">Click to attach PDF</span>
+                        <span className="text-sm text-foreground/50 group-hover:text-foreground/80 transition-colors font-display uppercase tracking-widest text-[10px]">Click to attach a file</span>
+                        <span className="text-[10px] text-foreground/35 font-sans normal-case tracking-normal">PDF, DOCX, DOC, PPTX, MD, TXT, JPG, PNG, WEBP, GIF, TIFF</span>
                         <input
                           ref={fileInputRef}
                           type="file"
                           className="hidden"
-                          accept=".pdf,.txt,.csv,.docx,.xlsx"
+                          accept=".pdf,.docx,.doc,.pptx,.md,.txt,.jpg,.jpeg,.png,.webp,.gif,.tiff,.tif,.csv"
                           onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
                         />
                       </label>

@@ -9,6 +9,7 @@ import { requireAuth, requireSuperAuth } from "../middlewares/auth";
 import { extractWikiPages, describeDocumentVisuals } from "../lib/ai-service";
 import { indexSource, removeSource, indexWikiPage } from "../lib/knowledge-index";
 import { extractTextOnly, extractImages, renderPdfPages } from "../lib/pdf-extractor";
+import { dispatchExtraction, SUPPORTED_MIME_TYPES, isSupportedMimeType } from "../lib/doc-extractor";
 import { logger } from "../lib/logger";
 
 const UploadFormSchema = z.object({
@@ -19,12 +20,9 @@ const UploadFormSchema = z.object({
   rawText: z.string().optional().default(""),
 });
 
-const ALLOWED_MIME_TYPES = [
-  "application/pdf",
-  "text/plain",
+const ALLOWED_MIME_TYPES: string[] = [
+  ...SUPPORTED_MIME_TYPES,
   "text/csv",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ];
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -50,7 +48,7 @@ const upload = multer({
     if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error(`File type ${file.mimetype} not allowed. Allowed: PDF, TXT, CSV, DOCX, XLSX`));
+      cb(new Error(`File type not supported. Allowed formats: PDF, DOCX, DOC, PPTX, MD, TXT, JPG, PNG, WEBP, GIF, TIFF, CSV`));
     }
   },
 });
@@ -102,42 +100,61 @@ router.post("/uploads", requireAuth, (req, res, next) => {
 
   const filePath = req.file ? req.file.filename : null;
 
-  // Build effective text: pasted input + PDF extraction (both combined when present)
+  // Build effective text: pasted input + file extraction (combined when both present)
   let effectiveText = data.rawText.trim();
   let candidateImageUrls: string[] = [];
-  if (req.file?.mimetype === "application/pdf") {
-    // Step 1: Extract text
-    try {
-      logger.info({ filename: req.file.originalname }, "Extracting text from PDF");
-      const pdfText = await extractTextOnly(req.file.path);
-      logger.info({ filename: req.file.originalname, chars: pdfText.length }, "PDF text extraction complete");
-      effectiveText = effectiveText
-        ? `${effectiveText}\n\n---\n\n${pdfText}`
-        : pdfText;
-    } catch (err) {
-      logger.error({ err, filename: req.file.originalname }, "PDF text extraction failed — using filename as fallback");
-      if (!effectiveText) effectiveText = `Uploaded file: ${req.file.originalname}`;
-    }
+  if (req.file) {
+    const mime = req.file.mimetype;
+    const fname = req.file.originalname;
 
-    // Step 2: Render pages → GPT Vision → visual insights appended to text
-    try {
-      logger.info({ filename: req.file.originalname }, "Rendering PDF pages for visual analysis");
-      const pageImages = await renderPdfPages(req.file.path, 4);
-      if (pageImages.length > 0) {
-        const visualDesc = await describeDocumentVisuals(pageImages, req.file.originalname);
-        if (visualDesc) {
-          effectiveText = `${effectiveText}\n\n---\n\n## Visual Content (charts, tables, diagrams)\n\n${visualDesc}`;
-        }
+    if (mime === "application/pdf") {
+      // PDF: text extraction + GPT vision for visual content + pdfimages for thumbnails
+      try {
+        logger.info({ filename: fname }, "Extracting text from PDF");
+        const pdfText = await extractTextOnly(req.file.path);
+        logger.info({ filename: fname, chars: pdfText.length }, "PDF text extraction complete");
+        effectiveText = effectiveText ? `${effectiveText}\n\n---\n\n${pdfText}` : pdfText;
+      } catch (err) {
+        logger.error({ err, filename: fname }, "PDF text extraction failed — using filename as fallback");
+        if (!effectiveText) effectiveText = `Uploaded file: ${fname}`;
       }
-    } catch (err) {
-      logger.warn({ err, filename: req.file.originalname }, "PDF visual analysis failed — continuing without visuals");
-    }
 
-    // Step 3: Extract embedded raster images for wiki card thumbnails (best-effort)
-    try {
-      candidateImageUrls = await extractImages(req.file.path);
-    } catch (err) {
-      logger.warn({ err, filename: req.file.originalname }, "PDF image extraction failed — continuing without images");
+      try {
+        logger.info({ filename: fname }, "Rendering PDF pages for visual analysis");
+        const pageImages = await renderPdfPages(req.file.path, 4);
+        if (pageImages.length > 0) {
+          const visualDesc = await describeDocumentVisuals(pageImages, fname);
+          if (visualDesc) {
+            effectiveText = `${effectiveText}\n\n---\n\n## Visual Content (charts, tables, diagrams)\n\n${visualDesc}`;
+          }
+        }
+      } catch (err) {
+        logger.warn({ err, filename: fname }, "PDF visual analysis failed — continuing without visuals");
+      }
+
+      try {
+        candidateImageUrls = await extractImages(req.file.path);
+      } catch (err) {
+        logger.warn({ err, filename: fname }, "PDF image extraction failed — continuing without images");
+      }
+    } else if (isSupportedMimeType(mime)) {
+      // All other supported formats — unified extractor
+      try {
+        logger.info({ filename: fname, mime }, "Dispatching file extraction");
+        const extracted = await dispatchExtraction(req.file.path, mime, fname);
+        if (extracted.text) {
+          effectiveText = effectiveText
+            ? `${effectiveText}\n\n---\n\n${extracted.text}`
+            : extracted.text;
+        } else if (!effectiveText) {
+          effectiveText = `Uploaded file: ${fname}`;
+        }
+        candidateImageUrls = extracted.imageUrls;
+        logger.info({ filename: fname, chars: extracted.text.length, images: candidateImageUrls.length }, "File extraction complete");
+      } catch (err) {
+        logger.error({ err, filename: fname, mime }, "File extraction failed — using fallback text");
+        if (!effectiveText) effectiveText = `Uploaded file: ${fname}`;
+      }
     }
   }
 
