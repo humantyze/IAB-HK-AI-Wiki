@@ -6,7 +6,8 @@ import { Link, useLocation } from "wouter";
 import {
   LogOut, Upload as UploadIcon, Hand,
   Paperclip, X, CheckCircle2, AlertCircle,
-  ArrowLeft, ChevronRight,
+  ArrowLeft, ChevronRight, Sparkles, FileText,
+  ImageIcon, BookOpen, Layers, Check,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
@@ -45,9 +46,34 @@ export default function AdminDashboard() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [phase, setPhase] = useState<"input" | "review">("input");
+  const [phase, setPhase] = useState<"input" | "review" | "integrating">("input");
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [approvedSlugs, setApprovedSlugs] = useState<Set<string>>(new Set());
+  const [integrationStep, setIntegrationStep] = useState(0);
+
+  const INTEGRATION_STEPS = [
+    { label: "Processing content", detail: "Parsing and preparing submitted material…", Icon: FileText },
+    { label: "Analysing with AI", detail: "Mapping content to report sections…", Icon: Sparkles },
+    { label: "Generating visuals", detail: "Creating AI illustrations for the report…", Icon: ImageIcon },
+    { label: "Writing to report", detail: "Applying updates to approved sections…", Icon: Layers },
+    { label: "Building wiki entries", detail: "Generating atomic knowledge pages…", Icon: BookOpen },
+  ] as const;
+
+  useEffect(() => {
+    if (phase !== "integrating") {
+      setIntegrationStep(0);
+      return;
+    }
+    let elapsed = 0;
+    const interval = setInterval(() => {
+      elapsed += 1;
+      if (elapsed >= 38) setIntegrationStep(4);
+      else if (elapsed >= 24) setIntegrationStep(3);
+      else if (elapsed >= 10) setIntegrationStep(2);
+      else if (elapsed >= 3) setIntegrationStep(1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [phase]);
 
   const form = useForm<z.infer<typeof uploadSchema>>({
     resolver: zodResolver(uploadSchema),
@@ -99,6 +125,8 @@ export default function AdminDashboard() {
       return;
     }
 
+    setPhase("integrating");
+
     try {
       await submitUpload.mutateAsync({
         uploaderName: values.uploaderName,
@@ -119,6 +147,7 @@ export default function AdminDashboard() {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Integration failed";
       toast({ title: "Integration Failed", description: message, variant: "destructive" });
+      setPhase("review");
     }
   };
 
@@ -177,7 +206,9 @@ export default function AdminDashboard() {
                 <CardDescription className="text-sm sm:text-base mt-2 font-light text-foreground/70">
                   {phase === "input"
                     ? "Submit intelligence, research, or market data. The AI will analyse the content and suggest which report sections to update."
-                    : "Review the AI-generated integration plan below. Approve or remove sections, then confirm to integrate."}
+                    : phase === "review"
+                    ? "Review the AI-generated integration plan below. Approve or remove sections, then confirm to integrate."
+                    : "AI is processing your content and updating the report. Steps complete automatically."}
                 </CardDescription>
               </div>
               {phase === "review" && (
@@ -194,6 +225,75 @@ export default function AdminDashboard() {
           </CardHeader>
 
           <CardContent className="px-4 sm:px-10 pb-6 sm:pb-10">
+            {phase === "integrating" && (
+              <div className="py-10 sm:py-16 flex flex-col items-center">
+                <div className="w-full max-w-md">
+                  <div className="text-center mb-10">
+                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 mb-5 relative">
+                      <Sparkles className="w-6 h-6 text-primary" />
+                      <span className="absolute inset-0 rounded-2xl animate-ping bg-primary/10" />
+                    </div>
+                    <h3 className="font-serif text-xl font-bold text-foreground/90 mb-2">Integration in Progress</h3>
+                    <p className="text-sm text-foreground/50 font-light">This takes around 30–60 seconds. Please keep this tab open.</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    {INTEGRATION_STEPS.map((step, idx) => {
+                      const done = idx < integrationStep;
+                      const active = idx === integrationStep;
+                      return (
+                        <div
+                          key={step.label}
+                          className={`flex items-center gap-4 px-5 py-4 rounded-xl border transition-all duration-500 ${
+                            done
+                              ? "border-primary/20 bg-primary/5"
+                              : active
+                              ? "border-primary/40 bg-primary/8 shadow-[0_0_20px_rgba(0,240,255,0.06)]"
+                              : "border-border/20 bg-background/10 opacity-40"
+                          }`}
+                        >
+                          <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 transition-all duration-500 ${
+                            done
+                              ? "border-primary bg-primary/20"
+                              : active
+                              ? "border-primary/60 bg-primary/10"
+                              : "border-border/30"
+                          }`}>
+                            {done ? (
+                              <Check className="w-3.5 h-3.5 text-primary" />
+                            ) : active ? (
+                              <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <step.Icon className="w-3.5 h-3.5 text-foreground/30" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-medium leading-tight ${done ? "text-primary/80" : active ? "text-foreground/90" : "text-foreground/40"}`}>
+                              {step.label}
+                            </p>
+                            {active && (
+                              <p className="text-[11px] text-foreground/50 mt-0.5 font-light">{step.detail}</p>
+                            )}
+                          </div>
+                          {done && <span className="text-[10px] font-display text-primary/50 tracking-widest uppercase shrink-0">Done</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-8 h-px w-full bg-border/20 overflow-hidden rounded-full">
+                    <div
+                      className="h-full bg-gradient-to-r from-primary/60 to-primary transition-all duration-1000 ease-out rounded-full"
+                      style={{ width: `${Math.round(((integrationStep) / (INTEGRATION_STEPS.length - 1)) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-center text-[11px] text-foreground/30 mt-3 font-display tracking-widest uppercase">
+                    Step {integrationStep + 1} of {INTEGRATION_STEPS.length}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {phase === "input" && (
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(handleAnalyze)} className="space-y-10">
@@ -323,15 +423,22 @@ export default function AdminDashboard() {
                     )}
                   </div>
 
-                  <Button
-                    type="submit"
-                    disabled={analyzeUpload.isPending}
-                    className="w-full h-14 font-display uppercase tracking-[0.2em] text-xs bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground border border-primary/30 rounded-xl transition-all duration-300"
-                  >
-                    {analyzeUpload.isPending
-                      ? <><div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-3" />Analysing…</>
-                      : "Analyse Content"}
-                  </Button>
+                  <div className="space-y-3">
+                    <Button
+                      type="submit"
+                      disabled={analyzeUpload.isPending}
+                      className="w-full h-14 font-display uppercase tracking-[0.2em] text-xs bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground border border-primary/30 rounded-xl transition-all duration-300"
+                    >
+                      {analyzeUpload.isPending
+                        ? <><div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-3" />Reading content &amp; mapping sections…</>
+                        : "Analyse Content"}
+                    </Button>
+                    {analyzeUpload.isPending && (
+                      <p className="text-center text-[11px] text-foreground/40 font-light">
+                        Usually takes 5–15 seconds
+                      </p>
+                    )}
+                  </div>
                 </form>
               </Form>
             )}
