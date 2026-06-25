@@ -4,7 +4,7 @@ export const backupLogTable = pgTable("backup_log", {
   id: serial("id").primaryKey(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   backedUpAt: timestamp("backed_up_at").notNull(),
-  driveFileId: text("drive_file_id"),
+  storageObjectPath: text("storage_object_path"),
   fileName: text("file_name").notNull(),
 });
 

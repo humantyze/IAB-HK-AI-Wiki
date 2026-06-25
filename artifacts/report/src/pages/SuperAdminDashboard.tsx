@@ -57,7 +57,7 @@ export default function SuperAdminDashboard() {
     id: number;
     createdAt: string;
     backedUpAt: string;
-    driveFileId: string | null;
+    storageObjectPath: string | null;
     fileName: string;
   }
   const [lastBackup, setLastBackup] = useState<BackupEntry | null | undefined>(undefined);
@@ -104,13 +104,13 @@ export default function SuperAdminDashboard() {
         method: "POST",
         credentials: "include",
       });
-      const data = await res.json() as { fileName?: string; driveFileId?: string | null; error?: string; skipped?: boolean };
+      const data = await res.json() as { fileName?: string; storageObjectPath?: string; error?: string; skipped?: boolean };
       if (!res.ok) {
         toast({ title: "Backup Failed", description: String(data.error ?? "Unknown error"), variant: "destructive" });
       } else if (data.skipped) {
         toast({ title: "Backup Skipped", description: "No new data since last backup." });
       } else {
-        toast({ title: "Backup Complete", description: data.fileName ?? "Backup uploaded to Google Drive." });
+        toast({ title: "Backup Complete", description: data.fileName ?? "Backup saved to object storage." });
         await fetchBackupStatus();
       }
     } catch (err) {
@@ -866,16 +866,7 @@ export default function SuperAdminDashboard() {
                     <span className="font-serif text-lg font-bold">Database Backup</span>
                   </div>
                   <p className="text-sm text-foreground/60 leading-relaxed">
-                    Full pg_dump uploaded to{" "}
-                    <a
-                      href="https://drive.google.com/drive/folders/1p8l8LIQpapPyN3x22eNzkvuvYfzCMshH"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline text-sky-400/80 hover:text-sky-400"
-                    >
-                      Google Drive
-                    </a>
-                    {" "}via service account. Runs automatically at 02:00 HKT when new data exists.
+                    Full pg_dump stored in Replit Object Storage. Runs automatically at 02:00 HKT when new data exists. Download any backup directly from the history below.
                   </p>
                 </div>
                 <div className="mt-5">
@@ -902,7 +893,7 @@ export default function SuperAdminDashboard() {
                     <div className="text-xs font-mono text-sky-400 break-all leading-relaxed mb-1">{lastBackup.fileName}</div>
                     <div className="text-xs text-foreground/50 mt-2">{format(new Date(lastBackup.createdAt), "dd MMM yyyy, HH:mm")}</div>
                     <div className="flex items-center gap-1 mt-2 text-[11px] text-green-400">
-                      <CheckCircle2 className="w-3 h-3" />on Drive
+                      <CheckCircle2 className="w-3 h-3" />Stored
                     </div>
                   </>
                 )}
@@ -929,7 +920,7 @@ export default function SuperAdminDashboard() {
                           <th className="text-left text-[10px] font-display uppercase tracking-widest text-foreground/40 px-4 sm:px-8 py-3">File</th>
                           <th className="text-left text-[10px] font-display uppercase tracking-widest text-foreground/40 px-4 py-3 hidden sm:table-cell">Data as of</th>
                           <th className="text-left text-[10px] font-display uppercase tracking-widest text-foreground/40 px-4 py-3">Backed up</th>
-                          <th className="text-right text-[10px] font-display uppercase tracking-widest text-foreground/40 px-4 sm:px-8 py-3">Drive</th>
+                          <th className="text-right text-[10px] font-display uppercase tracking-widest text-foreground/40 px-4 sm:px-8 py-3">Download</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -951,15 +942,13 @@ export default function SuperAdminDashboard() {
                               {format(new Date(entry.createdAt), "dd MMM yyyy, HH:mm")}
                             </td>
                             <td className="px-4 sm:px-8 py-3 text-right">
-                              {entry.driveFileId ? (
+                              {entry.storageObjectPath ? (
                                 <a
-                                  href={`https://drive.google.com/file/d/${entry.driveFileId}/view`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-[11px] text-green-400 hover:text-green-300 transition-colors"
+                                  href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/api/super-admin/backup/download/${entry.id}`}
+                                  className="inline-flex items-center gap-1 text-[11px] text-sky-400 hover:text-sky-300 transition-colors"
                                 >
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  <span className="hidden sm:inline">View</span>
+                                  <CloudUpload className="w-3 h-3" />
+                                  <span className="hidden sm:inline">Download</span>
                                 </a>
                               ) : (
                                 <span className="text-[11px] text-foreground/30">—</span>

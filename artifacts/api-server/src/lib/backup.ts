@@ -2,40 +2,13 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import fs from "fs/promises";
 import path from "path";
-import { google } from "googleapis";
 import { db } from "@workspace/db";
 import { backupLogTable, wikiPagesTable, uploadsTable, sectionVersionsTable } from "@workspace/db";
 import { desc, sql } from "drizzle-orm";
 import { logger } from "./logger";
+import { getBackupBucket } from "./gcsClient";
 
 const execFileAsync = promisify(execFile);
-
-const DRIVE_FOLDER_ID = "1p8l8LIQpapPyN3x22eNzkvuvYfzCMshH";
-
-/** Build a Drive client using a service account JSON stored in the env var. */
-function getDriveClient() {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  if (!raw) {
-    throw new Error(
-      "GOOGLE_SERVICE_ACCOUNT_JSON is not set. " +
-        "Paste your service account key JSON as the value of this env var.",
-    );
-  }
-
-  let keyFile: object;
-  try {
-    keyFile = JSON.parse(raw) as object;
-  } catch {
-    throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON");
-  }
-
-  const auth = new google.auth.GoogleAuth({
-    credentials: keyFile,
-    scopes: ["https://www.googleapis.com/auth/drive.file"],
-  });
-
-  return google.drive({ version: "v3", auth });
-}
 
 /** Return the most recent updatedAt/createdAt timestamp across all main data tables. */
 async function getLatestDataTimestamp(): Promise<Date> {
@@ -59,13 +32,13 @@ export interface BackupResult {
   skipped: true;
   reason: string;
   fileName?: undefined;
-  driveFileId?: undefined;
+  storageObjectPath?: undefined;
 }
 
 export interface BackupSuccess {
   skipped: false;
   fileName: string;
-  driveFileId: string;
+  storageObjectPath: string;
 }
 
 export type RunBackupResult = BackupResult | BackupSuccess;
@@ -106,26 +79,16 @@ export async function runBackup(force = false): Promise<RunBackupResult> {
     `--file=${filePath}`,
   ]);
 
-  let driveFileId: string;
+  let storageObjectPath: string;
   try {
-    const drive = getDriveClient();
-    const fileStream = (await import("fs")).createReadStream(filePath);
-    const upload = await drive.files.create({
-      requestBody: {
-        name: fileName,
-        parents: [DRIVE_FOLDER_ID],
-      },
-      media: {
-        mimeType: "application/sql",
-        body: fileStream,
-      },
-      fields: "id",
+    const bucket = getBackupBucket();
+    const destination = `backups/${fileName}`;
+    await bucket.upload(filePath, {
+      destination,
+      metadata: { contentType: "application/sql" },
     });
-
-    const uploadedId = upload.data.id;
-    if (!uploadedId) throw new Error("Drive upload succeeded but returned no file ID");
-    driveFileId = uploadedId;
-    logger.info({ driveFileId, fileName }, "Backup uploaded to Google Drive");
+    storageObjectPath = destination;
+    logger.info({ storageObjectPath, fileName }, "Backup uploaded to Replit Object Storage");
   } catch (err) {
     await fs.unlink(filePath).catch(() => {});
     throw err;
@@ -133,13 +96,13 @@ export async function runBackup(force = false): Promise<RunBackupResult> {
 
   await db.insert(backupLogTable).values({
     backedUpAt: latestData,
-    driveFileId,
+    storageObjectPath,
     fileName,
   });
 
   await fs.unlink(filePath).catch(() => {});
 
-  return { skipped: false, fileName, driveFileId };
+  return { skipped: false, fileName, storageObjectPath };
 }
 
 export async function getBackupHistory(limit = 20) {

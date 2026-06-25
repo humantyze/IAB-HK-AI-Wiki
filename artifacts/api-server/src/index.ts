@@ -56,7 +56,7 @@ async function main() {
         if (result.skipped) {
           logger.info({ reason: result.reason }, "Daily backup cron: skipped");
         } else {
-          logger.info({ fileName: result.fileName, driveFileId: result.driveFileId }, "Daily backup cron: completed");
+          logger.info({ fileName: result.fileName, storageObjectPath: result.storageObjectPath }, "Daily backup cron: completed");
         }
       } catch (err) {
         logger.error({ err }, "Daily backup cron: failed");
