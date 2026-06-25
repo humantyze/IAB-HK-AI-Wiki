@@ -1,2 +1,3 @@
 - [html-to-image font embedding quirk](html-to-image-fonts.md) — Google-Fonts CSSOM SecurityError on export is expected/non-blocking; await document.fonts.ready before toPng.
 - [Production data mutations](production-data-mutations.md) — how production seed/section deletions were handled and the safe path to mutate prod data.
+- [Startup migration anti-pattern](startup-migration.md) — never run Drizzle migrate() at server startup; use Replit Publish flow for production schema instead.
