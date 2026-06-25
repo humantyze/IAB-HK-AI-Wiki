@@ -11,7 +11,8 @@ import { extractTextOnly } from "../lib/pdf-extractor";
 import { logger } from "../lib/logger";
 
 const UploadFormSchema = z.object({
-  uploaderName: z.string().optional(),
+  uploaderName: z.string().min(1, "Name is required"),
+  uploaderEmail: z.string().email("Must be a valid work email"),
   contributorName: z.string().optional(),
   contentType: z.enum(["whitepaper", "case_study", "market_data", "regulation_update", "trend_insight"]),
   targetSections: z.array(z.string()).min(1, "At least one target section is required"),
@@ -66,6 +67,7 @@ router.get("/uploads", requireSuperAuth, async (_req, res) => {
     uploads.map((u) => ({
       id: u.id,
       uploaderName: u.uploaderName,
+      uploaderEmail: u.uploaderEmail,
       contributorName: u.contributorName,
       contentType: u.contentType,
       targetSections: u.targetSections,
@@ -193,7 +195,8 @@ router.post("/uploads", requireAuth, (req, res, next) => {
   const [uploadRecord] = await db
     .insert(uploadsTable)
     .values({
-      uploaderName: data.uploaderName ?? null,
+      uploaderName: data.uploaderName,
+      uploaderEmail: data.uploaderEmail,
       contributorName: data.contributorName ?? null,
       contentType: data.contentType,
       targetSections: data.targetSections,

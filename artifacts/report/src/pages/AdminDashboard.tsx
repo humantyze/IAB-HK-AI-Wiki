@@ -22,7 +22,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 
 const uploadSchema = z.object({
-  uploaderName: z.string().optional(),
+  uploaderName: z.string().min(1, "Name is required"),
+  uploaderEmail: z.string().min(1, "Work email is required").email("Must be a valid email address"),
   contributorName: z.string().optional(),
   contentType: z.enum(["whitepaper", "case_study", "market_data", "regulation_update", "trend_insight"]),
   rawText: z.string().optional(),
@@ -50,7 +51,7 @@ export default function AdminDashboard() {
 
   const form = useForm<z.infer<typeof uploadSchema>>({
     resolver: zodResolver(uploadSchema),
-    defaultValues: { uploaderName: "", contentType: "market_data", contributorName: "", rawText: "" },
+    defaultValues: { uploaderName: "", uploaderEmail: "", contentType: "market_data", contributorName: "", rawText: "" },
   });
 
   useEffect(() => {
@@ -100,13 +101,16 @@ export default function AdminDashboard() {
 
     try {
       await submitUpload.mutateAsync({
-        ...values,
+        uploaderName: values.uploaderName,
+        uploaderEmail: values.uploaderEmail,
+        contributorName: values.contributorName,
         rawText: values.rawText?.trim() || undefined,
         targetSections,
+        contentType: values.contentType,
         file: selectedFile,
       });
       toast({ title: "Integration Complete", description: `Content successfully integrated into ${targetSections.length} section${targetSections.length > 1 ? "s" : ""}.` });
-      form.reset({ uploaderName: values.uploaderName, rawText: "", contentType: values.contentType, contributorName: values.contributorName });
+      form.reset({ uploaderName: values.uploaderName, uploaderEmail: values.uploaderEmail, rawText: "", contentType: values.contentType, contributorName: values.contributorName });
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
       setPhase("input");
@@ -193,19 +197,41 @@ export default function AdminDashboard() {
             {phase === "input" && (
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(handleAnalyze)} className="space-y-10">
-                  <FormField
-                    control={form.control}
-                    name="uploaderName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70">Uploader</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Your name or team name" className="bg-background/50 border-border/50 h-12 rounded-xl focus-visible:ring-primary/30" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+
+                  {/* Identity fields — required */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <FormField
+                      control={form.control}
+                      name="uploaderName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70">
+                            Your Name <span className="text-destructive">*</span>
+                          </FormLabel>
+                          <FormControl>
+                            <Input placeholder="Full name" className="bg-background/50 border-border/50 h-12 rounded-xl focus-visible:ring-primary/30" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="uploaderEmail"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70">
+                            Work Email <span className="text-destructive">*</span>
+                          </FormLabel>
+                          <FormControl>
+                            <Input type="email" placeholder="you@company.com" className="bg-background/50 border-border/50 h-12 rounded-xl focus-visible:ring-primary/30" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
                     <FormField
                       control={form.control}
