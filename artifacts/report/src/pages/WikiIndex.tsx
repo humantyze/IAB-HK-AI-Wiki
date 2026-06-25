@@ -126,6 +126,7 @@ export default function WikiIndex() {
   const { data: pages, isLoading } = useWikiPages();
   const [query, setQuery] = useState("");
   const [activeTag, setActiveTag] = useState("All");
+  const [activeQuery, setActiveQuery] = useState("");
   const [aiResults, setAiResults] = useState<WikiPageSummary[] | null>(null);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [searchFallbackPages, setSearchFallbackPages] = useState<WikiPageSummary[] | null>(null);
@@ -134,7 +135,6 @@ export default function WikiIndex() {
   const [ragCitations, setRagCitations] = useState<KnowledgeCitation[] | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "graph">("grid");
   const [graphFilteredPages, setGraphFilteredPages] = useState<WikiPageSummary[]>([]);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const graphDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -148,40 +148,37 @@ export default function WikiIndex() {
   });
 
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
     if (abortRef.current) abortRef.current.abort();
 
-    // Clear stale ranked results immediately so the UI shows the client-side
-    // substring filter while the debounce timer and AI request are in flight.
     setAiResults(null);
     setAiSummary(null);
     setSearchFallbackPages(null);
     setRagAnswer(null);
     setRagCitations(null);
 
-    if (query.trim().length < 3) {
+    if (activeQuery.trim().length < 3) {
       setIsSearching(false);
       return;
     }
 
     setIsSearching(true);
-    debounceRef.current = setTimeout(async () => {
-      const controller = new AbortController();
-      abortRef.current = controller;
-      const fetchOpts = (body: object) => ({
-        method: "POST" as const,
-        headers: { "Content-Type": "application/json" },
-        credentials: "include" as const,
-        signal: controller.signal,
-        body: JSON.stringify(body),
-      });
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const fetchOpts = (body: object) => ({
+      method: "POST" as const,
+      headers: { "Content-Type": "application/json" },
+      credentials: "include" as const,
+      signal: controller.signal,
+      body: JSON.stringify(body),
+    });
+
+    (async () => {
       try {
         const [searchSettled, ragSettled] = await Promise.allSettled([
-          fetch(`${baseUrl}/api/wiki/search`, fetchOpts({ query: query.trim() })),
-          fetch(`${baseUrl}/api/knowledge/search`, fetchOpts({ query: query.trim() })),
+          fetch(`${baseUrl}/api/wiki/search`, fetchOpts({ query: activeQuery.trim() })),
+          fetch(`${baseUrl}/api/knowledge/search`, fetchOpts({ query: activeQuery.trim() })),
         ]);
 
-        // Wiki search — ranked page cards
         if (searchSettled.status === "fulfilled" && searchSettled.value.ok) {
           const result = await searchSettled.value.json() as { ranked: boolean; pages: WikiPageSummary[]; summary?: string };
           if (result.ranked && Array.isArray(result.pages)) {
@@ -199,7 +196,6 @@ export default function WikiIndex() {
           setSearchFallbackPages(null);
         }
 
-        // RAG knowledge answer — grounded answer with citations
         if (ragSettled.status === "fulfilled" && ragSettled.value.ok) {
           const rag = await ragSettled.value.json() as { answer: string | null; grounded: boolean; citations: KnowledgeCitation[] };
           if (rag.answer && rag.answer.trim().length > 0) {
@@ -219,17 +215,18 @@ export default function WikiIndex() {
           setRagCitations(null);
         }
       } finally {
-        if (abortRef.current === controller) {
-          setIsSearching(false);
-        }
+        if (abortRef.current === controller) setIsSearching(false);
       }
-    }, 400);
+    })();
 
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      if (abortRef.current) abortRef.current.abort();
-    };
-  }, [query, baseUrl]);
+    return () => { abortRef.current?.abort(); };
+  }, [activeQuery, baseUrl]);
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const trimmed = query.trim();
+    if (trimmed.length >= 3) setActiveQuery(trimmed);
+  };
 
   const basePages = aiResults !== null ? aiResults : (searchFallbackPages ?? pages ?? []);
 
@@ -261,7 +258,7 @@ export default function WikiIndex() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredSlugsKey]);
 
-  const usingAI = aiResults !== null && query.trim().length >= 3;
+  const usingAI = aiResults !== null && activeQuery.trim().length >= 3;
 
   const canonicalOrigin = typeof window !== "undefined" ? window.location.origin : "";
   const indexSchema = pages && pages.length > 0 ? {
@@ -344,19 +341,31 @@ export default function WikiIndex() {
         <p className="text-sm text-gray-500 max-w-2xl leading-relaxed">Welcome to the iAB Hong Kong State of AI Knowledge Base! An initiative of the 2026 AI and Technology Committee, this platform is designed as a living knowledge resource inspired by the "Second Brain" concept popularized by Andrej Karpathy. As new material is submitted, our language model reviews it in full, identifies key entities and ideas, and creates or updates relevant wiki pages. It also refines topic summaries, builds cross-links across related subjects, and flags inconsistencies, helping each new source strengthen an evolving, interconnected knowledge graph.</p>
 
         {/* Search */}
-        <div className="mt-6 relative max-w-xl">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Ask anything — e.g. 'how are HK marketers using AI?'"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="w-full pl-9 pr-10 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-gray-400 text-gray-700 placeholder-gray-400"
-          />
-          {isSearching && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-[#D63425]/20 border-t-[#D63425] rounded-full animate-spin" />
-          )}
-        </div>
+        <form onSubmit={handleSubmit} className="mt-6 flex items-center gap-2 max-w-xl">
+          <div className="relative flex-1">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Ask anything — e.g. 'how are HK marketers using AI?'"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-gray-400 text-gray-700 placeholder-gray-400"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={isSearching || query.trim().length < 3}
+            className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold rounded-lg transition-all shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ backgroundColor: "#D63425", color: "#fff" }}
+          >
+            {isSearching ? (
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <Sparkles size={13} />
+            )}
+            <span>Ask</span>
+          </button>
+        </form>
       </div>
       {/* Tag filters + count row */}
       <div className="max-w-6xl mx-auto px-6 lg:px-8">
@@ -417,7 +426,7 @@ export default function WikiIndex() {
         </div>
       </div>
       {/* AI answer panel */}
-      {query.trim().length >= 3 && !isSearching && (ragAnswer || aiSummary) && (
+      {activeQuery.trim().length >= 3 && !isSearching && (ragAnswer || aiSummary) && (
         <div className="max-w-6xl mx-auto px-6 lg:px-8 mb-6">
           <div className="rounded-xl border border-[#D63425]/15 bg-[#fff8f7] overflow-hidden">
             {/* Panel header */}
