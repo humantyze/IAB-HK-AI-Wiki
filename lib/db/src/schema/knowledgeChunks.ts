@@ -1,6 +1,6 @@
 import { pgTable, serial, integer, text, timestamp, vector, index } from "drizzle-orm/pg-core";
 
-export type KnowledgeSourceType = "section" | "wiki" | "upload";
+export type KnowledgeSourceType = "wiki" | "upload";
 
 export const EMBEDDING_DIMENSIONS = 384;
 

@@ -1,9 +1,7 @@
-import { and, asc, eq, sql, cosineDistance, gt, desc, inArray } from "drizzle-orm";
+import { and, eq, sql, cosineDistance, gt, desc, inArray } from "drizzle-orm";
 import {
   db,
   knowledgeChunksTable,
-  sectionsTable,
-  sectionVersionsTable,
   wikiPagesTable,
   uploadsTable,
   type KnowledgeSourceType,
@@ -22,9 +20,8 @@ interface IndexSourceInput {
 
 // Stable numeric class per source type for Postgres two-key advisory locks.
 const ADVISORY_LOCK_CLASS: Record<KnowledgeSourceType, number> = {
-  section: 1,
-  wiki: 2,
-  upload: 3,
+  wiki: 1,
+  upload: 2,
 };
 
 /**
@@ -57,10 +54,8 @@ async function buildChunkRows(input: IndexSourceInput): Promise<InsertKnowledgeC
  * the new text and stores the vectors. Idempotent per source.
  *
  * The delete + insert run inside one transaction guarded by a per-source
- * advisory lock, so concurrent index jobs for the SAME source (e.g. two uploads
- * touching the same section, or a delete-reconcile racing a re-index) serialize
- * instead of interleaving into duplicate/stale chunk sets. Embedding happens
- * before the transaction so the lock is held only briefly.
+ * advisory lock, so concurrent index jobs for the SAME source serialize
+ * instead of interleaving into duplicate/stale chunk sets.
  */
 export async function indexSource(input: IndexSourceInput): Promise<number> {
   const { sourceType, sourceId } = input;
@@ -111,36 +106,6 @@ export async function indexWikiPage(slug: string): Promise<void> {
     title: page.title,
     text: page.bodyMarkdown,
   });
-}
-
-/**
- * Re-index a section from its current published version. If the section no
- * longer exists or has no current body, its chunks are removed instead.
- */
-export async function indexSectionById(sectionId: number): Promise<void> {
-  const [s] = await db
-    .select({
-      id: sectionsTable.id,
-      slug: sectionsTable.slug,
-      title: sectionsTable.title,
-      description: sectionsTable.description,
-      bodyMarkdown: sectionVersionsTable.bodyMarkdown,
-    })
-    .from(sectionsTable)
-    .leftJoin(sectionVersionsTable, eq(sectionsTable.currentVersionId, sectionVersionsTable.id))
-    .where(eq(sectionsTable.id, sectionId))
-    .limit(1);
-
-  if (!s) {
-    await removeSource("section", sectionId);
-    return;
-  }
-  const body = [s.description, s.bodyMarkdown ?? ""].filter(Boolean).join("\n\n");
-  if (!body.trim()) {
-    await removeSource("section", sectionId);
-    return;
-  }
-  await indexSource({ sourceType: "section", sourceId: s.id, sourceSlug: s.slug, title: s.title, text: body });
 }
 
 export interface RetrievedChunk {
@@ -205,37 +170,13 @@ export async function countChunks(): Promise<number> {
 }
 
 /**
- * Rebuild the entire knowledge index from current sections, wiki pages and
- * uploads. Returns per-source counts.
+ * Rebuild the entire knowledge index from current wiki pages and uploads.
+ * Returns per-source counts.
  */
-export async function reindexAll(): Promise<{ sections: number; wiki: number; uploads: number; chunks: number }> {
+export async function reindexAll(): Promise<{ wiki: number; uploads: number; chunks: number }> {
   // Build every chunk + embedding FIRST (slow work, no DB writes), then swap
-  // the whole corpus in a single transaction. Concurrent searches keep seeing
-  // the previous index until commit and never observe an empty/partial corpus.
+  // the whole corpus in a single transaction.
   const allRows: InsertKnowledgeChunk[] = [];
-
-  // Sections (current version body)
-  const sections = await db
-    .select({
-      id: sectionsTable.id,
-      slug: sectionsTable.slug,
-      title: sectionsTable.title,
-      description: sectionsTable.description,
-      bodyMarkdown: sectionVersionsTable.bodyMarkdown,
-    })
-    .from(sectionsTable)
-    .leftJoin(sectionVersionsTable, eq(sectionsTable.currentVersionId, sectionVersionsTable.id))
-    .orderBy(asc(sectionsTable.displayOrder));
-
-  let sectionCount = 0;
-  for (const s of sections) {
-    const body = [s.description, s.bodyMarkdown ?? ""].filter(Boolean).join("\n\n");
-    if (!body.trim()) continue;
-    const rows = await buildChunkRows({ sourceType: "section", sourceId: s.id, sourceSlug: s.slug, title: s.title, text: body });
-    if (rows.length === 0) continue;
-    allRows.push(...rows);
-    sectionCount++;
-  }
 
   // Wiki pages
   const wiki = await db
@@ -266,14 +207,13 @@ export async function reindexAll(): Promise<{ sections: number; wiki: number; up
 
   await db.transaction(async (tx) => {
     await tx.delete(knowledgeChunksTable);
-    // Insert in batches to keep parameter counts well within Postgres limits.
     const BATCH = 200;
     for (let i = 0; i < allRows.length; i += BATCH) {
       await tx.insert(knowledgeChunksTable).values(allRows.slice(i, i + BATCH));
     }
   });
 
-  const result = { sections: sectionCount, wiki: wikiCount, uploads: uploadCount, chunks: allRows.length };
+  const result = { wiki: wikiCount, uploads: uploadCount, chunks: allRows.length };
   logger.info(result, "Knowledge index rebuild complete");
   return result;
 }

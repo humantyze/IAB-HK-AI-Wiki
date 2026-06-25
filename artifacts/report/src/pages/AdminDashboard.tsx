@@ -5,13 +5,12 @@ import { z } from "zod";
 import { Link, useLocation } from "wouter";
 import {
   LogOut, Upload as UploadIcon, Hand,
-  Paperclip, X, CheckCircle2, AlertCircle,
-  ArrowLeft, ChevronRight, Sparkles, FileText,
-  ImageIcon, BookOpen, Layers, Check,
+  Paperclip, X, Sparkles, FileText,
+  BookOpen, Check,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
-import { useSubmitUpload, useAnalyzeUpload, type AnalysisResult, type SectionSuggestion } from "@/hooks/use-uploads";
+import { useSubmitUpload } from "@/hooks/use-uploads";
 import { useToast } from "@/hooks/use-toast";
 
 import { Button } from "@/components/ui/button";
@@ -20,7 +19,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 
 const uploadSchema = z.object({
   uploaderName: z.string().min(1, "Name is required"),
@@ -30,50 +28,34 @@ const uploadSchema = z.object({
   rawText: z.string().optional(),
 });
 
-const confidenceConfig: Record<SectionSuggestion["confidence"], { label: string; classes: string }> = {
-  high: { label: "High Match", classes: "bg-primary/10 text-primary border-primary/20" },
-  medium: { label: "Medium Match", classes: "bg-secondary/10 text-secondary border-secondary/20" },
-  low: { label: "Low Match", classes: "bg-muted/30 text-foreground/70 border-border/40" },
-};
-
 export default function AdminDashboard() {
   const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const [, setLocation] = useLocation();
   const submitUpload = useSubmitUpload();
-  const analyzeUpload = useAnalyzeUpload();
   const { toast } = useToast();
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStep, setSubmitStep] = useState(0);
 
-  const [phase, setPhase] = useState<"input" | "review" | "integrating">("input");
-  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
-  const [approvedSlugs, setApprovedSlugs] = useState<Set<string>>(new Set());
-  const [integrationStep, setIntegrationStep] = useState(0);
-
-  const INTEGRATION_STEPS = [
+  const SUBMIT_STEPS = [
     { label: "Processing content", detail: "Parsing and preparing submitted material…", Icon: FileText },
-    { label: "Analysing with AI", detail: "Mapping content to report sections…", Icon: Sparkles },
-    { label: "Generating visuals", detail: "Creating AI illustrations for the report…", Icon: ImageIcon },
-    { label: "Writing to report", detail: "Applying updates to approved sections…", Icon: Layers },
-    { label: "Building wiki entries", detail: "Generating atomic knowledge pages…", Icon: BookOpen },
+    { label: "Building wiki entries", detail: "Extracting knowledge pages from your content…", Icon: BookOpen },
   ] as const;
 
   useEffect(() => {
-    if (phase !== "integrating") {
-      setIntegrationStep(0);
+    if (!isSubmitting) {
+      setSubmitStep(0);
       return;
     }
     let elapsed = 0;
     const interval = setInterval(() => {
       elapsed += 1;
-      if (elapsed >= 38) setIntegrationStep(4);
-      else if (elapsed >= 24) setIntegrationStep(3);
-      else if (elapsed >= 10) setIntegrationStep(2);
-      else if (elapsed >= 3) setIntegrationStep(1);
+      if (elapsed >= 8) setSubmitStep(1);
     }, 1000);
     return () => clearInterval(interval);
-  }, [phase]);
+  }, [isSubmitting]);
 
   const form = useForm<z.infer<typeof uploadSchema>>({
     resolver: zodResolver(uploadSchema),
@@ -94,70 +76,33 @@ export default function AdminDashboard() {
 
   if (!isAuthenticated) return null;
 
-  const handleAnalyze = async (values: z.infer<typeof uploadSchema>) => {
+  const handleSubmit = async (values: z.infer<typeof uploadSchema>) => {
     const rawText = values.rawText?.trim() ?? "";
     if (!rawText && !selectedFile) {
-      toast({ title: "Content Required", description: "Please provide text content or attach a file before analysing.", variant: "destructive" });
+      toast({ title: "Content Required", description: "Please provide text content or attach a file.", variant: "destructive" });
       return;
     }
 
-    try {
-      const result = await analyzeUpload.mutateAsync({
-        contentType: values.contentType,
-        rawText: rawText || undefined,
-        file: selectedFile,
-      });
-      setAnalysis(result);
-      setApprovedSlugs(new Set(result.suggestions.map((s) => s.slug)));
-      setPhase("review");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Analysis failed";
-      toast({ title: "Analysis Failed", description: message, variant: "destructive" });
-    }
-  };
-
-  const handleConfirmIntegration = async () => {
-    const values = form.getValues();
-    const targetSections = [...approvedSlugs];
-
-    if (targetSections.length === 0) {
-      toast({ title: "No Sections Selected", description: "Approve at least one section before integrating.", variant: "destructive" });
-      return;
-    }
-
-    setPhase("integrating");
-
+    setIsSubmitting(true);
     try {
       await submitUpload.mutateAsync({
         uploaderName: values.uploaderName,
         uploaderEmail: values.uploaderEmail,
         contributorName: values.contributorName,
-        rawText: values.rawText?.trim() || undefined,
-        targetSections,
+        rawText: rawText || undefined,
         contentType: values.contentType,
         file: selectedFile,
       });
-      toast({ title: "Integration Complete", description: `Content successfully integrated into ${targetSections.length} section${targetSections.length > 1 ? "s" : ""}.` });
+      toast({ title: "Content Submitted", description: "Your content has been received. Wiki pages are being generated in the background." });
       form.reset({ uploaderName: values.uploaderName, uploaderEmail: values.uploaderEmail, rawText: "", contentType: values.contentType, contributorName: values.contributorName });
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
-      setPhase("input");
-      setAnalysis(null);
-      setApprovedSlugs(new Set());
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Integration failed";
-      toast({ title: "Integration Failed", description: message, variant: "destructive" });
-      setPhase("review");
+      const message = err instanceof Error ? err.message : "Submission failed";
+      toast({ title: "Submission Failed", description: message, variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
     }
-  };
-
-  const toggleSlug = (slug: string) => {
-    setApprovedSlugs((prev) => {
-      const next = new Set(prev);
-      if (next.has(slug)) next.delete(slug);
-      else next.add(slug);
-      return next;
-    });
   };
 
   return (
@@ -194,38 +139,20 @@ export default function AdminDashboard() {
       <main className="max-w-[1600px] mx-auto px-6 py-12 relative z-10">
         <div className="mb-8 p-5 rounded-xl border border-border/40 bg-card/30 backdrop-blur-md text-sm text-foreground/80 leading-relaxed">
           <span className="font-semibold text-foreground/80">How this works: </span>
-          Submit new source material — whitepapers, case studies, market data, etc. The AI reads it, suggests which report sections to update, and you approve before anything changes. <span className="font-medium text-foreground/90">Wiki pages are created automatically as part of this process</span> — you do not need to do anything extra.
+          Submit source material — whitepapers, case studies, market data, etc. The AI reads it and <span className="font-medium text-foreground/90">automatically generates wiki knowledge pages</span> from the content. No further action required.
         </div>
 
         <Card className="border-primary/20 shadow-[0_10px_50px_rgba(0,240,255,0.03)] bg-card/40 backdrop-blur-md rounded-2xl overflow-hidden">
           <div className="h-1 w-full bg-gradient-to-r from-primary to-transparent" />
           <CardHeader className="pb-4 sm:pb-8 pt-6 sm:pt-10 px-4 sm:px-10">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="font-serif text-xl sm:text-3xl font-bold">Content Addition Panel</CardTitle>
-                <CardDescription className="text-sm sm:text-base mt-2 font-light text-foreground/70">
-                  {phase === "input"
-                    ? "Submit intelligence, research, or market data. The AI will analyse the content and suggest which report sections to update."
-                    : phase === "review"
-                    ? "Review the AI-generated integration plan below. Approve or remove sections, then confirm to integrate."
-                    : "AI is processing your content and updating the report. Steps complete automatically."}
-                </CardDescription>
-              </div>
-              {phase === "review" && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => { setPhase("input"); setAnalysis(null); setApprovedSlugs(new Set()); }}
-                  className="text-foreground/70 hover:text-foreground font-display uppercase tracking-widest text-[11px]"
-                >
-                  <ArrowLeft className="w-3 h-3 mr-2" /> Back
-                </Button>
-              )}
-            </div>
+            <CardTitle className="font-serif text-xl sm:text-3xl font-bold">Content Submission Panel</CardTitle>
+            <CardDescription className="text-sm sm:text-base mt-2 font-light text-foreground/70">
+              Submit intelligence, research, or market data. The AI will extract wiki knowledge pages from your content automatically.
+            </CardDescription>
           </CardHeader>
 
           <CardContent className="px-4 sm:px-10 pb-6 sm:pb-10">
-            {phase === "integrating" && (
+            {isSubmitting && (
               <div className="py-10 sm:py-16 flex flex-col items-center">
                 <div className="w-full max-w-md">
                   <div className="text-center mb-10">
@@ -233,14 +160,14 @@ export default function AdminDashboard() {
                       <Sparkles className="w-6 h-6 text-primary" />
                       <span className="absolute inset-0 rounded-2xl animate-ping bg-primary/10" />
                     </div>
-                    <h3 className="font-serif text-xl font-bold text-foreground/90 mb-2">Integration in Progress</h3>
-                    <p className="text-sm text-foreground/50 font-light">This takes around 30–60 seconds. Please keep this tab open.</p>
+                    <h3 className="font-serif text-xl font-bold text-foreground/90 mb-2">Processing Your Content</h3>
+                    <p className="text-sm text-foreground/50 font-light">This takes around 10–30 seconds. Please keep this tab open.</p>
                   </div>
 
                   <div className="space-y-2">
-                    {INTEGRATION_STEPS.map((step, idx) => {
-                      const done = idx < integrationStep;
-                      const active = idx === integrationStep;
+                    {SUBMIT_STEPS.map((step, idx) => {
+                      const done = idx < submitStep;
+                      const active = idx === submitStep;
                       return (
                         <div
                           key={step.label}
@@ -280,25 +207,14 @@ export default function AdminDashboard() {
                       );
                     })}
                   </div>
-
-                  <div className="mt-8 h-px w-full bg-border/20 overflow-hidden rounded-full">
-                    <div
-                      className="h-full bg-gradient-to-r from-primary/60 to-primary transition-all duration-1000 ease-out rounded-full"
-                      style={{ width: `${Math.round(((integrationStep) / (INTEGRATION_STEPS.length - 1)) * 100)}%` }}
-                    />
-                  </div>
-                  <p className="text-center text-[11px] text-foreground/30 mt-3 font-display tracking-widest uppercase">
-                    Step {integrationStep + 1} of {INTEGRATION_STEPS.length}
-                  </p>
                 </div>
               </div>
             )}
 
-            {phase === "input" && (
+            {!isSubmitting && (
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(handleAnalyze)} className="space-y-10">
+                <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-10">
 
-                  {/* Identity fields — required */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <FormField
                       control={form.control}
@@ -426,103 +342,16 @@ export default function AdminDashboard() {
                   <div className="space-y-3">
                     <Button
                       type="submit"
-                      disabled={analyzeUpload.isPending}
+                      disabled={submitUpload.isPending}
                       className="w-full h-14 font-display uppercase tracking-[0.2em] text-xs bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground border border-primary/30 rounded-xl transition-all duration-300"
                     >
-                      {analyzeUpload.isPending
-                        ? <><div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-3" />Reading content &amp; mapping sections…</>
-                        : "Analyse Content"}
+                      {submitUpload.isPending
+                        ? <><div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-3" />Submitting…</>
+                        : "Submit Content"}
                     </Button>
-                    {analyzeUpload.isPending && (
-                      <p className="text-center text-[11px] text-foreground/40 font-light">
-                        Usually takes 5–15 seconds
-                      </p>
-                    )}
                   </div>
                 </form>
               </Form>
-            )}
-
-            {phase === "review" && analysis && (
-              <div className="space-y-10">
-                {analysis.summary && (
-                  <div className="p-6 rounded-xl border border-primary/20 bg-primary/5">
-                    <p className="font-display tracking-[0.2em] uppercase text-[10px] text-primary mb-2">AI Content Summary</p>
-                    <p className="text-foreground/80 font-light leading-relaxed">{analysis.summary}</p>
-                  </div>
-                )}
-
-                <div>
-                  <h3 className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70 mb-6 flex items-center gap-3">
-                    <span className="w-1.5 h-1.5 bg-primary rounded-full shadow-[0_0_8px_rgba(0,240,255,0.8)]" />
-                    Integration Task List — Review &amp; Approve
-                  </h3>
-
-                  {analysis.suggestions.length === 0 ? (
-                    <div className="flex items-center gap-4 p-6 border border-dashed border-border/50 rounded-xl bg-background/20 text-foreground/70">
-                      <AlertCircle className="w-5 h-5 shrink-0" />
-                      <div>
-                        <p className="font-medium text-sm">No matching sections found</p>
-                        <p className="text-xs mt-1 font-light">The AI could not confidently match the content to any existing section. Go back and refine the content or select sections manually.</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {analysis.suggestions.map((suggestion, idx) => {
-                        const approved = approvedSlugs.has(suggestion.slug);
-                        const conf = confidenceConfig[suggestion.confidence];
-                        return (
-                          <button
-                            key={suggestion.slug}
-                            type="button"
-                            onClick={() => toggleSlug(suggestion.slug)}
-                            className={`w-full text-left p-6 rounded-xl border transition-all duration-300 group ${
-                              approved
-                                ? "border-primary/40 bg-primary/5 shadow-[inset_0_0_20px_rgba(0,240,255,0.04)]"
-                                : "border-border/40 bg-background/20 opacity-60 hover:opacity-80"
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="flex items-start gap-4 flex-1 min-w-0">
-                                <div className={`mt-0.5 w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition-all ${approved ? "border-primary bg-primary/20" : "border-border/50"}`}>
-                                  {approved && <CheckCircle2 className="w-3.5 h-3.5 text-primary" />}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-3 mb-2 flex-wrap">
-                                    <span className="font-display text-[10px] text-foreground/50">TASK {String(idx + 1).padStart(2, "0")}</span>
-                                    <Badge variant="outline" className={`text-[10px] font-display tracking-wide px-2 py-0.5 border ${conf.classes}`}>
-                                      {conf.label}
-                                    </Badge>
-                                  </div>
-                                  <p className="font-medium text-sm text-foreground/90 mb-1">{suggestion.title}</p>
-                                  <p className="text-xs text-foreground/70 font-light leading-relaxed">{suggestion.reason}</p>
-                                </div>
-                              </div>
-                              <ChevronRight className={`w-4 h-4 mt-1 shrink-0 transition-colors ${approved ? "text-primary/60" : "text-border/50"}`} />
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-4 border-t border-border/30">
-                  <p className="text-xs text-foreground/70 font-light">
-                    <span className="text-foreground font-medium">{approvedSlugs.size}</span> of {analysis.suggestions.length} section{analysis.suggestions.length !== 1 ? "s" : ""} approved for integration
-                  </p>
-                  <Button
-                    type="button"
-                    onClick={handleConfirmIntegration}
-                    disabled={submitUpload.isPending || approvedSlugs.size === 0}
-                    className="w-full sm:w-auto h-14 px-10 font-display uppercase tracking-[0.2em] text-xs bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl shadow-[0_0_20px_rgba(0,240,255,0.2)] hover:shadow-[0_0_30px_rgba(0,240,255,0.4)] transition-all disabled:opacity-40"
-                  >
-                    {submitUpload.isPending
-                      ? <><div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-3" />Integrating…</>
-                      : "Confirm Integration"}
-                  </Button>
-                </div>
-              </div>
             )}
           </CardContent>
         </Card>

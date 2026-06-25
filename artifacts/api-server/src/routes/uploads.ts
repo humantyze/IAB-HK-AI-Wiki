@@ -1,13 +1,13 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, inArray, and, ne, isNull, or } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { z } from "zod";
-import { db, uploadsTable, sectionsTable, sectionVersionsTable, wikiPagesTable } from "@workspace/db";
+import { db, uploadsTable, wikiPagesTable } from "@workspace/db";
 import { requireAuth, requireSuperAuth } from "../middlewares/auth";
-import { processUpload, analyzeSections, extractWikiPages } from "../lib/ai-service";
-import { indexSource, indexSectionById, indexWikiPage, removeSource } from "../lib/knowledge-index";
+import { extractWikiPages } from "../lib/ai-service";
+import { indexSource, removeSource, indexWikiPage } from "../lib/knowledge-index";
 import { extractTextOnly } from "../lib/pdf-extractor";
 import { logger } from "../lib/logger";
 
@@ -16,7 +16,6 @@ const UploadFormSchema = z.object({
   uploaderEmail: z.string().email("Must be a valid work email"),
   contributorName: z.string().optional(),
   contentType: z.enum(["whitepaper", "case_study", "market_data", "regulation_update", "trend_insight"]),
-  targetSections: z.array(z.string()).min(1, "At least one target section is required"),
   rawText: z.string().optional().default(""),
 });
 
@@ -81,54 +80,6 @@ router.get("/uploads", requireSuperAuth, async (_req, res) => {
   );
 });
 
-router.post("/uploads/analyze", requireAuth, (req, res, next) => {
-  upload.single("file")(req, res, (err) => {
-    if (err) {
-      res.status(400).json({ error: err instanceof multer.MulterError ? `Upload error: ${err.message}` : (err.message || "File upload failed") });
-      return;
-    }
-    next();
-  });
-}, async (req, res) => {
-  const rawText: string = req.body.rawText ?? "";
-  const contentType: string = req.body.contentType ?? "market_data";
-
-  if (!rawText.trim() && !req.file) {
-    res.status(400).json({ error: "Provide either raw text content or a file to analyse." });
-    return;
-  }
-
-  const allSections = await db
-    .select({ slug: sectionsTable.slug, title: sectionsTable.title })
-    .from(sectionsTable);
-
-  let textToAnalyse = rawText.trim();
-  if (req.file) {
-    if (req.file.mimetype === "application/pdf") {
-      try {
-        const pdfText = await extractTextOnly(req.file.path);
-        logger.info({ filename: req.file.originalname }, "Extracted text from PDF for analysis");
-        textToAnalyse = textToAnalyse
-          ? `${textToAnalyse}\n\n---\n\n${pdfText}`
-          : pdfText;
-      } catch (err) {
-        logger.warn({ err, filename: req.file.originalname }, "PDF text extraction failed — falling back to filename");
-        if (!textToAnalyse) textToAnalyse = `Uploaded file: ${req.file.originalname}`;
-      }
-    } else if (!textToAnalyse) {
-      textToAnalyse = `Uploaded file: ${req.file.originalname}`;
-    }
-  }
-
-  try {
-    const result = await analyzeSections(textToAnalyse, contentType, allSections);
-    res.json(result);
-  } catch (err) {
-    logger.error({ err }, "Section analysis failed");
-    res.status(500).json({ error: "Analysis failed. Please try again." });
-  }
-});
-
 router.post("/uploads", requireAuth, (req, res, next) => {
   upload.single("file")(req, res, (err) => {
     if (err) {
@@ -142,38 +93,12 @@ router.post("/uploads", requireAuth, (req, res, next) => {
     next();
   });
 }, async (req, res) => {
-  let targetSections: string[];
-  try {
-    targetSections = typeof req.body.targetSections === "string"
-      ? JSON.parse(req.body.targetSections)
-      : req.body.targetSections;
-  } catch {
-    res.status(400).json({ error: "Invalid targetSections: must be a valid JSON array" });
-    return;
-  }
-
-  const parseResult = UploadFormSchema.safeParse({
-    ...req.body,
-    targetSections,
-  });
+  const parseResult = UploadFormSchema.safeParse(req.body);
   if (!parseResult.success) {
     res.status(400).json({ error: "Validation failed", details: parseResult.error.flatten().fieldErrors });
     return;
   }
   const data = parseResult.data;
-
-  if (data.targetSections.length > 0) {
-    const existingSections = await db
-      .select({ slug: sectionsTable.slug })
-      .from(sectionsTable)
-      .where(inArray(sectionsTable.slug, data.targetSections));
-    const existingSlugs = new Set(existingSections.map((s) => s.slug));
-    const invalid = data.targetSections.filter((s) => !existingSlugs.has(s));
-    if (invalid.length > 0) {
-      res.status(400).json({ error: `Unknown target sections: ${invalid.join(", ")}` });
-      return;
-    }
-  }
 
   const filePath = req.file ? req.file.filename : null;
 
@@ -200,7 +125,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
       uploaderEmail: data.uploaderEmail,
       contributorName: data.contributorName ?? null,
       contentType: data.contentType,
-      targetSections: data.targetSections,
+      targetSections: [],
       rawText: effectiveText,
       filePath,
       status: "pending",
@@ -208,42 +133,6 @@ router.post("/uploads", requireAuth, (req, res, next) => {
     .returning();
 
   try {
-    const results = await processUpload(
-      effectiveText,
-      data.targetSections,
-      data.contentType,
-    );
-
-    const indexedSectionIds: number[] = [];
-    for (const result of results) {
-      const [section] = await db
-        .select()
-        .from(sectionsTable)
-        .where(eq(sectionsTable.slug, result.sectionSlug))
-        .limit(1);
-
-      if (section) {
-        const [newVersion] = await db
-          .insert(sectionVersionsTable)
-          .values({
-            sectionId: section.id,
-            bodyMarkdown: result.bodyMarkdown,
-            keyInsights: result.keyInsights,
-            chartData: result.chartData,
-            imageUrl: result.imageUrl ?? null,
-            createdByUploadId: uploadRecord.id,
-          })
-          .returning();
-
-        await db
-          .update(sectionsTable)
-          .set({ currentVersionId: newVersion.id })
-          .where(eq(sectionsTable.id, section.id));
-
-        indexedSectionIds.push(section.id);
-      }
-    }
-
     const [updated] = await db
       .update(uploadsTable)
       .set({ status: "processed", processedAt: new Date() })
@@ -263,7 +152,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
       processedAt: updated.processedAt?.toISOString() ?? null,
     });
 
-    // Non-blocking wiki extraction — always fires after a successful upload
+    // Non-blocking wiki extraction — fires after a successful upload
     {
       const sourceLabel = data.contributorName ?? data.contentType.replace(/_/g, " ");
       const sourceRef = `Upload #${updated.id} — ${data.contentType.replace(/_/g, " ")}`;
@@ -274,13 +163,10 @@ router.post("/uploads", requireAuth, (req, res, next) => {
       });
     }
 
-    // Non-blocking knowledge indexing — embed updated sections + the raw upload
+    // Non-blocking knowledge indexing of the raw upload
     setImmediate(() => {
       void (async () => {
         try {
-          for (const sectionId of indexedSectionIds) {
-            await indexSectionById(sectionId);
-          }
           const uploadTitle = `${data.contributorName ? `${data.contributorName} — ` : ""}${data.contentType.replace(/_/g, " ")}`;
           await indexSource({
             sourceType: "upload",
@@ -323,47 +209,21 @@ router.post("/uploads", requireAuth, (req, res, next) => {
 });
 
 router.get("/uploads/:id/impact", requireSuperAuth, async (req, res) => {
-  const uploadId = parseInt(req.params.id, 10);
+  const uploadId = parseInt(String(req.params.id), 10);
   if (isNaN(uploadId)) {
     res.status(400).json({ error: "Invalid upload ID" });
     return;
   }
 
-  const affectedVersions = await db
-    .select({ sectionId: sectionVersionsTable.sectionId, id: sectionVersionsTable.id })
-    .from(sectionVersionsTable)
-    .where(eq(sectionVersionsTable.createdByUploadId, uploadId));
-
-  const affectedSectionIds = [...new Set(affectedVersions.map((v) => v.sectionId))];
-
-  const sectionsRevertedList: Array<{ slug: string; title: string }> = [];
-
-  for (const sectionId of affectedSectionIds) {
-    const [currentSection] = await db
-      .select({ currentVersionId: sectionsTable.currentVersionId, slug: sectionsTable.slug, title: sectionsTable.title })
-      .from(sectionsTable)
-      .where(eq(sectionsTable.id, sectionId))
-      .limit(1);
-
-    const deletingVersionIds = affectedVersions.filter((v) => v.sectionId === sectionId).map((v) => v.id);
-    if (
-      currentSection?.currentVersionId !== null &&
-      currentSection?.currentVersionId !== undefined &&
-      deletingVersionIds.includes(currentSection.currentVersionId)
-    ) {
-      sectionsRevertedList.push({ slug: currentSection.slug, title: currentSection.title });
-    }
-  }
-
   res.json({
-    sectionsReverted: sectionsRevertedList.length,
-    versionsDeleted: affectedVersions.length,
-    sectionsRevertedList,
+    sectionsReverted: 0,
+    versionsDeleted: 0,
+    sectionsRevertedList: [],
   });
 });
 
 router.delete("/uploads/:id", requireSuperAuth, async (req, res) => {
-  const uploadId = parseInt(req.params.id, 10);
+  const uploadId = parseInt(String(req.params.id), 10);
   if (isNaN(uploadId)) {
     res.status(400).json({ error: "Invalid upload ID" });
     return;
@@ -378,57 +238,6 @@ router.delete("/uploads/:id", requireSuperAuth, async (req, res) => {
   if (!upload) {
     res.status(404).json({ error: "Upload not found" });
     return;
-  }
-
-  const affectedVersions = await db
-    .select()
-    .from(sectionVersionsTable)
-    .where(eq(sectionVersionsTable.createdByUploadId, uploadId));
-
-  const affectedSectionIds = [...new Set(affectedVersions.map((v) => v.sectionId))];
-
-  for (const sectionId of affectedSectionIds) {
-    const [currentSection] = await db
-      .select({ currentVersionId: sectionsTable.currentVersionId })
-      .from(sectionsTable)
-      .where(eq(sectionsTable.id, sectionId))
-      .limit(1);
-
-    const deletingVersionIds = affectedVersions
-      .filter((v) => v.sectionId === sectionId)
-      .map((v) => v.id);
-
-    const isCurrentBeingDeleted =
-      currentSection?.currentVersionId !== null &&
-      currentSection?.currentVersionId !== undefined &&
-      deletingVersionIds.includes(currentSection.currentVersionId);
-
-    if (isCurrentBeingDeleted) {
-      // Include versions with createdByUploadId = null (seed versions) as valid rollback targets
-      const [prevVersion] = await db
-        .select({ id: sectionVersionsTable.id })
-        .from(sectionVersionsTable)
-        .where(and(
-          eq(sectionVersionsTable.sectionId, sectionId),
-          or(
-            isNull(sectionVersionsTable.createdByUploadId),
-            ne(sectionVersionsTable.createdByUploadId, uploadId),
-          ),
-        ))
-        .orderBy(desc(sectionVersionsTable.createdAt))
-        .limit(1);
-
-      await db
-        .update(sectionsTable)
-        .set({ currentVersionId: prevVersion?.id ?? null })
-        .where(eq(sectionsTable.id, sectionId));
-    }
-  }
-
-  if (affectedVersions.length > 0) {
-    await db
-      .delete(sectionVersionsTable)
-      .where(eq(sectionVersionsTable.createdByUploadId, uploadId));
   }
 
   const allWikiPages = await db.select().from(wikiPagesTable);
@@ -462,9 +271,6 @@ router.delete("/uploads/:id", requireSuperAuth, async (req, res) => {
         for (const id of deletedWikiPageIds) {
           await removeSource("wiki", id);
         }
-        for (const sectionId of affectedSectionIds) {
-          await indexSectionById(sectionId);
-        }
         for (const slug of updatedWikiSlugs) {
           await indexWikiPage(slug);
         }
@@ -474,14 +280,13 @@ router.delete("/uploads/:id", requireSuperAuth, async (req, res) => {
     })();
   });
 
-  logger.info({ uploadId, sectionsReverted: affectedSectionIds.length, versionsDeleted: affectedVersions.length }, "Upload deleted and sections reverted");
+  logger.info({ uploadId }, "Upload deleted");
 
   res.json({
     deleted: true,
-    sectionsReverted: affectedSectionIds.length,
-    versionsDeleted: affectedVersions.length,
+    sectionsReverted: 0,
+    versionsDeleted: 0,
   });
 });
 
 export default router;
-

@@ -8,56 +8,6 @@
     <priority>1.0</priority>
   </url>
 
-  <!-- Report Sections -->
-  <url>
-    <loc>https://38522816-e225-4282-b566-f3e580ea7097-00-3co8knwldfnpy-z3cvhkq6.riker.replit.dev/sections/executive-overview</loc>
-    <lastmod>2026-04-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://38522816-e225-4282-b566-f3e580ea7097-00-3co8knwldfnpy-z3cvhkq6.riker.replit.dev/sections/market-context</loc>
-    <lastmod>2026-04-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://38522816-e225-4282-b566-f3e580ea7097-00-3co8knwldfnpy-z3cvhkq6.riker.replit.dev/sections/adoption-levels</loc>
-    <lastmod>2026-04-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://38522816-e225-4282-b566-f3e580ea7097-00-3co8knwldfnpy-z3cvhkq6.riker.replit.dev/sections/use-cases</loc>
-    <lastmod>2026-04-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://38522816-e225-4282-b566-f3e580ea7097-00-3co8knwldfnpy-z3cvhkq6.riker.replit.dev/sections/tools-platforms</loc>
-    <lastmod>2026-04-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://38522816-e225-4282-b566-f3e580ea7097-00-3co8knwldfnpy-z3cvhkq6.riker.replit.dev/sections/regulatory-ethical</loc>
-    <lastmod>2026-04-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://38522816-e225-4282-b566-f3e580ea7097-00-3co8knwldfnpy-z3cvhkq6.riker.replit.dev/sections/future-scenarios</loc>
-    <lastmod>2026-04-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://38522816-e225-4282-b566-f3e580ea7097-00-3co8knwldfnpy-z3cvhkq6.riker.replit.dev/sections/data-methodology</loc>
-    <lastmod>2026-04-27</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-  </url>
-
   <!-- Wiki Knowledge Base Entries -->
   <url>
     <loc>https://38522816-e225-4282-b566-f3e580ea7097-00-3co8knwldfnpy-z3cvhkq6.riker.replit.dev/wiki/adman-go-data</loc>

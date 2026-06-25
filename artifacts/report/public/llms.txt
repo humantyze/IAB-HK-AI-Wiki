@@ -1,27 +1,15 @@
 # State of AI in Hong Kong Marketing
 
-> A comprehensive public knowledge base and report published by IAB Hong Kong, examining how artificial intelligence is reshaping the marketing industry in Hong Kong.
+> A comprehensive public knowledge base published by IAB Hong Kong, examining how artificial intelligence is reshaping the marketing industry in Hong Kong.
 
 ## About
 
-This site presents the IAB Hong Kong State of AI in Marketing report alongside a structured wiki of supporting evidence, data points, case studies, and regulatory context. The content covers AI adoption rates, tool landscapes, use cases, workforce impacts, governance frameworks, and future projections specific to the Hong Kong marketing ecosystem.
+This site presents the IAB Hong Kong State of AI in Marketing knowledge base — a structured wiki of supporting evidence, data points, case studies, and regulatory context. The content covers AI adoption rates, tool landscapes, use cases, workforce impacts, governance frameworks, and future projections specific to the Hong Kong marketing ecosystem.
 
 ## Content Areas
 
-### Report Sections
-The report is divided into eight sections, each available at `/sections/<slug>`:
-
-- Executive Overview — key findings and summary of the Hong Kong AI marketing landscape
-- Market Context — advertising spend, market size, and digital growth indicators
-- Adoption Levels — current AI adoption rates among Hong Kong marketers and agencies
-- Use Cases — documented applications of AI in campaigns, media, and operations
-- Tools & Platforms — AI tools and martech platforms in active use across Hong Kong
-- Regulatory & Ethical — PDPO compliance, generative AI guidelines, content labelling rules
-- Future Scenarios — forecasts for agentic AI, ad spend, and workforce transformation
-- Data & Methodology — research methodology, sources, and data provenance
-
 ### Knowledge Base (Wiki)
-The wiki contains 44 individual entries covering specific data points, campaigns, tools, surveys, and regulations. Each entry is available at `/wiki/<slug>`. Topics include:
+The wiki contains individual entries covering specific data points, campaigns, tools, surveys, and regulations. Each entry is available at `/wiki/<slug>`. Topics include:
 
 - Market data: Hong Kong ad spend, digital ad growth, generative AI market size
 - AI tools: ChatGPT, Adobe Firefly, SenseChat, SenseTime, EternityX
@@ -34,7 +22,6 @@ The wiki contains 44 individual entries covering specific data points, campaigns
 
 - Homepage: /
 - Sitemap: /sitemap.xml
-- Report sections: /sections/{slug}
 - Wiki entries: /wiki/{slug}
 
 ## Publisher
@@ -43,4 +30,4 @@ IAB Hong Kong (Interactive Advertising Bureau Hong Kong)
 
 ## Content Type
 
-Research report and structured knowledge base. All content is publicly accessible without authentication.
+Structured knowledge base. All content is publicly accessible without authentication.

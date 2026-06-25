@@ -3,7 +3,7 @@ import { promisify } from "util";
 import fs from "fs/promises";
 import path from "path";
 import { db } from "@workspace/db";
-import { backupLogTable, wikiPagesTable, uploadsTable, sectionVersionsTable } from "@workspace/db";
+import { backupLogTable, wikiPagesTable, uploadsTable } from "@workspace/db";
 import { desc, sql } from "drizzle-orm";
 import { logger } from "./logger";
 import { getBackupBucket } from "./gcsClient";
@@ -12,15 +12,14 @@ const execFileAsync = promisify(execFile);
 
 /** Return the most recent updatedAt/createdAt timestamp across all main data tables. */
 async function getLatestDataTimestamp(): Promise<Date> {
-  const [wikiMax, uploadMax, versionMax] = await Promise.all([
+  const [wikiMax, uploadMax] = await Promise.all([
     db
       .select({ max: sql<string>`max(coalesce(updated_at, created_at))` })
       .from(wikiPagesTable),
     db.select({ max: sql<string>`max(created_at)` }).from(uploadsTable),
-    db.select({ max: sql<string>`max(created_at)` }).from(sectionVersionsTable),
   ]);
 
-  const candidates = [wikiMax[0]?.max, uploadMax[0]?.max, versionMax[0]?.max]
+  const candidates = [wikiMax[0]?.max, uploadMax[0]?.max]
     .filter(Boolean)
     .map((v) => new Date(v as string));
 
