@@ -1,14 +1,14 @@
 import { Router, type IRouter } from "express";
 import { requireSuperAuth } from "../middlewares/auth";
-import { runBackup, getLastBackup } from "../lib/backup";
+import { runBackup, getBackupHistory } from "../lib/backup";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
 router.get("/super-admin/backup/status", requireSuperAuth, async (_req, res) => {
   try {
-    const last = await getLastBackup();
-    res.json({ last });
+    const history = await getBackupHistory(20);
+    res.json({ history, last: history[0] ?? null });
   } catch (err) {
     logger.error({ err }, "Failed to fetch backup status");
     res.status(500).json({ error: "Failed to fetch backup status" });

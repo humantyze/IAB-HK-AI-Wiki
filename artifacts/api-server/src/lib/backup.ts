@@ -12,33 +12,29 @@ const execFileAsync = promisify(execFile);
 
 const DRIVE_FOLDER_ID = "1p8l8LIQpapPyN3x22eNzkvuvYfzCMshH";
 
-/** Fetch an OAuth2 access token from the Replit connector proxy. */
-async function getDriveAccessToken(): Promise<string> {
-  const connectorsHost = process.env.REPLIT_CONNECTORS_HOSTNAME;
-  const connectionId = process.env.GOOGLE_DRIVE_CONNECTION_ID;
-  const replIdentity = process.env.REPL_IDENTITY;
-
-  if (!connectorsHost || !connectionId) {
+/** Build a Drive client using a service account JSON stored in the env var. */
+function getDriveClient() {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (!raw) {
     throw new Error(
-      "Google Drive is not connected. Set GOOGLE_DRIVE_CONNECTION_ID after authorising the Google Drive integration.",
+      "GOOGLE_SERVICE_ACCOUNT_JSON is not set. " +
+        "Paste your service account key JSON as the value of this env var.",
     );
   }
 
-  const url = `https://${connectorsHost}/api/v2/connection/${connectionId}/token`;
-  const resp = await fetch(url, {
-    headers: {
-      "X-Replit-Identity": replIdentity ?? "",
-    },
-  });
-
-  if (!resp.ok) {
-    throw new Error(`Connector token fetch failed: ${resp.status} ${await resp.text()}`);
+  let keyFile: object;
+  try {
+    keyFile = JSON.parse(raw) as object;
+  } catch {
+    throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON");
   }
 
-  const body = (await resp.json()) as { access_token?: string; token?: string };
-  const token = body.access_token ?? body.token;
-  if (!token) throw new Error("Connector returned no access token");
-  return token;
+  const auth = new google.auth.GoogleAuth({
+    credentials: keyFile,
+    scopes: ["https://www.googleapis.com/auth/drive.file"],
+  });
+
+  return google.drive({ version: "v3", auth });
 }
 
 /** Return the most recent updatedAt/createdAt timestamp across all main data tables. */
@@ -112,11 +108,7 @@ export async function runBackup(force = false): Promise<RunBackupResult> {
 
   let driveFileId: string;
   try {
-    const accessToken = await getDriveAccessToken();
-    const auth = new google.auth.OAuth2();
-    auth.setCredentials({ access_token: accessToken });
-    const drive = google.drive({ version: "v3", auth });
-
+    const drive = getDriveClient();
     const fileStream = (await import("fs")).createReadStream(filePath);
     const upload = await drive.files.create({
       requestBody: {
@@ -150,11 +142,10 @@ export async function runBackup(force = false): Promise<RunBackupResult> {
   return { skipped: false, fileName, driveFileId };
 }
 
-export async function getLastBackup() {
-  const [row] = await db
+export async function getBackupHistory(limit = 20) {
+  return db
     .select()
     .from(backupLogTable)
     .orderBy(desc(backupLogTable.createdAt))
-    .limit(1);
-  return row ?? null;
+    .limit(limit);
 }
