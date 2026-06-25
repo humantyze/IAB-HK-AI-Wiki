@@ -30,12 +30,9 @@ export async function generateDownloadUrl(objectPath: string): Promise<string> {
   const bucketId = process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID;
   if (!bucketId) throw new Error("DEFAULT_OBJECT_STORAGE_BUCKET_ID is not set");
 
-  const [, ...nameParts] = objectPath.split("/");
-  const objectName = nameParts.join("/");
-
   const request = {
     bucket_name: bucketId,
-    object_name: objectName,
+    object_name: objectPath,
     method: "GET",
     expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
   };
