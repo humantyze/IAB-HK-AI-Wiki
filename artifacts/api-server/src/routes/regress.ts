@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, gt, lte, desc, and, ne } from "drizzle-orm";
+import { eq, gt, lte, desc, asc, and, notInArray } from "drizzle-orm";
 import { db, uploadsTable, sectionsTable, sectionVersionsTable, wikiPagesTable } from "@workspace/db";
 import { requireSuperAuth } from "../middlewares/auth";
 import { logger } from "../lib/logger";
@@ -20,10 +20,7 @@ router.get("/admin/regress/preview", requireSuperAuth, async (req, res) => {
   }
 
   const allSections = await db
-    .select({
-      id: sectionsTable.id,
-      currentVersionId: sectionsTable.currentVersionId,
-    })
+    .select({ id: sectionsTable.id, currentVersionId: sectionsTable.currentVersionId })
     .from(sectionsTable);
 
   let sectionsAffected = 0;
@@ -38,11 +35,6 @@ router.get("/admin/regress/preview", requireSuperAuth, async (req, res) => {
       sectionsAffected++;
     }
   }
-
-  const [wikiResult] = await db
-    .select({ count: wikiPagesTable.id })
-    .from(wikiPagesTable)
-    .where(gt(wikiPagesTable.createdAt, date));
 
   const wikiPagesRemoved = await db
     .select({ id: wikiPagesTable.id })
@@ -82,12 +74,15 @@ router.post("/admin/regress", requireSuperAuth, async (req, res) => {
 
   try {
     let sectionsReverted = 0;
-
     const allSections = await db.select().from(sectionsTable);
 
+    // Collect fallback (seed) version IDs to preserve from deletion
+    const preservedVersionIds: number[] = [];
+
     for (const section of allSections) {
+      // Find the latest version on or before the target date
       const [bestVersion] = await db
-        .select({ id: sectionVersionsTable.id, createdAt: sectionVersionsTable.createdAt })
+        .select({ id: sectionVersionsTable.id })
         .from(sectionVersionsTable)
         .where(and(
           eq(sectionVersionsTable.sectionId, section.id),
@@ -96,7 +91,24 @@ router.post("/admin/regress", requireSuperAuth, async (req, res) => {
         .orderBy(desc(sectionVersionsTable.createdAt))
         .limit(1);
 
-      const newVersionId = bestVersion?.id ?? null;
+      let newVersionId: number | null;
+
+      if (bestVersion) {
+        newVersionId = bestVersion.id;
+      } else {
+        // Fallback: use the earliest (seed) version so section is never empty
+        const [seedVersion] = await db
+          .select({ id: sectionVersionsTable.id })
+          .from(sectionVersionsTable)
+          .where(eq(sectionVersionsTable.sectionId, section.id))
+          .orderBy(asc(sectionVersionsTable.createdAt))
+          .limit(1);
+        newVersionId = seedVersion?.id ?? null;
+        if (newVersionId !== null) {
+          preservedVersionIds.push(newVersionId);
+        }
+      }
+
       if (newVersionId !== section.currentVersionId) {
         await db
           .update(sectionsTable)
@@ -106,10 +118,22 @@ router.post("/admin/regress", requireSuperAuth, async (req, res) => {
       }
     }
 
-    const deletedVersions = await db
-      .delete(sectionVersionsTable)
-      .where(gt(sectionVersionsTable.createdAt, date))
-      .returning({ id: sectionVersionsTable.id });
+    // Delete versions after the target date, sparing preserved seed versions
+    let deletedVersions: { id: number }[];
+    if (preservedVersionIds.length > 0) {
+      deletedVersions = await db
+        .delete(sectionVersionsTable)
+        .where(and(
+          gt(sectionVersionsTable.createdAt, date),
+          notInArray(sectionVersionsTable.id, preservedVersionIds),
+        ))
+        .returning({ id: sectionVersionsTable.id });
+    } else {
+      deletedVersions = await db
+        .delete(sectionVersionsTable)
+        .where(gt(sectionVersionsTable.createdAt, date))
+        .returning({ id: sectionVersionsTable.id });
+    }
 
     const deletedWiki = await db
       .delete(wikiPagesTable)
@@ -121,6 +145,7 @@ router.post("/admin/regress", requireSuperAuth, async (req, res) => {
       .where(gt(uploadsTable.createdAt, date))
       .returning({ id: uploadsTable.id });
 
+    // Clean upload source references from remaining wiki pages
     const deletedUploadIds = new Set(deletedUploads.map((u) => u.id));
     if (deletedUploadIds.size > 0) {
       const remainingWiki = await db.select().from(wikiPagesTable);
@@ -141,7 +166,10 @@ router.post("/admin/regress", requireSuperAuth, async (req, res) => {
       }
     }
 
-    logger.info({ targetDate, sectionsReverted, deletedVersions: deletedVersions.length, deletedWiki: deletedWiki.length, deletedUploads: deletedUploads.length }, "Wiki regressed to date");
+    logger.info(
+      { targetDate, sectionsReverted, deletedVersions: deletedVersions.length, deletedWiki: deletedWiki.length, deletedUploads: deletedUploads.length, preservedSeedVersions: preservedVersionIds.length },
+      "Wiki regressed to date",
+    );
 
     res.json({
       sectionsReverted,

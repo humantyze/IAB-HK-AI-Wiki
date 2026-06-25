@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc, inArray, and, ne } from "drizzle-orm";
+import { eq, desc, inArray, and, ne, isNull, or } from "drizzle-orm";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -294,6 +294,41 @@ router.post("/uploads", requireAuth, (req, res, next) => {
   }
 });
 
+router.get("/uploads/:id/impact", requireSuperAuth, async (req, res) => {
+  const uploadId = parseInt(req.params.id, 10);
+  if (isNaN(uploadId)) {
+    res.status(400).json({ error: "Invalid upload ID" });
+    return;
+  }
+
+  const affectedVersions = await db
+    .select({ sectionId: sectionVersionsTable.sectionId, id: sectionVersionsTable.id })
+    .from(sectionVersionsTable)
+    .where(eq(sectionVersionsTable.createdByUploadId, uploadId));
+
+  const affectedSectionIds = [...new Set(affectedVersions.map((v) => v.sectionId))];
+
+  let sectionsReverted = 0;
+  for (const sectionId of affectedSectionIds) {
+    const [currentSection] = await db
+      .select({ currentVersionId: sectionsTable.currentVersionId })
+      .from(sectionsTable)
+      .where(eq(sectionsTable.id, sectionId))
+      .limit(1);
+
+    const deletingVersionIds = affectedVersions.filter((v) => v.sectionId === sectionId).map((v) => v.id);
+    if (
+      currentSection?.currentVersionId !== null &&
+      currentSection?.currentVersionId !== undefined &&
+      deletingVersionIds.includes(currentSection.currentVersionId)
+    ) {
+      sectionsReverted++;
+    }
+  }
+
+  res.json({ sectionsReverted, versionsDeleted: affectedVersions.length });
+});
+
 router.delete("/uploads/:id", requireSuperAuth, async (req, res) => {
   const uploadId = parseInt(req.params.id, 10);
   if (isNaN(uploadId)) {
@@ -336,12 +371,16 @@ router.delete("/uploads/:id", requireSuperAuth, async (req, res) => {
       deletingVersionIds.includes(currentSection.currentVersionId);
 
     if (isCurrentBeingDeleted) {
+      // Include versions with createdByUploadId = null (seed versions) as valid rollback targets
       const [prevVersion] = await db
         .select({ id: sectionVersionsTable.id })
         .from(sectionVersionsTable)
         .where(and(
           eq(sectionVersionsTable.sectionId, sectionId),
-          ne(sectionVersionsTable.createdByUploadId, uploadId),
+          or(
+            isNull(sectionVersionsTable.createdByUploadId),
+            ne(sectionVersionsTable.createdByUploadId, uploadId),
+          ),
         ))
         .orderBy(desc(sectionVersionsTable.createdAt))
         .limit(1);

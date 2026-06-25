@@ -10,7 +10,7 @@ import {
 
 import { useSuperAuth } from "@/hooks/use-super-auth";
 import { useSections, useSectionVersions } from "@/hooks/use-sections";
-import { useUploads, useDeleteUpload, useRegressPreview, useRegress } from "@/hooks/use-uploads";
+import { useUploads, useDeleteUpload, useUploadImpact, useRegressPreview, useRegress, type UploadImpact } from "@/hooks/use-uploads";
 import { getListSectionsQueryKey } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -54,10 +54,12 @@ export default function SuperAdminDashboard() {
   const [wikiSeedResult, setWikiSeedResult] = useState<{ pagesCreated: number; pagesUpdated: number } | null>(null);
 
   const deleteUpload = useDeleteUpload();
+  const uploadImpact = useUploadImpact();
   const regressPreview = useRegressPreview();
   const regress = useRegress();
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [deleteImpact, setDeleteImpact] = useState<UploadImpact | null>(null);
   const [regressDate, setRegressDate] = useState("");
   const [regressPreviewData, setRegressPreviewData] = useState<{
     sectionsAffected: number;
@@ -219,10 +221,22 @@ export default function SuperAdminDashboard() {
     }
   };
 
+  const handleDeleteButtonClick = async (uploadId: number) => {
+    setDeleteImpact(null);
+    setDeleteConfirmId(uploadId);
+    try {
+      const impact = await uploadImpact.mutateAsync(uploadId);
+      setDeleteImpact(impact);
+    } catch {
+      // Non-critical — dialog still opens without impact count
+    }
+  };
+
   const handleDeleteUpload = async (uploadId: number) => {
     try {
       const result = await deleteUpload.mutateAsync(uploadId);
       setDeleteConfirmId(null);
+      setDeleteImpact(null);
       toast({
         title: "Contribution Deleted",
         description: `${result.sectionsReverted} section(s) reverted, ${result.versionsDeleted} version(s) removed.`,
@@ -236,13 +250,18 @@ export default function SuperAdminDashboard() {
     }
   };
 
+  // Use end-of-selected-day (23:59:59.999) so the chosen date is fully inclusive
+  function toEndOfDay(dateStr: string): string {
+    return new Date(`${dateStr}T23:59:59.999`).toISOString();
+  }
+
   const handleRegressPreview = async () => {
     if (!regressDate) {
       toast({ title: "Date Required", description: "Please select a target date.", variant: "destructive" });
       return;
     }
     try {
-      const preview = await regressPreview.mutateAsync(new Date(regressDate).toISOString());
+      const preview = await regressPreview.mutateAsync(toEndOfDay(regressDate));
       setRegressPreviewData(preview);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Preview failed";
@@ -253,7 +272,7 @@ export default function SuperAdminDashboard() {
   const handleRegressConfirm = async () => {
     if (!regressDate) return;
     try {
-      const result = await regress.mutateAsync(new Date(regressDate).toISOString());
+      const result = await regress.mutateAsync(toEndOfDay(regressDate));
       setRegressConfirmOpen(false);
       setRegressPreviewData(null);
       setRegressDate("");
@@ -462,10 +481,13 @@ export default function SuperAdminDashboard() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setDeleteConfirmId(upload.id)}
+                          onClick={() => handleDeleteButtonClick(upload.id)}
+                          disabled={uploadImpact.isPending && deleteConfirmId === upload.id}
                           className="shrink-0 text-foreground/40 hover:text-destructive hover:bg-destructive/10 border border-transparent hover:border-destructive/20 rounded-xl h-9 px-3 transition-all"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          {uploadImpact.isPending && deleteConfirmId === upload.id
+                            ? <div className="w-3.5 h-3.5 border border-current border-t-transparent rounded-full animate-spin" />
+                            : <Trash2 className="w-3.5 h-3.5" />}
                         </Button>
                       </div>
                     </div>
@@ -751,25 +773,45 @@ export default function SuperAdminDashboard() {
       </main>
 
       {/* DELETE CONTRIBUTION DIALOG */}
-      <Dialog open={deleteConfirmId !== null} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null); }}>
+      <Dialog open={deleteConfirmId !== null} onOpenChange={(open) => { if (!open) { setDeleteConfirmId(null); setDeleteImpact(null); } }}>
         <DialogContent className="bg-card border-border/50 rounded-2xl max-w-md">
           <DialogHeader>
             <DialogTitle className="font-serif text-xl">Delete Contribution?</DialogTitle>
             <DialogDescription className="text-foreground/70 mt-2 leading-relaxed">
-              This will permanently remove contribution <span className="font-mono text-foreground/90">#{deleteTarget?.id}</span>
+              Permanently remove contribution <span className="font-mono text-foreground/90">#{deleteTarget?.id}</span>
               {deleteTarget && (
                 <> ({deleteTarget.contentType.replace(/_/g, " ")} by {deleteTarget.contributorName || "Anonymous"})</>
-              )}, roll back any sections it updated to their previous version, and clean up its wiki sources.
+              )}.
             </DialogDescription>
           </DialogHeader>
+
+          {/* Impact preview */}
+          {uploadImpact.isPending ? (
+            <div className="flex items-center gap-2 text-xs text-foreground/60 py-1">
+              <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+              Checking impact…
+            </div>
+          ) : deleteImpact ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg border border-border/40 bg-background/40 p-3 text-center">
+                <div className="text-2xl font-bold font-serif text-amber-400">{deleteImpact.sectionsReverted}</div>
+                <div className="text-[9px] font-display uppercase tracking-widest text-foreground/50 mt-0.5">Section(s) Reverted</div>
+              </div>
+              <div className="rounded-lg border border-border/40 bg-background/40 p-3 text-center">
+                <div className="text-2xl font-bold font-serif text-orange-400">{deleteImpact.versionsDeleted}</div>
+                <div className="text-[9px] font-display uppercase tracking-widest text-foreground/50 mt-0.5">Version(s) Removed</div>
+              </div>
+            </div>
+          ) : null}
+
           <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-foreground/70 flex gap-2">
             <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-            This action cannot be undone.
+            Sections updated by this contribution will roll back to their previous version. Wiki sources will be cleaned up. This cannot be undone.
           </div>
           <DialogFooter className="gap-3">
             <Button
               variant="ghost"
-              onClick={() => setDeleteConfirmId(null)}
+              onClick={() => { setDeleteConfirmId(null); setDeleteImpact(null); }}
               className="font-display uppercase tracking-widest text-[11px] text-foreground/60"
             >
               <X className="w-3.5 h-3.5 mr-1" />Cancel

@@ -89,6 +89,27 @@ export function useSubmitUpload() {
   });
 }
 
+export interface UploadImpact {
+  sectionsReverted: number;
+  versionsDeleted: number;
+}
+
+export function useUploadImpact() {
+  return useMutation({
+    mutationFn: async (uploadId: number): Promise<UploadImpact> => {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/uploads/${uploadId}/impact`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Impact check failed" }));
+        throw new Error(err.error || "Impact check failed");
+      }
+      return res.json() as Promise<UploadImpact>;
+    },
+  });
+}
+
 export interface DeleteUploadResult {
   deleted: boolean;
   sectionsReverted: number;
