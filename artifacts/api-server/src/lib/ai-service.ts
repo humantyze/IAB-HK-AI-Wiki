@@ -181,7 +181,7 @@ export async function assignImageToWikiPage(
         },
       ],
       response_format: { type: "json_object" },
-      max_tokens: 64,
+      max_completion_tokens: 64,
     });
 
     const raw = response.choices[0]?.message?.content ?? "{}";

@@ -120,8 +120,7 @@ router.post("/wiki/search", async (req, res) => {
         },
       ],
       response_format: { type: "json_object" },
-      temperature: 0,
-      max_tokens: 512,
+      max_completion_tokens: 512,
     });
 
     const rawContent = (response.choices[0]?.message?.content ?? "").trim();

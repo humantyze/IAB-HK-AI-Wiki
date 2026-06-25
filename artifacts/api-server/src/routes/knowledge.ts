@@ -114,8 +114,7 @@ router.post("/knowledge/search", async (req, res) => {
           content: `Question: ${trimmed}\n\nContext passages:\n${context}`,
         },
       ],
-      temperature: 0.2,
-      max_tokens: 600,
+      max_completion_tokens: 600,
     });
 
     const answer = (response.choices[0]?.message?.content ?? "").trim();
