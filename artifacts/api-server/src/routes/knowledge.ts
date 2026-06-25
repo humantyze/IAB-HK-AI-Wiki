@@ -98,7 +98,7 @@ router.post("/knowledge/search", async (req, res) => {
     const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 30_000 });
 
     const response = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-5-mini",
       messages: [
         {
           role: "system",

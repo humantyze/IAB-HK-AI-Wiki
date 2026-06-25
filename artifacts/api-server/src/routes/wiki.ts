@@ -95,7 +95,7 @@ router.post("/wiki/search", async (req, res) => {
       .join("\n");
 
     const response = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-5-mini",
       messages: [
         {
           role: "system",

@@ -176,7 +176,7 @@ JSON schema:
     const userPrompt = `Content type: ${contentType.replace(/_/g, " ")}\n\nContent:\n${rawText.substring(0, 4000)}`;
 
     const response = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-5-mini",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -254,7 +254,7 @@ JSON schema:
     const userPrompt = `Source: ${sourceLabel}\n\nText:\n${rawText}`;
 
     const response = await client.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-5",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -381,7 +381,7 @@ JSON schema:
     const userPrompt = `Already extracted wiki pages:\n${alreadyExtracted}\n\n---\n\nSection content:\n${sectionOverview}`;
 
     const response = await client.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-5",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
