@@ -1,1 +1,2 @@
-- [Production data mutations](production-data-mutations.md) — prod DB is read-only via executeSql; mutate prod ONLY through the deployed app's API after publishing.
+- [html-to-image font embedding quirk](html-to-image-fonts.md) — Google-Fonts CSSOM SecurityError on export is expected/non-blocking; await document.fonts.ready before toPng.
+- [Production data mutations](production-data-mutations.md) — how production seed/section deletions were handled and the safe path to mutate prod data.

@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
-import { BookOpen, ArrowLeft, Clock, FileText, ChevronRight, ExternalLink, Lock, AlignLeft } from "lucide-react";
+import { BookOpen, ArrowLeft, Clock, FileText, ChevronRight, ExternalLink, Lock, AlignLeft, Share2 } from "lucide-react";
+import { ShareInsightDialog } from "@/components/ShareInsightDialog";
+import { extractInsights, fallbackInsight, type Insight } from "@/lib/insights";
 
 interface WikiPageData {
   id: number;
@@ -216,9 +218,17 @@ export default function WikiPage({ params }: WikiPageProps) {
   const { page, related, isLoading, notFound } = useWikiPage(slug);
   const sectionSlugMap = useSectionSlugMap();
   const [activeHeading, setActiveHeading] = useState<string>("");
+  const [shareOpen, setShareOpen] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const headings = page ? extractHeadings(page.bodyMarkdown) : [];
+  const extracted = page ? extractInsights(page.bodyMarkdown) : [];
+  const insights: Insight[] = page
+    ? extracted.length
+      ? extracted
+      : [fallbackInsight(page.title, page.bodyMarkdown)]
+    : [];
+  const baseUrl = (import.meta.env.BASE_URL as string);
 
   useEffect(() => {
     if (!headings.length) return;
@@ -326,6 +336,19 @@ export default function WikiPage({ params }: WikiPageProps) {
                     <FileText size={11} />
                     {page.sources.length} {page.sources.length === 1 ? "source" : "sources"}
                   </span>
+                </>
+              )}
+              {insights.length > 0 && (
+                <>
+                  <span>·</span>
+                  <button
+                    onClick={() => setShareOpen(true)}
+                    className="flex items-center gap-1.5 font-semibold transition-colors hover:opacity-80"
+                    style={{ color: "#D63425" }}
+                  >
+                    <Share2 size={11} />
+                    Share insight
+                  </button>
                 </>
               )}
             </div>
@@ -476,6 +499,16 @@ export default function WikiPage({ params }: WikiPageProps) {
           </div>
         </aside>
       </div>
+
+      <ShareInsightDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        title={page.title}
+        tag={page.tags[0] ?? "Insight"}
+        source={page.sources[0]?.label}
+        insights={insights}
+        logoSrc={`${baseUrl}iabhk-logo.png`}
+      />
     </div>
   );
 }

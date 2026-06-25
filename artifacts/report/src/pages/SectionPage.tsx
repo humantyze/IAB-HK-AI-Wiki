@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
-import { BookOpen, ArrowLeft, Clock, ChevronRight, Lock, AlignLeft } from "lucide-react";
+import { BookOpen, ArrowLeft, Clock, ChevronRight, Lock, AlignLeft, Share2 } from "lucide-react";
+import { ShareInsightDialog } from "@/components/ShareInsightDialog";
+import { extractInsights, insightFromText, fallbackInsight, type Insight } from "@/lib/insights";
 
 interface SectionData {
   id: number;
@@ -214,9 +216,22 @@ export default function SectionPage({ params }: SectionPageProps) {
   const { slug } = params;
   const { section, isLoading, notFound } = useSectionPage(slug);
   const [activeHeading, setActiveHeading] = useState<string>("");
+  const [shareOpen, setShareOpen] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const headings = section ? extractHeadings(section.bodyMarkdown) : [];
+  const baseUrl = import.meta.env.BASE_URL as string;
+  const sectionInsights = section
+    ? [
+        ...section.keyInsights.map((t, i) => insightFromText(t, `ki-${i}`)),
+        ...extractInsights(section.bodyMarkdown),
+      ]
+    : [];
+  const insights: Insight[] = section
+    ? sectionInsights.length
+      ? sectionInsights
+      : [fallbackInsight(section.title, section.bodyMarkdown)]
+    : [];
 
   useEffect(() => {
     if (!headings.length) return;
@@ -310,6 +325,19 @@ export default function SectionPage({ params }: SectionPageProps) {
                 <Clock size={11} />
                 Updated {formatDate(section.lastUpdated)}
               </span>
+              {insights.length > 0 && (
+                <>
+                  <span>·</span>
+                  <button
+                    onClick={() => setShareOpen(true)}
+                    className="flex items-center gap-1.5 font-semibold transition-colors hover:opacity-80"
+                    style={{ color: "#D63425" }}
+                  >
+                    <Share2 size={11} />
+                    Share insight
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -381,6 +409,15 @@ export default function SectionPage({ params }: SectionPageProps) {
           </div>
         </aside>
       </div>
+
+      <ShareInsightDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        title={section.title}
+        tag="Report Section"
+        insights={insights}
+        logoSrc={`${baseUrl}iabhk-logo.png`}
+      />
     </div>
   );
 }
