@@ -22,9 +22,25 @@ build = [ "pnpm", "--filter", "@workspace/report", "run", "build" ]
 publicDir = "artifacts/report/dist/public"
 serve = "static"
 
+# Admin routes still need SPA routing (no prerendered files for these)
 [[services.production.rewrites]]
-from = "/*"
+from = "/admin"
 to = "/index.html"
+
+[[services.production.rewrites]]
+from = "/admin/*"
+to = "/index.html"
+
+[[services.production.rewrites]]
+from = "/super-admin"
+to = "/index.html"
+
+[[services.production.rewrites]]
+from = "/super-admin/*"
+to = "/index.html"
+
+# Public routes (/, /wiki/:slug, /sections/:slug) are served from prerendered
+# static files. Unknown slugs have no matching file and return HTTP 404.
 
 [services.env]
 PORT = "20970"

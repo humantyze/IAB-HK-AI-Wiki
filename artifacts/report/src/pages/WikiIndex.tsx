@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { Search, BookOpen, Clock, ChevronRight, Lock, Sparkles, LayoutGrid, Network } from "lucide-react";
 import WikiGraph from "../components/WikiGraph";
 import { useJsonLd } from "@/lib/useJsonLd";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 interface WikiPageSummary {
   id: number;
@@ -97,6 +98,13 @@ export default function WikiIndex() {
   const abortRef = useRef<AbortController | null>(null);
 
   const baseUrl = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+
+  usePageMeta({
+    title: "Knowledge Base",
+    description: "Explore the State of AI in HK Marketing knowledge base — the definitive resource on AI adoption, tools, regulations, and trends in Hong Kong's marketing industry.",
+    canonical: "/",
+    ogType: "website",
+  });
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);

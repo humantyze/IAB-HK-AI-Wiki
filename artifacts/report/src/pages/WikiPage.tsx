@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Link } from "wouter";
 import { BookOpen, ArrowLeft, Clock, FileText, ChevronRight, ExternalLink, Lock, AlignLeft, Share2 } from "lucide-react";
 import { ShareInsightDialog } from "@/components/ShareInsightDialog";
 import { extractInsights, fallbackInsight, type Insight } from "@/lib/insights";
 import { useJsonLd } from "@/lib/useJsonLd";
+import { usePageMeta, markdownToPlainText } from "@/hooks/usePageMeta";
 
 interface WikiPageData {
   id: number;
@@ -157,23 +158,6 @@ function renderMarkdown(markdown: string): React.ReactNode[] {
   return nodes;
 }
 
-function useSectionSlugMap(): Record<string, string> {
-  const [slugMap, setSlugMap] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    const baseUrl = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
-    fetch(`${baseUrl}/api/sections`, { credentials: "include" })
-      .then((r) => r.json())
-      .then((data: Array<{ title: string; slug: string }>) => {
-        const map: Record<string, string> = {};
-        data.forEach((s) => { map[s.title] = s.slug; });
-        setSlugMap(map);
-      })
-      .catch(() => {});
-  }, []);
-
-  return slugMap;
-}
 
 function useWikiPage(slug: string) {
   const [page, setPage] = useState<WikiPageData | null>(null);
@@ -218,7 +202,6 @@ interface WikiPageProps {
 export default function WikiPage({ params }: WikiPageProps) {
   const { slug } = params;
   const { page, related, isLoading, notFound } = useWikiPage(slug);
-  const sectionSlugMap = useSectionSlugMap();
   const [activeHeading, setActiveHeading] = useState<string>("");
   const [shareOpen, setShareOpen] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -286,6 +269,17 @@ export default function WikiPage({ params }: WikiPageProps) {
   } : null;
 
   useJsonLd(wikiPageSchema);
+
+  const pageMeta = useMemo(() => {
+    if (!page) return null;
+    return {
+      title: page.title,
+      description: markdownToPlainText(page.bodyMarkdown, 155),
+      canonical: `/wiki/${page.slug}`,
+    };
+  }, [page?.title, page?.slug, page?.bodyMarkdown]);
+
+  usePageMeta(pageMeta);
 
   useEffect(() => {
     if (!headings.length) return;
@@ -509,35 +503,20 @@ export default function WikiPage({ params }: WikiPageProps) {
               <div className="space-y-2">
                 {page.sources.map((src, i) => {
                   const isUrl = /^https?:\/\//i.test(src.ref);
-                  const isSectionRef = src.ref.startsWith("§ ");
-                  const sectionTitle = isSectionRef ? src.ref.slice(2).trim() : null;
-                  const sectionSlug = sectionTitle ? sectionSlugMap[sectionTitle] : null;
-                  const isLinkable = isUrl || (isSectionRef && sectionSlug);
 
-                  if (isLinkable) {
+                  if (isUrl) {
                     return (
                       <div key={i} className="p-2.5 rounded-lg border border-gray-100 bg-gray-50">
                         <p className="text-xs font-semibold text-gray-700 leading-snug mb-0.5">{src.label}</p>
-                        {isUrl ? (
-                          <a
-                            href={src.ref}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[10px] break-all hover:underline"
-                            style={{ color: "#D63425" }}
-                          >
-                            {src.ref}
-                          </a>
-                        ) : (
-                          <Link href={`/sections/${sectionSlug}`}>
-                            <span
-                              className="text-[10px] hover:underline cursor-pointer"
-                              style={{ color: "#D63425" }}
-                            >
-                              {sectionTitle}
-                            </span>
-                          </Link>
-                        )}
+                        <a
+                          href={src.ref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] break-all hover:underline"
+                          style={{ color: "#D63425" }}
+                        >
+                          {src.ref}
+                        </a>
                       </div>
                     );
                   }
