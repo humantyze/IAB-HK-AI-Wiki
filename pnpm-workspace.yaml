@@ -40,6 +40,9 @@ onlyBuiltDependencies:
   - esbuild
   - msw
   - unrs-resolver
+  - onnxruntime-node
+  - sharp
+  - protobufjs
 
 overrides:
   '@esbuild-kit/esm-loader': npm:tsx@^4.21.0

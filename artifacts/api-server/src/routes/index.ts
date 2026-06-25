@@ -5,6 +5,7 @@ import authRouter from "./auth";
 import superAuthRouter from "./super-auth";
 import uploadsRouter from "./uploads";
 import wikiRouter from "./wiki";
+import knowledgeRouter from "./knowledge";
 import regressRouter from "./regress";
 import backupRouter from "./backup";
 
@@ -16,6 +17,7 @@ router.use(authRouter);
 router.use(superAuthRouter);
 router.use(uploadsRouter);
 router.use(wikiRouter);
+router.use(knowledgeRouter);
 router.use(regressRouter);
 router.use(backupRouter);
 

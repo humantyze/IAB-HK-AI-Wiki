@@ -1,12 +1,16 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { db, wikiPagesTable, sectionsTable, sectionVersionsTable } from "@workspace/db";
 import { extractWikiPages, synthesizeWikiGaps } from "./ai-service";
+import { removeAllOfType } from "./knowledge-index";
 import { logger } from "./logger";
 
 export async function runWikiSeed(): Promise<{ pagesCreated: number; pagesUpdated: number }> {
   // Wipe all existing wiki pages so Build Wiki is always a clean rebuild
   // from the current section state — not an accumulation of prior content.
   await db.delete(wikiPagesTable);
+  // Drop stale wiki vectors too; extractWikiPages/synthesizeWikiGaps re-index
+  // each page as it is rebuilt.
+  await removeAllOfType("wiki");
   logger.info("Wiki pages cleared before rebuild");
 
   const rows = await db

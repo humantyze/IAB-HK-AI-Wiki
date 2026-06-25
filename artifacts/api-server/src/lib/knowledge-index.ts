@@ -1,0 +1,294 @@
+import { and, asc, eq, sql, cosineDistance, gt, desc, inArray } from "drizzle-orm";
+import {
+  db,
+  knowledgeChunksTable,
+  sectionsTable,
+  sectionVersionsTable,
+  wikiPagesTable,
+  uploadsTable,
+  type KnowledgeSourceType,
+  type InsertKnowledgeChunk,
+} from "@workspace/db";
+import { embed, embedBatch, chunkText } from "./embeddings";
+import { logger } from "./logger";
+
+interface IndexSourceInput {
+  sourceType: KnowledgeSourceType;
+  sourceId: number;
+  sourceSlug?: string | null;
+  title: string;
+  text: string;
+}
+
+// Stable numeric class per source type for Postgres two-key advisory locks.
+const ADVISORY_LOCK_CLASS: Record<KnowledgeSourceType, number> = {
+  section: 1,
+  wiki: 2,
+  upload: 3,
+};
+
+/**
+ * Chunk + embed a source's text into rows ready for insertion. Does NOT touch
+ * the database, so the (potentially slow) embedding work happens outside any
+ * transaction/lock.
+ */
+async function buildChunkRows(input: IndexSourceInput): Promise<InsertKnowledgeChunk[]> {
+  const { sourceType, sourceId, sourceSlug = null, title } = input;
+  const chunks = chunkText(input.text);
+  if (chunks.length === 0) return [];
+
+  // Prefix each chunk with the title so isolated chunks keep topical context.
+  const toEmbed = chunks.map((c) => (title ? `${title}\n\n${c}` : c));
+  const vectors = await embedBatch(toEmbed);
+
+  return chunks.map((content, i) => ({
+    sourceType,
+    sourceId,
+    sourceSlug,
+    title,
+    chunkIndex: i,
+    content,
+    embedding: vectors[i],
+  }));
+}
+
+/**
+ * Re-index a single source: removes its existing chunks, then chunks + embeds
+ * the new text and stores the vectors. Idempotent per source.
+ *
+ * The delete + insert run inside one transaction guarded by a per-source
+ * advisory lock, so concurrent index jobs for the SAME source (e.g. two uploads
+ * touching the same section, or a delete-reconcile racing a re-index) serialize
+ * instead of interleaving into duplicate/stale chunk sets. Embedding happens
+ * before the transaction so the lock is held only briefly.
+ */
+export async function indexSource(input: IndexSourceInput): Promise<number> {
+  const { sourceType, sourceId } = input;
+  const rows = await buildChunkRows(input);
+
+  await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(${ADVISORY_LOCK_CLASS[sourceType]}, ${sourceId})`,
+    );
+    await tx
+      .delete(knowledgeChunksTable)
+      .where(and(eq(knowledgeChunksTable.sourceType, sourceType), eq(knowledgeChunksTable.sourceId, sourceId)));
+    if (rows.length > 0) {
+      await tx.insert(knowledgeChunksTable).values(rows);
+    }
+  });
+
+  return rows.length;
+}
+
+export async function removeSource(sourceType: KnowledgeSourceType, sourceId: number): Promise<void> {
+  await db
+    .delete(knowledgeChunksTable)
+    .where(and(eq(knowledgeChunksTable.sourceType, sourceType), eq(knowledgeChunksTable.sourceId, sourceId)));
+}
+
+export async function removeAllOfType(sourceType: KnowledgeSourceType): Promise<void> {
+  await db.delete(knowledgeChunksTable).where(eq(knowledgeChunksTable.sourceType, sourceType));
+}
+
+/** Re-index a single wiki page by slug (removes it from the index if empty/missing). */
+export async function indexWikiPage(slug: string): Promise<void> {
+  const [page] = await db
+    .select({
+      id: wikiPagesTable.id,
+      slug: wikiPagesTable.slug,
+      title: wikiPagesTable.title,
+      bodyMarkdown: wikiPagesTable.bodyMarkdown,
+    })
+    .from(wikiPagesTable)
+    .where(eq(wikiPagesTable.slug, slug))
+    .limit(1);
+  if (!page || !page.bodyMarkdown.trim()) return;
+  await indexSource({
+    sourceType: "wiki",
+    sourceId: page.id,
+    sourceSlug: page.slug,
+    title: page.title,
+    text: page.bodyMarkdown,
+  });
+}
+
+/**
+ * Re-index a section from its current published version. If the section no
+ * longer exists or has no current body, its chunks are removed instead.
+ */
+export async function indexSectionById(sectionId: number): Promise<void> {
+  const [s] = await db
+    .select({
+      id: sectionsTable.id,
+      slug: sectionsTable.slug,
+      title: sectionsTable.title,
+      description: sectionsTable.description,
+      bodyMarkdown: sectionVersionsTable.bodyMarkdown,
+    })
+    .from(sectionsTable)
+    .leftJoin(sectionVersionsTable, eq(sectionsTable.currentVersionId, sectionVersionsTable.id))
+    .where(eq(sectionsTable.id, sectionId))
+    .limit(1);
+
+  if (!s) {
+    await removeSource("section", sectionId);
+    return;
+  }
+  const body = [s.description, s.bodyMarkdown ?? ""].filter(Boolean).join("\n\n");
+  if (!body.trim()) {
+    await removeSource("section", sectionId);
+    return;
+  }
+  await indexSource({ sourceType: "section", sourceId: s.id, sourceSlug: s.slug, title: s.title, text: body });
+}
+
+export interface RetrievedChunk {
+  sourceType: KnowledgeSourceType;
+  sourceId: number;
+  sourceSlug: string | null;
+  title: string;
+  content: string;
+  similarity: number;
+}
+
+export interface RetrieveOptions {
+  limit?: number;
+  sourceTypes?: KnowledgeSourceType[];
+  minSimilarity?: number;
+}
+
+/** Embed the query and return the most similar chunks across the corpus. */
+export async function retrieve(query: string, opts: RetrieveOptions = {}): Promise<RetrievedChunk[]> {
+  const { limit = 8, sourceTypes, minSimilarity = 0.15 } = opts;
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const queryVector = await embed(trimmed);
+  const similarity = sql<number>`1 - (${cosineDistance(knowledgeChunksTable.embedding, queryVector)})`;
+
+  const conditions = [gt(similarity, minSimilarity)];
+  if (sourceTypes && sourceTypes.length > 0) {
+    conditions.push(inArray(knowledgeChunksTable.sourceType, sourceTypes));
+  }
+
+  const rows = await db
+    .select({
+      sourceType: knowledgeChunksTable.sourceType,
+      sourceId: knowledgeChunksTable.sourceId,
+      sourceSlug: knowledgeChunksTable.sourceSlug,
+      title: knowledgeChunksTable.title,
+      content: knowledgeChunksTable.content,
+      similarity,
+    })
+    .from(knowledgeChunksTable)
+    .where(and(...conditions))
+    .orderBy(desc(similarity))
+    .limit(limit);
+
+  return rows.map((r) => ({
+    sourceType: r.sourceType as KnowledgeSourceType,
+    sourceId: r.sourceId,
+    sourceSlug: r.sourceSlug,
+    title: r.title,
+    content: r.content,
+    similarity: Number(r.similarity),
+  }));
+}
+
+/** Count indexed chunks (used to decide whether a backfill is needed). */
+export async function countChunks(): Promise<number> {
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(knowledgeChunksTable);
+  return count;
+}
+
+/**
+ * Rebuild the entire knowledge index from current sections, wiki pages and
+ * uploads. Returns per-source counts.
+ */
+export async function reindexAll(): Promise<{ sections: number; wiki: number; uploads: number; chunks: number }> {
+  // Build every chunk + embedding FIRST (slow work, no DB writes), then swap
+  // the whole corpus in a single transaction. Concurrent searches keep seeing
+  // the previous index until commit and never observe an empty/partial corpus.
+  const allRows: InsertKnowledgeChunk[] = [];
+
+  // Sections (current version body)
+  const sections = await db
+    .select({
+      id: sectionsTable.id,
+      slug: sectionsTable.slug,
+      title: sectionsTable.title,
+      description: sectionsTable.description,
+      bodyMarkdown: sectionVersionsTable.bodyMarkdown,
+    })
+    .from(sectionsTable)
+    .leftJoin(sectionVersionsTable, eq(sectionsTable.currentVersionId, sectionVersionsTable.id))
+    .orderBy(asc(sectionsTable.displayOrder));
+
+  let sectionCount = 0;
+  for (const s of sections) {
+    const body = [s.description, s.bodyMarkdown ?? ""].filter(Boolean).join("\n\n");
+    if (!body.trim()) continue;
+    const rows = await buildChunkRows({ sourceType: "section", sourceId: s.id, sourceSlug: s.slug, title: s.title, text: body });
+    if (rows.length === 0) continue;
+    allRows.push(...rows);
+    sectionCount++;
+  }
+
+  // Wiki pages
+  const wiki = await db
+    .select({ id: wikiPagesTable.id, slug: wikiPagesTable.slug, title: wikiPagesTable.title, bodyMarkdown: wikiPagesTable.bodyMarkdown })
+    .from(wikiPagesTable);
+  let wikiCount = 0;
+  for (const w of wiki) {
+    if (!w.bodyMarkdown.trim()) continue;
+    const rows = await buildChunkRows({ sourceType: "wiki", sourceId: w.id, sourceSlug: w.slug, title: w.title, text: w.bodyMarkdown });
+    if (rows.length === 0) continue;
+    allRows.push(...rows);
+    wikiCount++;
+  }
+
+  // Uploads (raw submitted text)
+  const uploads = await db
+    .select({ id: uploadsTable.id, contentType: uploadsTable.contentType, contributorName: uploadsTable.contributorName, rawText: uploadsTable.rawText })
+    .from(uploadsTable);
+  let uploadCount = 0;
+  for (const u of uploads) {
+    if (!u.rawText.trim()) continue;
+    const title = `${u.contributorName ? `${u.contributorName} — ` : ""}${u.contentType.replace(/_/g, " ")}`;
+    const rows = await buildChunkRows({ sourceType: "upload", sourceId: u.id, sourceSlug: null, title, text: u.rawText });
+    if (rows.length === 0) continue;
+    allRows.push(...rows);
+    uploadCount++;
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.delete(knowledgeChunksTable);
+    // Insert in batches to keep parameter counts well within Postgres limits.
+    const BATCH = 200;
+    for (let i = 0; i < allRows.length; i += BATCH) {
+      await tx.insert(knowledgeChunksTable).values(allRows.slice(i, i + BATCH));
+    }
+  });
+
+  const result = { sections: sectionCount, wiki: wikiCount, uploads: uploadCount, chunks: allRows.length };
+  logger.info(result, "Knowledge index rebuild complete");
+  return result;
+}
+
+/** Run a one-off backfill in the background if the index is empty. */
+export async function indexKnowledgeIfEmpty(): Promise<void> {
+  try {
+    const count = await countChunks();
+    if (count > 0) {
+      logger.info({ count }, "Knowledge index already populated — skipping backfill");
+      return;
+    }
+    logger.info("Knowledge index empty — starting backfill");
+    await reindexAll();
+  } catch (err) {
+    logger.error({ err }, "Knowledge backfill failed — retrieval will be degraded until reindex");
+  }
+}

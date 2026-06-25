@@ -1,5 +1,6 @@
 import type { ChartDataPoint } from "@workspace/db";
 import { db, wikiPagesTable } from "@workspace/db";
+import { indexWikiPage } from "./knowledge-index";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import { uploadSectionImage } from "./sectionImageStorage";
@@ -318,6 +319,12 @@ JSON schema:
         });
         created++;
       }
+
+      try {
+        await indexWikiPage(page.slug);
+      } catch (err) {
+        logger.warn({ err, slug: page.slug }, "Failed to index wiki page into knowledge store");
+      }
     }
 
     logger.info({ sourceLabel, created, updated }, "Wiki extraction complete");
@@ -407,6 +414,12 @@ JSON schema:
           sources: [{ label: "Synthesis — cross-section analysis", ref: "wiki-seed-synthesis" }],
         });
         created++;
+
+        try {
+          await indexWikiPage(page.slug);
+        } catch (err) {
+          logger.warn({ err, slug: page.slug }, "Failed to index synthesized wiki page into knowledge store");
+        }
       }
     }
 

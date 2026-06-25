@@ -7,6 +7,7 @@ import { z } from "zod";
 import { db, uploadsTable, sectionsTable, sectionVersionsTable, wikiPagesTable } from "@workspace/db";
 import { requireAuth, requireSuperAuth } from "../middlewares/auth";
 import { processUpload, analyzeSections, extractWikiPages } from "../lib/ai-service";
+import { indexSource, indexSectionById, indexWikiPage, removeSource } from "../lib/knowledge-index";
 import { extractTextOnly } from "../lib/pdf-extractor";
 import { logger } from "../lib/logger";
 
@@ -213,6 +214,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
       data.contentType,
     );
 
+    const indexedSectionIds: number[] = [];
     for (const result of results) {
       const [section] = await db
         .select()
@@ -237,6 +239,8 @@ router.post("/uploads", requireAuth, (req, res, next) => {
           .update(sectionsTable)
           .set({ currentVersionId: newVersion.id })
           .where(eq(sectionsTable.id, section.id));
+
+        indexedSectionIds.push(section.id);
       }
     }
 
@@ -269,6 +273,27 @@ router.post("/uploads", requireAuth, (req, res, next) => {
         });
       });
     }
+
+    // Non-blocking knowledge indexing — embed updated sections + the raw upload
+    setImmediate(() => {
+      void (async () => {
+        try {
+          for (const sectionId of indexedSectionIds) {
+            await indexSectionById(sectionId);
+          }
+          const uploadTitle = `${data.contributorName ? `${data.contributorName} — ` : ""}${data.contentType.replace(/_/g, " ")}`;
+          await indexSource({
+            sourceType: "upload",
+            sourceId: updated.id,
+            sourceSlug: null,
+            title: uploadTitle,
+            text: effectiveText,
+          });
+        } catch (err) {
+          logger.error({ err, uploadId: updated.id }, "Non-blocking knowledge indexing failed");
+        }
+      })();
+    });
   } catch (err) {
     logger.error({ err, uploadId: uploadRecord.id }, "Failed to process upload");
     await db
@@ -407,6 +432,8 @@ router.delete("/uploads/:id", requireSuperAuth, async (req, res) => {
   }
 
   const allWikiPages = await db.select().from(wikiPagesTable);
+  const deletedWikiPageIds: number[] = [];
+  const updatedWikiSlugs: string[] = [];
   for (const page of allWikiPages) {
     const sources = (page.sources as Array<{ label: string; ref: string }>) ?? [];
     const filtered = sources.filter((s) => {
@@ -417,13 +444,35 @@ router.delete("/uploads/:id", requireSuperAuth, async (req, res) => {
     if (filtered.length !== sources.length) {
       if (filtered.length === 0) {
         await db.delete(wikiPagesTable).where(eq(wikiPagesTable.id, page.id));
+        deletedWikiPageIds.push(page.id);
       } else {
         await db.update(wikiPagesTable).set({ sources: filtered }).where(eq(wikiPagesTable.id, page.id));
+        updatedWikiSlugs.push(page.slug);
       }
     }
   }
 
   await db.delete(uploadsTable).where(eq(uploadsTable.id, uploadId));
+
+  // Non-blocking: reconcile the knowledge index with the deletion.
+  setImmediate(() => {
+    void (async () => {
+      try {
+        await removeSource("upload", uploadId);
+        for (const id of deletedWikiPageIds) {
+          await removeSource("wiki", id);
+        }
+        for (const sectionId of affectedSectionIds) {
+          await indexSectionById(sectionId);
+        }
+        for (const slug of updatedWikiSlugs) {
+          await indexWikiPage(slug);
+        }
+      } catch (err) {
+        logger.error({ err, uploadId }, "Knowledge index reconciliation after upload delete failed");
+      }
+    })();
+  });
 
   logger.info({ uploadId, sectionsReverted: affectedSectionIds.length, versionsDeleted: affectedVersions.length }, "Upload deleted and sections reverted");
 

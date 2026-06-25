@@ -2,6 +2,7 @@ import cron from "node-cron";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { seedWikiIfEmpty } from "./lib/wiki-seed";
+import { indexKnowledgeIfEmpty } from "./lib/knowledge-index";
 import { runBackup } from "./lib/backup";
 
 const rawPort = process.env["PORT"];
@@ -34,6 +35,14 @@ async function main() {
   seedWikiIfEmpty().catch((e) => {
     logger.error({ err: e }, "Unexpected error during wiki auto-seed");
   });
+
+  // Backfill the semantic knowledge index in the background if it is empty.
+  // Runs after wiki auto-seed kicks off so a fresh DB indexes seeded pages too.
+  setTimeout(() => {
+    indexKnowledgeIfEmpty().catch((e) => {
+      logger.error({ err: e }, "Unexpected error during knowledge backfill");
+    });
+  }, 30_000);
 
   cron.schedule(
     "0 2 * * *",

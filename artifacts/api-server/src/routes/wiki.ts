@@ -3,6 +3,7 @@ import { eq, asc } from "drizzle-orm";
 import { db, wikiPagesTable } from "@workspace/db";
 import { requireSuperAuth } from "../middlewares/auth";
 import { runWikiSeed } from "../lib/wiki-seed";
+import { retrieve } from "../lib/knowledge-index";
 import { logger } from "../lib/logger";
 
 function formatPageSummary(p: {
@@ -64,11 +65,32 @@ router.post("/wiki/search", async (req, res) => {
     return;
   }
 
+  // Use vector retrieval to narrow the candidate set the LLM ranks over. This
+  // surfaces semantically relevant pages even when keywords don't match, and
+  // keeps the prompt small. Falls back to all pages if retrieval finds nothing.
+  let candidatePages = allPages;
+  try {
+    const hits = await retrieve(query.trim(), { sourceTypes: ["wiki"], limit: 24 });
+    const orderedSlugs: string[] = [];
+    const seen = new Set<string>();
+    for (const h of hits) {
+      if (h.sourceSlug && !seen.has(h.sourceSlug)) {
+        seen.add(h.sourceSlug);
+        orderedSlugs.push(h.sourceSlug);
+      }
+    }
+    const bySlug = new Map(allPages.map((p) => [p.slug, p]));
+    const vectorPages = orderedSlugs.flatMap((slug) => { const p = bySlug.get(slug); return p ? [p] : []; });
+    if (vectorPages.length > 0) candidatePages = vectorPages;
+  } catch (err) {
+    logger.warn({ err }, "Wiki vector pre-filter failed — ranking over all pages");
+  }
+
   try {
     const { default: OpenAI } = await import("openai");
     const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 20_000 });
 
-    const pageList = allPages
+    const pageList = candidatePages
       .map((p, i) => `${i + 1}. slug:"${p.slug}" | title:"${p.title}" | tags:[${p.tags.join(", ")}] | excerpt:"${p.excerpt.slice(0, 120)}"`)
       .join("\n");
 
