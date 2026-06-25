@@ -397,11 +397,13 @@ export default function WikiIndex() {
         <div className="border-t border-gray-100 pt-4 pb-2 flex items-center justify-between">
           {isLoading ? (
             <span className="text-xs text-gray-400">Loading…</span>
-          ) : (
+          ) : filtered.length > 0 ? (
             <span className="text-xs text-gray-400 font-medium">
               {filtered.length} {filtered.length === 1 ? "page" : "pages"}
               {activeTag !== "All" ? ` · ${activeTag}` : ""}
             </span>
+          ) : (
+            <span />
           )}
           <div className="flex items-center gap-3">
             {usingAI && !isSearching && (
