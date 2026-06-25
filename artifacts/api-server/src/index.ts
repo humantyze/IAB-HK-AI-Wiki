@@ -3,6 +3,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { seedWikiIfEmpty } from "./lib/wiki-seed";
 import { indexKnowledgeIfEmpty, cleanupLegacyChunks } from "./lib/knowledge-index";
+import { embed } from "./lib/embeddings";
 import { runBackup } from "./lib/backup";
 
 const rawPort = process.env["PORT"];
@@ -39,6 +40,14 @@ async function main() {
 
   seedWikiIfEmpty().catch((e) => {
     logger.error({ err: e }, "Unexpected error during wiki auto-seed");
+  });
+
+  // Pre-warm the local embedding model so the first user search doesn't
+  // trigger a slow model-load that times out or returns empty results.
+  embed("knowledge base pre-warm").then(() => {
+    logger.info("Embedding model pre-warmed");
+  }).catch((e) => {
+    logger.warn({ err: e }, "Embedding model pre-warm failed — first search may be slow");
   });
 
   // Backfill the semantic knowledge index in the background if it is empty.

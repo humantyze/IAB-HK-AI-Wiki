@@ -125,7 +125,7 @@ export interface RetrieveOptions {
 
 /** Embed the query and return the most similar chunks across the corpus. */
 export async function retrieve(query: string, opts: RetrieveOptions = {}): Promise<RetrievedChunk[]> {
-  const { limit = 8, sourceTypes, minSimilarity = 0.15 } = opts;
+  const { limit = 8, sourceTypes, minSimilarity = 0.10 } = opts;
   const trimmed = query.trim();
   if (!trimmed) return [];
 
