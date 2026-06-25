@@ -454,10 +454,23 @@ export default function WikiIndex() {
       <footer className="border-t border-gray-100 py-8 px-6 bg-[#fafafa]">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <span className="text-xs text-gray-400 font-medium uppercase tracking-widest">IAB HK · State of AI in Marketing</span>
-          <Link href="/admin" className="text-xs text-gray-400 hover:text-[#D63425] transition-colors uppercase tracking-widest font-medium flex items-center gap-1.5">
-            <Lock size={10} />
-            Contributor Access
-          </Link>
+          <div className="flex items-center gap-5">
+            <span className="text-xs text-gray-400">
+              Created by{" "}
+              <a
+                href="https://humantyze.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold hover:text-[#D63425] transition-colors"
+              >
+                Humantyze
+              </a>
+            </span>
+            <Link href="/admin" className="text-xs text-gray-400 hover:text-[#D63425] transition-colors uppercase tracking-widest font-medium flex items-center gap-1.5">
+              <Lock size={10} />
+              Contributor Access
+            </Link>
+          </div>
         </div>
       </footer>
     </div>
