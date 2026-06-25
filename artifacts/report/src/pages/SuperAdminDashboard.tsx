@@ -5,7 +5,7 @@ import { Link, useLocation } from "wouter";
 import {
   LogOut, History, Settings,
   CheckCircle2, BookOpen, RefreshCw, AlertCircle,
-  Trash2, RotateCcw, Calendar, X, DatabaseBackup, CloudUpload,
+  Trash2, RotateCcw, Calendar, X, DatabaseBackup, CloudUpload, ImagePlay,
 } from "lucide-react";
 
 import { useSuperAuth } from "@/hooks/use-super-auth";
@@ -36,6 +36,9 @@ export default function SuperAdminDashboard() {
   const [wikiPageCount, setWikiPageCount] = useState<number | null>(null);
   const [wikiSeeding, setWikiSeeding] = useState(false);
   const [wikiSeedResult, setWikiSeedResult] = useState<{ pagesCreated: number; pagesUpdated: number } | null>(null);
+
+  const [imageBackfilling, setImageBackfilling] = useState(false);
+  const [imageBackfillResult, setImageBackfillResult] = useState<{ pagesUpdated: number; uploadsProcessed: number; message?: string } | null>(null);
 
   interface BackupEntry {
     id: number;
@@ -98,6 +101,33 @@ export default function SuperAdminDashboard() {
       toast({ title: "Backup Failed", description: message, variant: "destructive" });
     } finally {
       setBackupRunning(false);
+    }
+  };
+
+  const handleImageBackfill = async () => {
+    setImageBackfilling(true);
+    setImageBackfillResult(null);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/wiki/backfill-images`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json() as { pagesUpdated: number; uploadsProcessed: number; message?: string };
+        setImageBackfillResult(data);
+        toast({
+          title: "Image Backfill Complete",
+          description: data.message ?? `${data.pagesUpdated} page(s) received images from ${data.uploadsProcessed} PDF(s).`,
+        });
+      } else {
+        toast({ title: "Backfill Failed", description: "Image backfill encountered an error.", variant: "destructive" });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Request failed";
+      toast({ title: "Backfill Failed", description: message, variant: "destructive" });
+    } finally {
+      setImageBackfilling(false);
     }
   };
 
@@ -329,6 +359,47 @@ export default function SuperAdminDashboard() {
                     {wikiSeeding
                       ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Rebuilding…</>
                       : <><RefreshCw className="w-3.5 h-3.5 mr-2" />Rebuild Wiki</>}
+                  </Button>
+                </div>
+
+                <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-6">
+                  <h3 className="font-display text-sm tracking-widest uppercase text-violet-400 mb-2">Backfill Images from PDFs</h3>
+                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                    Retroactively extract images from archived PDFs and assign the most relevant image to each wiki page that currently has none. Already-imaged pages are skipped. This may take a few minutes.
+                  </p>
+                  {imageBackfillResult && (
+                    <div className="mb-4 space-y-1">
+                      {imageBackfillResult.message ? (
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-green-400" />
+                          <span className="text-sm text-foreground/80">{imageBackfillResult.message}</span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-violet-400" />
+                            <span className="text-sm text-foreground/80">
+                              <strong>{imageBackfillResult.pagesUpdated}</strong> page(s) received images
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <ImagePlay className="w-4 h-4 text-violet-400/60" />
+                            <span className="text-sm text-foreground/80">
+                              from <strong>{imageBackfillResult.uploadsProcessed}</strong> PDF(s) processed
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  <Button
+                    onClick={handleImageBackfill}
+                    disabled={imageBackfilling}
+                    className="font-display uppercase tracking-[0.15em] text-[11px] bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 border border-violet-500/30 rounded-xl h-11 px-6 transition-all"
+                  >
+                    {imageBackfilling
+                      ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Processing…</>
+                      : <><ImagePlay className="w-3.5 h-3.5 mr-2" />Backfill Images</>}
                   </Button>
                 </div>
               </CardContent>

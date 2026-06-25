@@ -1,10 +1,13 @@
 import { Router, type IRouter } from "express";
-import { eq, asc } from "drizzle-orm";
-import { db, wikiPagesTable } from "@workspace/db";
+import { eq, asc, isNull } from "drizzle-orm";
+import path from "path";
+import { db, wikiPagesTable, uploadsTable } from "@workspace/db";
 import { requireSuperAuth } from "../middlewares/auth";
 import { runWikiSeed } from "../lib/wiki-seed";
 import { retrieve } from "../lib/knowledge-index";
 import { generateDownloadUrl } from "../lib/gcsClient";
+import { extractImages } from "../lib/pdf-extractor";
+import { assignImageToWikiPage } from "../lib/ai-service";
 import { logger } from "../lib/logger";
 
 function formatPageSummary(p: {
@@ -218,6 +221,106 @@ router.post("/wiki/seed", requireSuperAuth, async (_req, res) => {
   } catch (err) {
     logger.error({ err }, "Wiki seed failed");
     res.status(500).json({ error: "Wiki seed failed" });
+  }
+});
+
+/**
+ * POST /api/wiki/backfill-images
+ * Super-admin: re-process archived PDFs to assign images to wiki pages that
+ * currently have no image. Already-imaged pages are skipped.
+ */
+router.post("/wiki/backfill-images", requireSuperAuth, async (_req, res) => {
+  const uploadsDir = path.join(process.cwd(), "uploads");
+
+  try {
+    // Fetch all uploads that have a stored PDF file path
+    const uploads = await db
+      .select({
+        id: uploadsTable.id,
+        filePath: uploadsTable.filePath,
+        contentType: uploadsTable.contentType,
+        contributorName: uploadsTable.contributorName,
+      })
+      .from(uploadsTable);
+
+    const pdfUploads = uploads.filter(
+      (u) => u.filePath && u.filePath.toLowerCase().endsWith(".pdf"),
+    );
+
+    // Fetch all wiki pages that have no image yet
+    const imagelessPages = await db
+      .select({
+        id: wikiPagesTable.id,
+        slug: wikiPagesTable.slug,
+        title: wikiPagesTable.title,
+        bodyMarkdown: wikiPagesTable.bodyMarkdown,
+        sources: wikiPagesTable.sources,
+      })
+      .from(wikiPagesTable)
+      .where(isNull(wikiPagesTable.imageUrl));
+
+    if (imagelessPages.length === 0) {
+      res.json({ pagesUpdated: 0, uploadsProcessed: 0, message: "All wiki pages already have images." });
+      return;
+    }
+
+    // Build a map: uploadId -> imageless wiki pages sourced from it
+    const pagesByUploadId = new Map<number, typeof imagelessPages>();
+    for (const page of imagelessPages) {
+      const sources = (page.sources as Array<{ label: string; ref: string }>) ?? [];
+      for (const source of sources) {
+        const match = source.ref.match(/^Upload #(\d+)/);
+        if (!match) continue;
+        const uploadId = Number(match[1]);
+        if (!pagesByUploadId.has(uploadId)) pagesByUploadId.set(uploadId, []);
+        pagesByUploadId.get(uploadId)!.push(page);
+      }
+    }
+
+    let pagesUpdated = 0;
+    let uploadsProcessed = 0;
+
+    for (const upload of pdfUploads) {
+      const targetPages = pagesByUploadId.get(upload.id);
+      if (!targetPages || targetPages.length === 0) continue;
+
+      const absPath = path.join(uploadsDir, upload.filePath!);
+      logger.info({ uploadId: upload.id, filePath: upload.filePath }, "Backfill: extracting images from PDF");
+
+      let candidateImageUrls: string[];
+      try {
+        candidateImageUrls = await extractImages(absPath);
+      } catch (err) {
+        logger.warn({ err, uploadId: upload.id }, "Backfill: image extraction failed — skipping upload");
+        continue;
+      }
+
+      if (candidateImageUrls.length === 0) {
+        logger.info({ uploadId: upload.id }, "Backfill: no images found in PDF — skipping");
+        continue;
+      }
+
+      uploadsProcessed++;
+
+      for (const page of targetPages) {
+        const chosen = await assignImageToWikiPage(page.title, page.bodyMarkdown, candidateImageUrls);
+        if (!chosen) continue;
+
+        await db
+          .update(wikiPagesTable)
+          .set({ imageUrl: chosen, updatedAt: new Date() })
+          .where(eq(wikiPagesTable.id, page.id));
+
+        pagesUpdated++;
+        logger.info({ pageSlug: page.slug, imageUrl: chosen }, "Backfill: assigned image to wiki page");
+      }
+    }
+
+    logger.info({ pagesUpdated, uploadsProcessed }, "Wiki image backfill complete");
+    res.json({ pagesUpdated, uploadsProcessed });
+  } catch (err) {
+    logger.error({ err }, "Wiki image backfill failed");
+    res.status(500).json({ error: "Wiki image backfill failed" });
   }
 });
 

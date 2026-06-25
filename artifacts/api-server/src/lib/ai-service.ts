@@ -144,6 +144,61 @@ ${jsonSchema}`;
   }
 }
 
+/**
+ * Ask the AI to choose the single best image path from a candidate list for a
+ * given wiki page. Returns the chosen path string or null if none fits.
+ */
+export async function assignImageToWikiPage(
+  pageTitle: string,
+  pageBody: string,
+  candidateImageUrls: string[],
+): Promise<string | null> {
+  if (candidateImageUrls.length === 0) return null;
+
+  const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  if (!baseUrl || !apiKey) return null;
+
+  try {
+    const { default: OpenAI } = await import("openai");
+    const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 30_000 });
+
+    const response = await client.chat.completions.create({
+      model: "gpt-5-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are an image selection assistant. Given a wiki page title, body, and a numbered list of image paths extracted from a PDF, pick the single most relevant image for the page. " +
+            'Return ONLY valid JSON in this exact shape: {"image_url": "chosen-path-or-null"}. ' +
+            "Use null if no image is a good match. Use the exact path string from the list.",
+        },
+        {
+          role: "user",
+          content:
+            `Wiki page title: ${pageTitle}\n\nBody (excerpt):\n${pageBody.slice(0, 800)}\n\n` +
+            `Candidate image paths:\n${candidateImageUrls.map((u, i) => `${i + 1}. ${u}`).join("\n")}\n\n` +
+            'Return {"image_url": "chosen-path-or-null"}',
+        },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0,
+      max_tokens: 64,
+    });
+
+    const raw = response.choices[0]?.message?.content ?? "{}";
+    const parsed = JSON.parse(raw) as { image_url?: string | null };
+    const chosen = parsed.image_url;
+    if (typeof chosen === "string" && candidateImageUrls.includes(chosen)) {
+      return chosen;
+    }
+    return null;
+  } catch (err) {
+    logger.warn({ err, pageTitle }, "assignImageToWikiPage AI call failed");
+    return null;
+  }
+}
+
 export async function synthesizeWikiGaps(
   sectionSummaries: Array<{ title: string; bodyMarkdown: string }>,
   existingPageTitles: string[],
