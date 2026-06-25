@@ -221,7 +221,7 @@ export async function describeDocumentVisuals(
       type: "image_url" as const,
       image_url: {
         url: `data:image/png;base64,${buf.toString("base64")}`,
-        detail: "low" as const,
+        detail: "high" as const,
       },
     }));
 
@@ -252,8 +252,13 @@ export async function describeDocumentVisuals(
       max_completion_tokens: 1500,
     });
 
-    const text = response.choices[0]?.message?.content?.trim() ?? "";
-    logger.info({ filename, pages: pageBuffers.length, chars: text.length }, "PDF visual analysis complete");
+    const raw = response.choices[0]?.message?.content;
+    const text = raw?.trim() ?? "";
+    if (!text) {
+      logger.warn({ filename, pages: pageBuffers.length, finishReason: response.choices[0]?.finish_reason }, "PDF visual analysis returned empty content");
+    } else {
+      logger.info({ filename, pages: pageBuffers.length, chars: text.length }, "PDF visual analysis complete");
+    }
     return text;
   } catch (err) {
     logger.warn({ err, filename }, "PDF visual analysis failed — continuing without visuals");
