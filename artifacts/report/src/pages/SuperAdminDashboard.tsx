@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 
 import { useSuperAuth } from "@/hooks/use-super-auth";
-import { useSections, useSectionVersions } from "@/hooks/use-sections";
+import { useSections, useSectionVersions, useDeleteSection } from "@/hooks/use-sections";
 import { useUploads, useDeleteUpload, useUploadImpact, useRegressPreview, useRegress, type UploadImpact } from "@/hooks/use-uploads";
 import { getListSectionsQueryKey } from "@workspace/api-client-react";
 import { useToast } from "@/hooks/use-toast";
@@ -57,9 +57,11 @@ export default function SuperAdminDashboard() {
   const uploadImpact = useUploadImpact();
   const regressPreview = useRegressPreview();
   const regress = useRegress();
+  const deleteSection = useDeleteSection();
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [deleteImpact, setDeleteImpact] = useState<UploadImpact | null>(null);
+  const [deleteSectionId, setDeleteSectionId] = useState<number | null>(null);
   const [regressDate, setRegressDate] = useState("");
   const [regressPreviewData, setRegressPreviewData] = useState<{
     sectionsAffected: number;
@@ -244,6 +246,22 @@ export default function SuperAdminDashboard() {
       await refetchUploads();
       await queryClient.invalidateQueries({ queryKey: getListSectionsQueryKey() });
       fetchWikiCount();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Delete failed";
+      toast({ title: "Delete Failed", description: message, variant: "destructive" });
+    }
+  };
+
+  const handleDeleteSection = async (sectionId: number) => {
+    try {
+      const result = await deleteSection.mutateAsync(sectionId);
+      setDeleteSectionId(null);
+      if (selectedSectionId === sectionId) setSelectedSectionId(null);
+      toast({
+        title: "Section Deleted",
+        description: `"${result.title}" removed (${result.versionsDeleted} version(s)). Rebuild the wiki to drop its pages.`,
+      });
+      await queryClient.invalidateQueries({ queryKey: getListSectionsQueryKey() });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Delete failed";
       toast({ title: "Delete Failed", description: message, variant: "destructive" });
@@ -648,32 +666,45 @@ export default function SuperAdminDashboard() {
                   <div className="space-y-1">
                     <h4 className="font-display tracking-[0.2em] text-[10px] uppercase text-foreground/70 mb-3">Select Section</h4>
                     {sections?.map((section) => (
-                      <button
+                      <div
                         key={section.id}
-                        onClick={() => setSelectedSectionId(section.id === selectedSectionId ? null : section.id)}
-                        className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-display tracking-wide transition-all border ${
+                        className={`group flex items-center gap-1 rounded-lg border transition-all ${
                           selectedSectionId === section.id
-                            ? "bg-accent/10 text-accent border-accent/30"
-                            : "text-foreground/60 border-transparent hover:bg-card/50 hover:text-foreground/80"
+                            ? "bg-accent/10 border-accent/30"
+                            : "border-transparent hover:bg-card/50"
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="truncate">{section.title}</span>
-                          <div className="flex items-center gap-1 shrink-0">
-                            {section.imageUrl ? (
-                              <CheckCircle2 className={`w-3 h-3 ${selectedSectionId === section.id ? "text-accent" : "text-green-500/70"}`} />
-                            ) : (
-                              <UploadCloud className={`w-3 h-3 ${selectedSectionId === section.id ? "text-accent/70" : "text-foreground/30"}`} />
-                            )}
-                            {imageProgress?.completedSlugs.has(section.slug) && (
-                              <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                            )}
-                            {imageProgress?.failedSlugs.has(section.slug) && (
-                              <div className="w-1.5 h-1.5 rounded-full bg-destructive" />
-                            )}
+                        <button
+                          onClick={() => setSelectedSectionId(section.id === selectedSectionId ? null : section.id)}
+                          className={`flex-1 min-w-0 text-left px-3 py-2.5 text-xs font-display tracking-wide ${
+                            selectedSectionId === section.id ? "text-accent" : "text-foreground/60 hover:text-foreground/80"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate">{section.title}</span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {section.imageUrl ? (
+                                <CheckCircle2 className={`w-3 h-3 ${selectedSectionId === section.id ? "text-accent" : "text-green-500/70"}`} />
+                              ) : (
+                                <UploadCloud className={`w-3 h-3 ${selectedSectionId === section.id ? "text-accent/70" : "text-foreground/30"}`} />
+                              )}
+                              {imageProgress?.completedSlugs.has(section.slug) && (
+                                <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                              )}
+                              {imageProgress?.failedSlugs.has(section.slug) && (
+                                <div className="w-1.5 h-1.5 rounded-full bg-destructive" />
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </button>
+                        </button>
+                        <button
+                          onClick={() => setDeleteSectionId(section.id)}
+                          title="Delete section"
+                          className="shrink-0 mr-1.5 p-1.5 rounded-md text-foreground/30 opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-all"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -771,6 +802,44 @@ export default function SuperAdminDashboard() {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* DELETE SECTION DIALOG */}
+      <Dialog open={deleteSectionId !== null} onOpenChange={(open) => { if (!open) setDeleteSectionId(null); }}>
+        <DialogContent className="bg-card border-border/50 rounded-2xl max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl">Delete Section?</DialogTitle>
+            <DialogDescription className="text-foreground/70 mt-2 leading-relaxed">
+              This permanently removes the section
+              {deleteSectionId !== null && (
+                <> <span className="font-medium text-foreground/90">"{sections?.find((s) => s.id === deleteSectionId)?.title}"</span></>
+              )}
+              {" "}and all of its content versions. It will no longer appear in the report.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-foreground/70 flex gap-2">
+            <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+            This cannot be undone. Rebuild the wiki afterwards so any pages sourced from this section are dropped.
+          </div>
+          <DialogFooter className="gap-3">
+            <Button
+              variant="ghost"
+              onClick={() => setDeleteSectionId(null)}
+              className="font-display uppercase tracking-widest text-[11px] text-foreground/60"
+            >
+              <X className="w-3.5 h-3.5 mr-1" />Cancel
+            </Button>
+            <Button
+              onClick={() => deleteSectionId !== null && handleDeleteSection(deleteSectionId)}
+              disabled={deleteSection.isPending}
+              className="font-display uppercase tracking-widest text-[11px] bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/30 rounded-xl"
+            >
+              {deleteSection.isPending
+                ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Deleting…</>
+                : <><Trash2 className="w-3.5 h-3.5 mr-2" />Delete Section</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* DELETE CONTRIBUTION DIALOG */}
       <Dialog open={deleteConfirmId !== null} onOpenChange={(open) => { if (!open) { setDeleteConfirmId(null); setDeleteImpact(null); } }}>

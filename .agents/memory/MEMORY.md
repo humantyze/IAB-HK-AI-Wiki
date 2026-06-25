@@ -1,0 +1,1 @@
+- [Production data mutations](production-data-mutations.md) — prod DB is read-only via executeSql; mutate prod ONLY through the deployed app's API after publishing.

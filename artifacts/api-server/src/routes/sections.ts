@@ -309,4 +309,53 @@ router.post("/admin/sections/:sectionId/upload-image", requireSuperAuth, (req, r
   res.json({ imageUrl });
 });
 
+router.delete("/admin/sections/:id", requireSuperAuth, async (req, res) => {
+  const sectionId = parseInt(String(req.params.id), 10);
+  if (isNaN(sectionId)) {
+    res.status(400).json({ error: "Invalid section ID" });
+    return;
+  }
+
+  const [section] = await db
+    .select()
+    .from(sectionsTable)
+    .where(eq(sectionsTable.id, sectionId))
+    .limit(1);
+
+  if (!section) {
+    res.status(404).json({ error: "Section not found" });
+    return;
+  }
+
+  // Atomically clear the current-version pointer, remove version rows
+  // (FK children of the section), then the section itself.
+  const deletedVersions = await db.transaction(async (tx) => {
+    await tx
+      .update(sectionsTable)
+      .set({ currentVersionId: null })
+      .where(eq(sectionsTable.id, sectionId));
+
+    const versions = await tx
+      .delete(sectionVersionsTable)
+      .where(eq(sectionVersionsTable.sectionId, sectionId))
+      .returning({ id: sectionVersionsTable.id });
+
+    await tx.delete(sectionsTable).where(eq(sectionsTable.id, sectionId));
+
+    return versions;
+  });
+
+  logger.info(
+    { sectionId, title: section.title, versionsDeleted: deletedVersions.length },
+    "Section deleted",
+  );
+
+  res.json({
+    deleted: true,
+    sectionId,
+    title: section.title,
+    versionsDeleted: deletedVersions.length,
+  });
+});
+
 export default router;
