@@ -197,6 +197,70 @@ export async function assignImageToWikiPage(
   }
 }
 
+/**
+ * Send rendered PDF page images to GPT Vision and return a plain-text
+ * description of every chart, table, diagram, statistic, and infographic
+ * found. Returns an empty string when no useful visual content is detected
+ * or when the AI call fails.
+ */
+export async function describeDocumentVisuals(
+  pageBuffers: Buffer[],
+  filename: string,
+): Promise<string> {
+  if (pageBuffers.length === 0) return "";
+
+  const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  if (!baseUrl || !apiKey) return "";
+
+  try {
+    const { default: OpenAI } = await import("openai");
+    const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 90_000 });
+
+    const imageContent = pageBuffers.map((buf) => ({
+      type: "image_url" as const,
+      image_url: {
+        url: `data:image/png;base64,${buf.toString("base64")}`,
+        detail: "low" as const,
+      },
+    }));
+
+    const response = await client.chat.completions.create({
+      model: "gpt-5",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a document analyst for a knowledge base about AI adoption in Hong Kong's marketing industry. " +
+            "Examine the provided PDF page images and extract every meaningful visual element: " +
+            "charts, graphs, tables, statistics callouts, frameworks, diagrams, and infographics. " +
+            "For each visual element describe: what type it is, the key data or information it conveys, " +
+            "and any important labels, axes, percentages, or numbers visible. " +
+            "Be specific and factual. Output plain text with no markdown.",
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `Analyze the visual content across these ${pageBuffers.length} page(s) from "${filename}":`,
+            },
+            ...imageContent,
+          ],
+        },
+      ],
+      max_completion_tokens: 1500,
+    });
+
+    const text = response.choices[0]?.message?.content?.trim() ?? "";
+    logger.info({ filename, pages: pageBuffers.length, chars: text.length }, "PDF visual analysis complete");
+    return text;
+  } catch (err) {
+    logger.warn({ err, filename }, "PDF visual analysis failed — continuing without visuals");
+    return "";
+  }
+}
+
 export async function synthesizeWikiGaps(
   sectionSummaries: Array<{ title: string; bodyMarkdown: string }>,
   existingPageTitles: string[],

@@ -6,9 +6,9 @@ import fs from "fs";
 import { z } from "zod";
 import { db, uploadsTable, wikiPagesTable } from "@workspace/db";
 import { requireAuth, requireSuperAuth } from "../middlewares/auth";
-import { extractWikiPages } from "../lib/ai-service";
+import { extractWikiPages, describeDocumentVisuals } from "../lib/ai-service";
 import { indexSource, removeSource, indexWikiPage } from "../lib/knowledge-index";
-import { extractTextOnly, extractImages } from "../lib/pdf-extractor";
+import { extractTextOnly, extractImages, renderPdfPages } from "../lib/pdf-extractor";
 import { logger } from "../lib/logger";
 
 const UploadFormSchema = z.object({
@@ -106,6 +106,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
   let effectiveText = data.rawText.trim();
   let candidateImageUrls: string[] = [];
   if (req.file?.mimetype === "application/pdf") {
+    // Step 1: Extract text
     try {
       logger.info({ filename: req.file.originalname }, "Extracting text from PDF");
       const pdfText = await extractTextOnly(req.file.path);
@@ -117,6 +118,22 @@ router.post("/uploads", requireAuth, (req, res, next) => {
       logger.error({ err, filename: req.file.originalname }, "PDF text extraction failed — using filename as fallback");
       if (!effectiveText) effectiveText = `Uploaded file: ${req.file.originalname}`;
     }
+
+    // Step 2: Render pages → GPT Vision → visual insights appended to text
+    try {
+      logger.info({ filename: req.file.originalname }, "Rendering PDF pages for visual analysis");
+      const pageImages = await renderPdfPages(req.file.path, 4);
+      if (pageImages.length > 0) {
+        const visualDesc = await describeDocumentVisuals(pageImages, req.file.originalname);
+        if (visualDesc) {
+          effectiveText = `${effectiveText}\n\n---\n\n## Visual Content (charts, tables, diagrams)\n\n${visualDesc}`;
+        }
+      }
+    } catch (err) {
+      logger.warn({ err, filename: req.file.originalname }, "PDF visual analysis failed — continuing without visuals");
+    }
+
+    // Step 3: Extract embedded raster images for wiki card thumbnails (best-effort)
     try {
       candidateImageUrls = await extractImages(req.file.path);
     } catch (err) {

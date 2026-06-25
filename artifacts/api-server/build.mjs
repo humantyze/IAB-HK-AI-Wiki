@@ -57,6 +57,7 @@ async function buildAll() {
       "onnxruntime-node",
       "@tensorflow/*",
       "@prisma/client",
+      "mupdf",
       "@mikro-orm/*",
       "@grpc/*",
       "@swc/*",

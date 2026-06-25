@@ -21,6 +21,32 @@ async function extractTextWithPdfParse(filePath: string): Promise<string> {
   return data.text.trim();
 }
 
+/**
+ * Render up to `maxPages` pages of a PDF as PNG image buffers using MuPDF WASM.
+ * Works in Cloud Run with no system dependencies.
+ * Returns an empty array if rendering fails for any reason.
+ */
+export async function renderPdfPages(filePath: string, maxPages = 4): Promise<Buffer[]> {
+  const { readFile } = await import("fs/promises");
+  const fileData = await readFile(filePath);
+  // Dynamic import keeps the WASM module out of the esbuild bundle
+  const mupdf = await import("mupdf");
+  const doc = mupdf.Document.openDocument(fileData, "application/pdf");
+  const count = Math.min(doc.countPages(), maxPages);
+  const results: Buffer[] = [];
+  for (let i = 0; i < count; i++) {
+    const page = doc.loadPage(i);
+    // 1.5× scale ≈ 108 DPI — legible for charts and tables
+    const pixmap = page.toPixmap(
+      [1.5, 0, 0, 1.5, 0, 0],
+      mupdf.ColorSpace.DeviceRGB,
+      false,
+    );
+    results.push(Buffer.from(pixmap.asPNG()));
+  }
+  return results;
+}
+
 export async function extractTextOnly(filePath: string): Promise<string> {
   try {
     const { stdout } = await execFileAsync(
