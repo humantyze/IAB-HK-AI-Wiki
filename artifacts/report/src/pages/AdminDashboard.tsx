@@ -147,6 +147,10 @@ export default function AdminDashboard() {
               View Knowledge Base
             </Link>
             <div className="hidden sm:block w-px h-6 bg-border" />
+            <Link href="/super-admin/login" className="hidden sm:block text-[11px] font-display uppercase tracking-widest text-foreground/40 hover:text-foreground/70 transition-colors">
+              Admin Panel
+            </Link>
+            <div className="hidden sm:block w-px h-6 bg-border" />
             <Button variant="ghost" size="sm" onClick={() => logout()} className="text-foreground/70 hover:text-destructive font-display uppercase tracking-widest text-[11px]">
               <LogOut className="w-3 h-3 sm:mr-2" /><span className="hidden sm:inline">Terminate Session</span>
             </Button>
