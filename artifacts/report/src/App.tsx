@@ -8,6 +8,8 @@ import WikiPage from "@/pages/WikiPage";
 import SectionPage from "@/pages/SectionPage";
 import AdminLogin from "@/pages/AdminLogin";
 import AdminDashboard from "@/pages/AdminDashboard";
+import SuperAdminLogin from "@/pages/SuperAdminLogin";
+import SuperAdminDashboard from "@/pages/SuperAdminDashboard";
 
 const queryClient = new QueryClient();
 
@@ -19,6 +21,8 @@ function Router() {
       <Route path="/sections/:slug" component={SectionPage} />
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin" component={AdminDashboard} />
+      <Route path="/super-admin/login" component={SuperAdminLogin} />
+      <Route path="/super-admin" component={SuperAdminDashboard} />
       <Route component={NotFound} />
     </Switch>
   );

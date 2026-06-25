@@ -6,7 +6,7 @@ import {
   GetSectionBySlugParams,
   ListSectionVersionsParams,
 } from "@workspace/api-zod";
-import { requireAuth } from "../middlewares/auth";
+import { requireSuperAuth } from "../middlewares/auth";
 import { generateSectionImage } from "../lib/ai-service";
 import { logger } from "../lib/logger";
 import {
@@ -125,7 +125,7 @@ router.get("/sections/:slug", async (req, res) => {
   });
 });
 
-router.get("/sections/:sectionId/versions", requireAuth, async (req, res) => {
+router.get("/sections/:sectionId/versions", requireSuperAuth, async (req, res) => {
   const { sectionId } = ListSectionVersionsParams.parse(req.params);
 
   const versions = await db
@@ -164,7 +164,7 @@ router.get("/section-images/:filename", async (req, res) => {
   result.stream.pipe(res);
 });
 
-router.post("/admin/generate-images", requireAuth, async (req, res) => {
+router.post("/admin/generate-images", requireSuperAuth, async (req, res) => {
   const promptExtra = typeof req.body?.promptExtra === "string" ? req.body.promptExtra.trim() : undefined;
 
   res.setHeader("Content-Type", "text/event-stream");
@@ -256,7 +256,7 @@ router.post("/admin/generate-images", requireAuth, async (req, res) => {
   res.end();
 });
 
-router.post("/admin/sections/:sectionId/upload-image", requireAuth, (req, res, next) => {
+router.post("/admin/sections/:sectionId/upload-image", requireSuperAuth, (req, res, next) => {
   imageUpload.single("image")(req, res, (err) => {
     if (err) {
       res.status(400).json({ error: err instanceof multer.MulterError ? `Upload error: ${err.message}` : (err.message || "Image upload failed") });

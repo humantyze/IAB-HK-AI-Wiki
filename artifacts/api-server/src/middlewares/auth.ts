@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
 
 const SESSION_COOKIE = "admin_session";
+const SUPER_SESSION_COOKIE = "super_admin_session";
 
 function getSecret(): string {
   const secret = process.env.SESSION_SECRET;
@@ -77,6 +78,42 @@ export function clearAuthCookie(req: Request, res: Response): void {
 
 export function isAuthenticated(req: Request): boolean {
   const encryptedToken = req.cookies?.[SESSION_COOKIE];
+  if (!encryptedToken) return false;
+  return decrypt(encryptedToken) !== false;
+}
+
+export function requireSuperAuth(req: Request, res: Response, next: NextFunction): void {
+  const encryptedToken = req.cookies?.[SUPER_SESSION_COOKIE];
+  if (!encryptedToken) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const token = decrypt(encryptedToken);
+  if (token === false) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  next();
+}
+
+export function setSuperAuthCookie(res: Response): void {
+  const token = generateSessionToken();
+  const encrypted = encrypt(token);
+  res.cookie(SUPER_SESSION_COOKIE, encrypted, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: "/",
+  });
+}
+
+export function clearSuperAuthCookie(req: Request, res: Response): void {
+  res.clearCookie(SUPER_SESSION_COOKIE, { path: "/" });
+}
+
+export function isSuperAuthenticated(req: Request): boolean {
+  const encryptedToken = req.cookies?.[SUPER_SESSION_COOKIE];
   if (!encryptedToken) return false;
   return decrypt(encryptedToken) !== false;
 }

@@ -5,7 +5,7 @@ import path from "path";
 import fs from "fs";
 import { z } from "zod";
 import { db, uploadsTable, sectionsTable, sectionVersionsTable } from "@workspace/db";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth, requireSuperAuth } from "../middlewares/auth";
 import { processUpload, analyzeSections, extractWikiPages } from "../lib/ai-service";
 import { extractTextOnly } from "../lib/pdf-extractor";
 import { logger } from "../lib/logger";
@@ -56,7 +56,7 @@ const upload = multer({
 
 const router: IRouter = Router();
 
-router.get("/uploads", requireAuth, async (_req, res) => {
+router.get("/uploads", requireSuperAuth, async (_req, res) => {
   const uploads = await db
     .select()
     .from(uploadsTable)

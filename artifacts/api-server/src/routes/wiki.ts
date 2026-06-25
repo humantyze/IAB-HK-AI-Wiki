@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, asc } from "drizzle-orm";
 import { db, wikiPagesTable } from "@workspace/db";
-import { requireAuth } from "../middlewares/auth";
+import { requireSuperAuth } from "../middlewares/auth";
 import { runWikiSeed } from "../lib/wiki-seed";
 import { logger } from "../lib/logger";
 
@@ -165,7 +165,7 @@ router.get("/wiki/:slug", async (req, res) => {
   });
 });
 
-router.post("/wiki/seed", requireAuth, async (_req, res) => {
+router.post("/wiki/seed", requireSuperAuth, async (_req, res) => {
   try {
     const { pagesCreated, pagesUpdated } = await runWikiSeed();
     res.json({ pagesCreated, pagesUpdated });
