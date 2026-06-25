@@ -2,7 +2,7 @@ import cron from "node-cron";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { seedWikiIfEmpty } from "./lib/wiki-seed";
-import { indexKnowledgeIfEmpty } from "./lib/knowledge-index";
+import { indexKnowledgeIfEmpty, cleanupLegacyChunks } from "./lib/knowledge-index";
 import { runBackup } from "./lib/backup";
 
 const rawPort = process.env["PORT"];
@@ -31,6 +31,11 @@ async function main() {
   });
 
   logger.info({ port }, "Server listening");
+
+  // Remove any knowledge chunks from removed source types (e.g. legacy "section" rows).
+  cleanupLegacyChunks().catch((e) => {
+    logger.error({ err: e }, "Unexpected error during legacy chunk cleanup");
+  });
 
   seedWikiIfEmpty().catch((e) => {
     logger.error({ err: e }, "Unexpected error during wiki auto-seed");

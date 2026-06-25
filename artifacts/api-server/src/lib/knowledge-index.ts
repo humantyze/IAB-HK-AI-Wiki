@@ -218,6 +218,26 @@ export async function reindexAll(): Promise<{ wiki: number; uploads: number; chu
   return result;
 }
 
+/**
+ * Delete any knowledge_chunks rows with a source_type that no longer exists
+ * in the schema (e.g. legacy "section" rows from before the sections feature
+ * was removed). Safe to call on every startup — a no-op when no stale rows
+ * exist.
+ */
+export async function cleanupLegacyChunks(): Promise<void> {
+  try {
+    const result = await db.execute(
+      sql`DELETE FROM knowledge_chunks WHERE source_type NOT IN ('wiki', 'upload')`,
+    );
+    const deleted = (result as { rowCount?: number }).rowCount ?? 0;
+    if (deleted > 0) {
+      logger.info({ deleted }, "Cleaned up legacy knowledge chunks (non-wiki/upload source types)");
+    }
+  } catch (err) {
+    logger.error({ err }, "cleanupLegacyChunks failed — stale chunks may remain");
+  }
+}
+
 /** Run a one-off backfill in the background if the index is empty. */
 export async function indexKnowledgeIfEmpty(): Promise<void> {
   try {
