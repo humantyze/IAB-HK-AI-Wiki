@@ -69,7 +69,7 @@ export interface BackupResult {
 export interface BackupSuccess {
   skipped: false;
   fileName: string;
-  driveFileId: string | null;
+  driveFileId: string;
 }
 
 export type RunBackupResult = BackupResult | BackupSuccess;
@@ -110,7 +110,7 @@ export async function runBackup(force = false): Promise<RunBackupResult> {
     `--file=${filePath}`,
   ]);
 
-  let driveFileId: string | null = null;
+  let driveFileId: string;
   try {
     const accessToken = await getDriveAccessToken();
     const auth = new google.auth.OAuth2();
@@ -129,10 +129,14 @@ export async function runBackup(force = false): Promise<RunBackupResult> {
       },
       fields: "id",
     });
-    driveFileId = upload.data.id ?? null;
+
+    const uploadedId = upload.data.id;
+    if (!uploadedId) throw new Error("Drive upload succeeded but returned no file ID");
+    driveFileId = uploadedId;
     logger.info({ driveFileId, fileName }, "Backup uploaded to Google Drive");
   } catch (err) {
-    logger.warn({ err }, "Drive upload failed — backup saved locally but not uploaded");
+    await fs.unlink(filePath).catch(() => {});
+    throw err;
   }
 
   await db.insert(backupLogTable).values({

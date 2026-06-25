@@ -880,17 +880,10 @@ export default function SuperAdminDashboard() {
                       <>
                         <div className="text-sm font-mono text-sky-400 truncate mb-1">{lastBackup.fileName}</div>
                         <div className="text-xs text-foreground/50">{format(new Date(lastBackup.createdAt), "dd MMM yyyy, HH:mm")}</div>
-                        {lastBackup.driveFileId ? (
-                          <div className="flex items-center gap-1 mt-2 text-xs text-green-400">
-                            <CheckCircle2 className="w-3 h-3" />
-                            Uploaded to Google Drive
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1 mt-2 text-xs text-amber-400">
-                            <AlertCircle className="w-3 h-3" />
-                            Drive upload pending
-                          </div>
-                        )}
+                        <div className="flex items-center gap-1 mt-2 text-xs text-green-400">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Uploaded to Google Drive
+                        </div>
                       </>
                     )}
                   </div>
