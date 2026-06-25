@@ -16,6 +16,14 @@ interface WikiPageSummary {
   imageUrl?: string | null;
 }
 
+interface KnowledgeCitation {
+  index: number;
+  sourceType: string;
+  sourceSlug: string | null;
+  title: string;
+  similarity: number;
+}
+
 const ALL_TAGS = ["All", "Organizations", "Statistics", "Tools & Platforms", "Regulatory", "Trends", "Case Studies", "Frameworks"];
 
 const TAG_COLORS: Record<string, string> = {
@@ -83,6 +91,37 @@ function parseSummaryWithLinks(summary: string, knownSlugs: Set<string>): React.
   return parts;
 }
 
+function renderAnswerWithCitations(answer: string, citations: KnowledgeCitation[]): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  const markerRegex = /(\[\d+\])+/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = markerRegex.exec(answer)) !== null) {
+    if (match.index > lastIndex) parts.push(answer.slice(lastIndex, match.index));
+    const nums = [...match[0].matchAll(/\[(\d+)\]/g)].map((m) => parseInt(m[1]));
+    parts.push(
+      <sup key={`cite-${match.index}`} className="ml-0.5">
+        {nums.map((n, i) => {
+          const cit = citations.find((c) => c.index === n);
+          return (
+            <a
+              key={n}
+              href={cit?.sourceSlug ? `#citation-${n}` : undefined}
+              className="text-[#D63425] font-bold hover:underline"
+              style={{ fontSize: "0.68em" }}
+            >
+              {i > 0 ? "," : ""}[{n}]
+            </a>
+          );
+        })}
+      </sup>
+    );
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < answer.length) parts.push(answer.slice(lastIndex));
+  return parts;
+}
+
 export default function WikiIndex() {
   const { data: pages, isLoading } = useWikiPages();
   const [query, setQuery] = useState("");
@@ -91,6 +130,8 @@ export default function WikiIndex() {
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [searchFallbackPages, setSearchFallbackPages] = useState<WikiPageSummary[] | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [ragAnswer, setRagAnswer] = useState<string | null>(null);
+  const [ragCitations, setRagCitations] = useState<KnowledgeCitation[] | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "graph">("grid");
   const [graphFilteredPages, setGraphFilteredPages] = useState<WikiPageSummary[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -115,6 +156,8 @@ export default function WikiIndex() {
     setAiResults(null);
     setAiSummary(null);
     setSearchFallbackPages(null);
+    setRagAnswer(null);
+    setRagCitations(null);
 
     if (query.trim().length < 3) {
       setIsSearching(false);
@@ -125,33 +168,55 @@ export default function WikiIndex() {
     debounceRef.current = setTimeout(async () => {
       const controller = new AbortController();
       abortRef.current = controller;
+      const fetchOpts = (body: object) => ({
+        method: "POST" as const,
+        headers: { "Content-Type": "application/json" },
+        credentials: "include" as const,
+        signal: controller.signal,
+        body: JSON.stringify(body),
+      });
       try {
-        const r = await fetch(`${baseUrl}/api/wiki/search`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          signal: controller.signal,
-          body: JSON.stringify({ query: query.trim() }),
-        });
-        if (!r.ok) throw new Error("Search failed");
-        const result = await r.json() as { ranked: boolean; pages: WikiPageSummary[]; summary?: string };
-        if (result.ranked && Array.isArray(result.pages)) {
-          setAiResults(result.pages);
-          setAiSummary(result.summary && result.summary.trim().length > 0 ? result.summary.trim() : null);
-          setSearchFallbackPages(null);
-        } else {
-          // Use server-provided unranked pages as the client-side filter base,
-          // so the fallback works even if the initial page-list load failed.
+        const [searchSettled, ragSettled] = await Promise.allSettled([
+          fetch(`${baseUrl}/api/wiki/search`, fetchOpts({ query: query.trim() })),
+          fetch(`${baseUrl}/api/knowledge/search`, fetchOpts({ query: query.trim() })),
+        ]);
+
+        // Wiki search — ranked page cards
+        if (searchSettled.status === "fulfilled" && searchSettled.value.ok) {
+          const result = await searchSettled.value.json() as { ranked: boolean; pages: WikiPageSummary[]; summary?: string };
+          if (result.ranked && Array.isArray(result.pages)) {
+            setAiResults(result.pages);
+            setAiSummary(result.summary && result.summary.trim().length > 0 ? result.summary.trim() : null);
+            setSearchFallbackPages(null);
+          } else {
+            setAiResults(null);
+            setAiSummary(null);
+            setSearchFallbackPages(Array.isArray(result.pages) ? result.pages : null);
+          }
+        } else if (searchSettled.status === "rejected" && (searchSettled.reason as Error).name !== "AbortError") {
           setAiResults(null);
           setAiSummary(null);
-          setSearchFallbackPages(Array.isArray(result.pages) ? result.pages : null);
+          setSearchFallbackPages(null);
+        }
+
+        // RAG knowledge answer — grounded answer with citations
+        if (ragSettled.status === "fulfilled" && ragSettled.value.ok) {
+          const rag = await ragSettled.value.json() as { answer: string | null; grounded: boolean; citations: KnowledgeCitation[] };
+          if (rag.answer && rag.answer.trim().length > 0) {
+            setRagAnswer(rag.answer.trim());
+            setRagCitations(rag.citations ?? []);
+          } else {
+            setRagAnswer(null);
+            setRagCitations(null);
+          }
         }
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
-          // Network/parse error — clear both so client filter uses initial load data
           setAiResults(null);
           setAiSummary(null);
           setSearchFallbackPages(null);
+          setRagAnswer(null);
+          setRagCitations(null);
         }
       } finally {
         if (abortRef.current === controller) {
@@ -351,21 +416,56 @@ export default function WikiIndex() {
           </div>
         </div>
       </div>
-      {/* AI summary panel */}
-      {usingAI && aiSummary && !isSearching && (
-        <div className="max-w-6xl mx-auto px-6 lg:px-8 mb-4">
-          <div className="rounded-xl border border-[#D63425]/15 bg-[#fff8f7] px-5 py-4 flex gap-3">
-            <Sparkles size={15} className="mt-0.5 shrink-0" style={{ color: "#D63425" }} />
-            <p className="text-sm text-gray-700 leading-relaxed">
-              {parseSummaryWithLinks(
-                aiSummary,
-                new Set([
-                  ...(pages ?? []).map((p) => p.slug),
-                  ...(aiResults ?? []).map((p) => p.slug),
-                  ...(searchFallbackPages ?? []).map((p) => p.slug),
-                ])
-              )}
-            </p>
+      {/* AI answer panel */}
+      {query.trim().length >= 3 && !isSearching && (ragAnswer || aiSummary) && (
+        <div className="max-w-6xl mx-auto px-6 lg:px-8 mb-6">
+          <div className="rounded-xl border border-[#D63425]/15 bg-[#fff8f7] overflow-hidden">
+            {/* Panel header */}
+            <div className="px-5 py-2.5 border-b border-[#D63425]/10 flex items-center gap-2 bg-[#D63425]/5">
+              <Sparkles size={11} style={{ color: "#D63425" }} />
+              <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#D63425" }}>AI Answer</span>
+            </div>
+
+            <div className="px-5 py-4">
+              {ragAnswer ? (
+                <>
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    {renderAnswerWithCitations(ragAnswer, ragCitations ?? [])}
+                  </p>
+                  {ragCitations && ragCitations.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-[#D63425]/10 flex flex-wrap gap-2">
+                      {ragCitations.map((c) => (
+                        <a
+                          key={c.index}
+                          id={`citation-${c.index}`}
+                          href={c.sourceSlug ? `${baseUrl}/wiki/${c.sourceSlug}` : undefined}
+                          className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                            c.sourceSlug
+                              ? "border-[#D63425]/20 bg-white hover:bg-[#D63425]/5 hover:border-[#D63425]/40 cursor-pointer"
+                              : "border-gray-200 bg-white cursor-default"
+                          }`}
+                          style={{ color: c.sourceSlug ? "#D63425" : "#9ca3af" }}
+                        >
+                          <span className="font-bold text-[10px] opacity-60">[{c.index}]</span>
+                          <span className="truncate max-w-[180px]">{c.title}</span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : aiSummary ? (
+                <p className="text-sm text-gray-700 leading-relaxed">
+                  {parseSummaryWithLinks(
+                    aiSummary,
+                    new Set([
+                      ...(pages ?? []).map((p) => p.slug),
+                      ...(aiResults ?? []).map((p) => p.slug),
+                      ...(searchFallbackPages ?? []).map((p) => p.slug),
+                    ])
+                  )}
+                </p>
+              ) : null}
+            </div>
           </div>
         </div>
       )}
@@ -390,7 +490,11 @@ export default function WikiIndex() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
+            {ragAnswer && !isSearching && (
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Related pages</p>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map((page) => {
               const imgSrc = page.imageUrl
                 ? `${baseUrl}/api/wiki-image?path=${encodeURIComponent(page.imageUrl)}`
@@ -447,6 +551,7 @@ export default function WikiIndex() {
                 </Link>
               );
             })}
+            </div>
           </div>
         )}
       </div>
