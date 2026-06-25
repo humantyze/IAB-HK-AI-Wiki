@@ -479,13 +479,27 @@ export default function SuperAdminDashboard() {
                             </Badge>
                           </div>
                           <p className="text-sm text-foreground/80 font-medium truncate">
-                            {upload.contributorName ?? "Anonymous"}
+                            {upload.uploaderName ?? "Anonymous"}
                           </p>
-                          <p className="text-xs text-foreground/50 mt-0.5">
-                            {format(new Date(upload.createdAt), "d MMM yyyy, HH:mm")}
-                          </p>
-                          {upload.rawText && (
-                            <p className="text-xs text-foreground/40 mt-1 line-clamp-2 font-mono">{upload.rawText.slice(0, 120)}…</p>
+                          <div className="flex items-center gap-3 flex-wrap mt-0.5">
+                            <p className="text-xs text-foreground/50">
+                              {new Date(upload.createdAt).toLocaleString("en-HK", {
+                                day: "numeric", month: "short", year: "numeric",
+                                hour: "2-digit", minute: "2-digit",
+                                timeZone: "Asia/Hong_Kong",
+                              })} HKT
+                            </p>
+                            {upload.uploaderEmail && (
+                              <span className="text-xs text-foreground/40">{upload.uploaderEmail}</span>
+                            )}
+                            {upload.contributorName && (
+                              <span className="text-xs text-foreground/40">Source: {upload.contributorName}</span>
+                            )}
+                          </div>
+                          {upload.filePath && (
+                            <p className="text-xs font-mono text-foreground/35 mt-1 truncate">
+                              {upload.filePath.replace(/^\d+-\d+-/, "")}
+                            </p>
                           )}
                         </div>
                         <button

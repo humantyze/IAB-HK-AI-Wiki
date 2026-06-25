@@ -6,7 +6,7 @@ import { Link, useLocation } from "wouter";
 import {
   LogOut, Upload as UploadIcon, Hand,
   Paperclip, X, Sparkles, FileText,
-  BookOpen, Check,
+  BookOpen, Check, PlusCircle,
 } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
@@ -39,6 +39,13 @@ export default function AdminDashboard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStep, setSubmitStep] = useState(0);
 
+  const [submitResult, setSubmitResult] = useState<{
+    fileName: string | null;
+    wikiCountBefore: number;
+  } | null>(null);
+  const [wikiCountAfter, setWikiCountAfter] = useState<number | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
+
   const SUBMIT_STEPS = [
     { label: "Processing content", detail: "Parsing and preparing submitted material…", Icon: FileText },
     { label: "Building wiki entries", detail: "Extracting knowledge pages from your content…", Icon: BookOpen },
@@ -68,6 +75,31 @@ export default function AdminDashboard() {
     }
   }, [authLoading, isAuthenticated, setLocation]);
 
+  useEffect(() => {
+    if (!isPolling || !submitResult) return;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 36;
+    const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+    const poll = async () => {
+      if (attempts >= MAX_ATTEMPTS) { setIsPolling(false); return; }
+      attempts++;
+      try {
+        const res = await fetch(`${baseUrl}/api/wiki`, { credentials: "include" });
+        if (res.ok) {
+          const data = await res.json();
+          const count = Array.isArray(data) ? data.length : 0;
+          if (count > submitResult.wikiCountBefore) {
+            setWikiCountAfter(count);
+            setIsPolling(false);
+          }
+        }
+      } catch { /* ignore */ }
+    };
+    const timer = setTimeout(poll, 15000);
+    const interval = setInterval(poll, 5000);
+    return () => { clearTimeout(timer); clearInterval(interval); };
+  }, [isPolling, submitResult]);
+
   if (authLoading) return (
     <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -85,6 +117,16 @@ export default function AdminDashboard() {
 
     setIsSubmitting(true);
     try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      let wikiCountBefore = 0;
+      try {
+        const wikiRes = await fetch(`${baseUrl}/api/wiki`, { credentials: "include" });
+        if (wikiRes.ok) {
+          const wikiData = await wikiRes.json();
+          wikiCountBefore = Array.isArray(wikiData) ? wikiData.length : 0;
+        }
+      } catch { /* non-critical */ }
+
       await submitUpload.mutateAsync({
         uploaderName: values.uploaderName,
         uploaderEmail: values.uploaderEmail,
@@ -93,10 +135,14 @@ export default function AdminDashboard() {
         contentType: values.contentType,
         file: selectedFile,
       });
-      toast({ title: "Content Submitted", description: "Your content has been received. Wiki pages are being generated in the background." });
+
+      const fileName = selectedFile?.name ?? null;
       form.reset({ uploaderName: values.uploaderName, uploaderEmail: values.uploaderEmail, rawText: "", contentType: values.contentType, contributorName: values.contributorName });
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      setSubmitResult({ fileName, wikiCountBefore });
+      setWikiCountAfter(null);
+      setIsPolling(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Submission failed";
       toast({ title: "Submission Failed", description: message, variant: "destructive" });
@@ -211,7 +257,64 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            {!isSubmitting && (
+            {!isSubmitting && submitResult && (
+              <div className="py-10 sm:py-16 flex flex-col items-center">
+                <div className="w-full max-w-md space-y-6">
+                  <div className="text-center">
+                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-green-500/10 border border-green-500/20 mb-5">
+                      <Check className="w-6 h-6 text-green-400" />
+                    </div>
+                    <h3 className="font-serif text-xl font-bold text-foreground/90 mb-1">Content Received</h3>
+                    {submitResult.fileName && (
+                      <p className="text-sm text-foreground/50 font-mono">{submitResult.fileName}</p>
+                    )}
+                  </div>
+
+                  <div className={`flex items-center gap-4 px-5 py-4 rounded-xl border transition-all duration-500 ${
+                    wikiCountAfter !== null
+                      ? "border-primary/30 bg-primary/5"
+                      : "border-primary/20 bg-primary/5 shadow-[0_0_20px_rgba(0,240,255,0.05)]"
+                  }`}>
+                    <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 border-primary/60 bg-primary/10">
+                      {wikiCountAfter !== null ? (
+                        <Check className="w-3.5 h-3.5 text-primary" />
+                      ) : (
+                        <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      {wikiCountAfter !== null ? (
+                        <>
+                          <p className="text-sm font-medium text-primary/80">Wiki pages generated</p>
+                          <p className="text-xs text-foreground/50 mt-0.5">
+                            {wikiCountAfter - submitResult.wikiCountBefore} new page{wikiCountAfter - submitResult.wikiCountBefore !== 1 ? "s" : ""} added to the knowledge base
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm font-medium text-foreground/80">AI is generating wiki pages…</p>
+                          <p className="text-xs text-foreground/50 mt-0.5">This typically takes 60–90 seconds. You can leave this page.</p>
+                        </>
+                      )}
+                    </div>
+                    {wikiCountAfter !== null && (
+                      <span className="text-lg font-bold text-primary shrink-0">
+                        +{wikiCountAfter - submitResult.wikiCountBefore}
+                      </span>
+                    )}
+                  </div>
+
+                  <Button
+                    onClick={() => { setSubmitResult(null); setWikiCountAfter(null); setIsPolling(false); }}
+                    className="w-full h-12 font-display uppercase tracking-[0.2em] text-xs bg-background/50 hover:bg-background/80 text-foreground/70 border border-border/50 rounded-xl transition-all"
+                  >
+                    <PlusCircle className="w-4 h-4 mr-2" />Submit Another
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {!isSubmitting && !submitResult && (
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-10">
 

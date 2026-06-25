@@ -366,6 +366,12 @@ components:
       properties:
         id:
           type: integer
+        uploaderName:
+          type: string
+          nullable: true
+        uploaderEmail:
+          type: string
+          nullable: true
         contributorName:
           type: string
           nullable: true

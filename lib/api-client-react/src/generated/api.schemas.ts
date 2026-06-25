@@ -64,6 +64,8 @@ export const UploadStatus = {
 
 export interface Upload {
   id: number;
+  uploaderName?: string | null;
+  uploaderEmail?: string | null;
   contributorName?: string | null;
   contentType: string;
   targetSections: string[];
