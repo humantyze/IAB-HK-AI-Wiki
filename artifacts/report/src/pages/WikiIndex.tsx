@@ -133,6 +133,8 @@ export default function WikiIndex() {
   const [isSearching, setIsSearching] = useState(false);
   const [ragAnswer, setRagAnswer] = useState<string | null>(null);
   const [ragCitations, setRagCitations] = useState<KnowledgeCitation[] | null>(null);
+  const [ragGrounded, setRagGrounded] = useState(false);
+  const [searchDone, setSearchDone] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "graph">("grid");
   const [graphFilteredPages, setGraphFilteredPages] = useState<WikiPageSummary[]>([]);
   const graphDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -155,6 +157,8 @@ export default function WikiIndex() {
     setSearchFallbackPages(null);
     setRagAnswer(null);
     setRagCitations(null);
+    setRagGrounded(false);
+    setSearchDone(false);
 
     if (activeQuery.trim().length < 3) {
       setIsSearching(false);
@@ -198,12 +202,13 @@ export default function WikiIndex() {
 
         if (ragSettled.status === "fulfilled" && ragSettled.value.ok) {
           const rag = await ragSettled.value.json() as { answer: string | null; grounded: boolean; citations: KnowledgeCitation[] };
-          if (rag.answer && rag.answer.trim().length > 0) {
+          setRagGrounded(rag.grounded);
+          if (rag.grounded && rag.answer && rag.answer.trim().length > 0) {
             setRagAnswer(rag.answer.trim());
             setRagCitations(rag.citations ?? []);
           } else {
             setRagAnswer(null);
-            setRagCitations(null);
+            setRagCitations(rag.citations ?? []);
           }
         }
       } catch (err) {
@@ -215,7 +220,10 @@ export default function WikiIndex() {
           setRagCitations(null);
         }
       } finally {
-        if (abortRef.current === controller) setIsSearching(false);
+        if (abortRef.current === controller) {
+          setIsSearching(false);
+          setSearchDone(true);
+        }
       }
     })();
 
@@ -425,14 +433,15 @@ export default function WikiIndex() {
           </div>
         </div>
       </div>
-      {/* AI answer panel */}
-      {activeQuery.trim().length >= 3 && !isSearching && (ragAnswer || aiSummary) && (
+      {/* AI answer panel — always shown once search completes */}
+      {activeQuery.trim().length >= 3 && searchDone && !isSearching && (
         <div className="max-w-6xl mx-auto px-6 lg:px-8 mb-6">
-          <div className="rounded-xl border border-[#D63425]/15 bg-[#fff8f7] overflow-hidden">
-            {/* Panel header */}
-            <div className="px-5 py-2.5 border-b border-[#D63425]/10 flex items-center gap-2 bg-[#D63425]/5">
-              <Sparkles size={11} style={{ color: "#D63425" }} />
-              <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "#D63425" }}>AI Answer</span>
+          <div className={`rounded-xl border overflow-hidden ${ragAnswer || aiSummary ? "border-[#D63425]/15 bg-[#fff8f7]" : "border-gray-100 bg-gray-50"}`}>
+            <div className={`px-5 py-2.5 border-b flex items-center gap-2 ${ragAnswer || aiSummary ? "border-[#D63425]/10 bg-[#D63425]/5" : "border-gray-100 bg-white"}`}>
+              <Sparkles size={11} style={{ color: ragAnswer || aiSummary ? "#D63425" : "#9ca3af" }} />
+              <span className={`text-[10px] font-bold uppercase tracking-widest ${ragAnswer || aiSummary ? "" : "text-gray-400"}`} style={ragAnswer || aiSummary ? { color: "#D63425" } : {}}>
+                AI Answer
+              </span>
             </div>
 
             <div className="px-5 py-4">
@@ -473,7 +482,22 @@ export default function WikiIndex() {
                     ])
                   )}
                 </p>
-              ) : null}
+              ) : (
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                    <BookOpen size={12} className="text-gray-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 leading-relaxed">
+                      The knowledge base doesn't have specific information about <span className="font-medium text-gray-700">"{activeQuery}"</span> yet.
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      New topics are added as contributors upload source material. You can browse all pages below, or{" "}
+                      <Link href="/admin" className="underline hover:text-gray-600 transition-colors">contribute a source</Link>.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
