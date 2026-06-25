@@ -4,16 +4,19 @@ import crypto from "crypto";
 const SESSION_COOKIE = "admin_session";
 const SUPER_SESSION_COOKIE = "super_admin_session";
 
+type Role = "contributor" | "super_admin";
+
+interface SessionPayload {
+  role: Role;
+  nonce: string;
+}
+
 function getSecret(): string {
   const secret = process.env.SESSION_SECRET;
   if (!secret) {
     throw new Error("SESSION_SECRET environment variable is required");
   }
   return secret;
-}
-
-function generateSessionToken(): string {
-  return crypto.randomBytes(32).toString("hex");
 }
 
 function encrypt(plaintext: string): string {
@@ -46,14 +49,41 @@ function decrypt(ciphertext: string): string | false {
   }
 }
 
+function createSessionCookie(role: Role): string {
+  const payload: SessionPayload = {
+    role,
+    nonce: crypto.randomBytes(32).toString("hex"),
+  };
+  return encrypt(JSON.stringify(payload));
+}
+
+function extractRole(cookieValue: string): Role | false {
+  const raw = decrypt(cookieValue);
+  if (raw === false) return false;
+  try {
+    const payload = JSON.parse(raw) as unknown;
+    if (
+      typeof payload === "object" &&
+      payload !== null &&
+      "role" in payload &&
+      typeof (payload as SessionPayload).role === "string"
+    ) {
+      return (payload as SessionPayload).role as Role;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   const encryptedToken = req.cookies?.[SESSION_COOKIE];
   if (!encryptedToken) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
-  const token = decrypt(encryptedToken);
-  if (token === false) {
+  const role = extractRole(encryptedToken);
+  if (role !== "contributor") {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
@@ -61,8 +91,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 }
 
 export function setAuthCookie(res: Response): void {
-  const token = generateSessionToken();
-  const encrypted = encrypt(token);
+  const encrypted = createSessionCookie("contributor");
   res.cookie(SESSION_COOKIE, encrypted, {
     httpOnly: true,
     sameSite: "lax",
@@ -79,7 +108,7 @@ export function clearAuthCookie(req: Request, res: Response): void {
 export function isAuthenticated(req: Request): boolean {
   const encryptedToken = req.cookies?.[SESSION_COOKIE];
   if (!encryptedToken) return false;
-  return decrypt(encryptedToken) !== false;
+  return extractRole(encryptedToken) === "contributor";
 }
 
 export function requireSuperAuth(req: Request, res: Response, next: NextFunction): void {
@@ -88,8 +117,8 @@ export function requireSuperAuth(req: Request, res: Response, next: NextFunction
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
-  const token = decrypt(encryptedToken);
-  if (token === false) {
+  const role = extractRole(encryptedToken);
+  if (role !== "super_admin") {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
@@ -97,8 +126,7 @@ export function requireSuperAuth(req: Request, res: Response, next: NextFunction
 }
 
 export function setSuperAuthCookie(res: Response): void {
-  const token = generateSessionToken();
-  const encrypted = encrypt(token);
+  const encrypted = createSessionCookie("super_admin");
   res.cookie(SUPER_SESSION_COOKIE, encrypted, {
     httpOnly: true,
     sameSite: "lax",
@@ -115,5 +143,5 @@ export function clearSuperAuthCookie(req: Request, res: Response): void {
 export function isSuperAuthenticated(req: Request): boolean {
   const encryptedToken = req.cookies?.[SUPER_SESSION_COOKIE];
   if (!encryptedToken) return false;
-  return decrypt(encryptedToken) !== false;
+  return extractRole(encryptedToken) === "super_admin";
 }
