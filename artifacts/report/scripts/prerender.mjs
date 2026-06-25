@@ -3,12 +3,11 @@
  *
  * After `vite build` has written dist/public/, this script:
  *  1. Connects to PostgreSQL (DATABASE_URL env var — required; build fails without it).
- *  2. Fetches every wiki page and report section.
+ *  2. Fetches every wiki page.
  *  3. Enhances dist/public/index.html (the home route) with the full link
  *     graph and a <noscript> index so crawlers discover all internal URLs.
- *  4. Writes a dedicated index.html for each slug under:
+ *  4. Writes a dedicated index.html for each wiki slug under:
  *       dist/public/wiki/<slug>/index.html
- *       dist/public/sections/<slug>/index.html
  *  Each file has route-specific <head> metadata (title, description,
  *  canonical, Open Graph, Twitter Card) and a <noscript> block with
  *  the full article body so non-JS crawlers see real content.
@@ -46,25 +45,6 @@ async function fetchAllWikiPages(client) {
     relatedSlugs: Array.isArray(r.related_slugs) ? r.related_slugs : [],
     sources: Array.isArray(r.sources) ? r.sources : [],
     updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : new Date().toISOString(),
-  }));
-}
-
-async function fetchAllSections(client) {
-  const { rows } = await client.query(
-    `SELECT s.id, s.slug, s.title, s.description, s.display_order,
-            sv.body_markdown, sv.key_insights, sv.created_at AS version_created_at
-     FROM sections s
-     LEFT JOIN section_versions sv ON s.current_version_id = sv.id
-     ORDER BY s.display_order ASC`
-  );
-  return rows.map((r) => ({
-    id: r.id,
-    slug: r.slug,
-    title: r.title,
-    description: r.description ?? "",
-    bodyMarkdown: r.body_markdown ?? "",
-    keyInsights: Array.isArray(r.key_insights) ? r.key_insights : [],
-    lastUpdated: r.version_created_at ? new Date(r.version_created_at).toISOString() : new Date().toISOString(),
   }));
 }
 
@@ -215,9 +195,9 @@ function patchHead(html, { title, description, canonical, ogImage }) {
 
 /**
  * Prerender the home route — inject the full knowledge-base link graph so
- * crawlers can discover every wiki page and section from the root URL.
+ * crawlers can discover every wiki page from the root URL.
  */
-function buildHomeHtml(baseHtml, wikiPages, sections) {
+function buildHomeHtml(baseHtml, wikiPages) {
   const wikiLinksHtml = wikiPages
     .map((p) => {
       const tagsStr = p.tags.length ? ` (${p.tags.map(escapeHtml).join(", ")})` : "";
@@ -226,23 +206,10 @@ function buildHomeHtml(baseHtml, wikiPages, sections) {
     })
     .join("\n");
 
-  const sectionLinksHtml = sections
-    .map((s) => {
-      const desc = s.description ? ` — ${escapeHtml(s.description.slice(0, 100))}` : "";
-      return `<li><a href="/sections/${escapeHtml(s.slug)}">${escapeHtml(s.title)}</a>${desc}</li>`;
-    })
-    .join("\n");
-
   const noscript = `<noscript>
   <main>
     <h1>${SITE_NAME}</h1>
     <p>The definitive knowledge base on AI adoption, tools, regulations, and trends in Hong Kong's marketing industry.</p>
-    <section>
-      <h2>Report Sections</h2>
-      <ul>
-        ${sectionLinksHtml}
-      </ul>
-    </section>
     <section>
       <h2>Knowledge Base (${wikiPages.length} pages)</h2>
       <ul>
@@ -291,33 +258,6 @@ function buildWikiHtml(baseHtml, page) {
   return html.replace("</body>", `${noscript}\n</body>`);
 }
 
-function buildSectionHtml(baseHtml, section) {
-  const description = section.description
-    ? section.description.slice(0, 160)
-    : (section.keyInsights[0] ?? markdownToPlainText(section.bodyMarkdown, 155));
-  const canonical = `/sections/${section.slug}`;
-
-  let html = patchHead(baseHtml, { title: section.title, description, canonical });
-
-  const insightsHtml = section.keyInsights.length
-    ? `<section><strong>Key Insights:</strong><ul>${section.keyInsights
-        .map((ins) => `<li>${escapeHtml(ins)}</li>`)
-        .join("")}</ul></section>`
-    : "";
-
-  const noscript = `<noscript>
-  <article>
-    <h1>${escapeHtml(section.title)}</h1>
-    ${section.description ? `<p>${escapeHtml(section.description)}</p>` : ""}
-    ${insightsHtml}
-    ${markdownToHtml(section.bodyMarkdown)}
-    <p><a href="/">← Back to Knowledge Base</a></p>
-  </article>
-</noscript>`;
-
-  return html.replace("</body>", `${noscript}\n</body>`);
-}
-
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -337,15 +277,12 @@ async function main() {
   await client.connect();
 
   try {
-    const [wikiPages, sections] = await Promise.all([
-      fetchAllWikiPages(client),
-      fetchAllSections(client),
-    ]);
+    const wikiPages = await fetchAllWikiPages(client);
 
-    console.log(`[prerender] Found ${wikiPages.length} wiki pages, ${sections.length} sections.`);
+    console.log(`[prerender] Found ${wikiPages.length} wiki pages.`);
 
     // ---- Home route --------------------------------------------------------
-    const homeHtml = buildHomeHtml(baseHtml, wikiPages, sections);
+    const homeHtml = buildHomeHtml(baseHtml, wikiPages);
     writeFileSync(join(distDir, "index.html"), homeHtml, "utf8");
     console.log("[prerender] Updated home index.html with full link graph.");
 
@@ -357,19 +294,10 @@ async function main() {
     }
     console.log(`[prerender] Wrote ${wikiPages.length} wiki HTML files.`);
 
-    // ---- Sections ----------------------------------------------------------
-    for (const section of sections) {
-      const dir = join(distDir, "sections", section.slug);
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, "index.html"), buildSectionHtml(baseHtml, section), "utf8");
-    }
-    console.log(`[prerender] Wrote ${sections.length} section HTML files.`);
-
     // ---- Validation: spot-check output exists ------------------------------
     const checks = [
       join(distDir, "index.html"),
       ...(wikiPages.length > 0 ? [join(distDir, "wiki", wikiPages[0].slug, "index.html")] : []),
-      ...(sections.length > 0 ? [join(distDir, "sections", sections[0].slug, "index.html")] : []),
     ];
     for (const f of checks) {
       readFileSync(f); // throws if missing
