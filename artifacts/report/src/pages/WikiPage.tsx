@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { BookOpen, ArrowLeft, Clock, FileText, ChevronRight, ExternalLink, Lock, AlignLeft, Share2 } from "lucide-react";
 import { ShareInsightDialog } from "@/components/ShareInsightDialog";
 import { extractInsights, fallbackInsight, type Insight } from "@/lib/insights";
+import { useJsonLd } from "@/lib/useJsonLd";
 
 interface WikiPageData {
   id: number;
@@ -230,6 +231,61 @@ export default function WikiPage({ params }: WikiPageProps) {
       : [fallbackInsight(page.title, page.bodyMarkdown)]
     : [];
   const baseUrl = (import.meta.env.BASE_URL as string);
+
+  const canonicalOrigin = typeof window !== "undefined" ? window.location.origin : "";
+  const baseNoSlash = baseUrl.replace(/\/$/, "");
+  const wikiPageSchema = page ? {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Article",
+        "@id": `${canonicalOrigin}${baseNoSlash}/wiki/${page.slug}`,
+        "url": `${canonicalOrigin}${baseNoSlash}/wiki/${page.slug}`,
+        "headline": page.title,
+        "dateModified": page.updatedAt,
+        "datePublished": page.createdAt,
+        ...(page.tags.length > 0 ? { "keywords": page.tags.join(", ") } : {}),
+        "publisher": {
+          "@type": "Organization",
+          "name": "IAB Hong Kong",
+          "url": "https://iabhongkong.com/",
+        },
+        "isPartOf": {
+          "@type": "CollectionPage",
+          "@id": `${canonicalOrigin}${baseNoSlash}/`,
+          "url": `${canonicalOrigin}${baseNoSlash}/`,
+          "name": "Hong Kong Bible of AI Adoption — State of AI in HK Marketing",
+        },
+        ...(page.sources.some((s) => /^https?:\/\//i.test(s.ref)) ? {
+          "citation": page.sources
+            .filter((s) => /^https?:\/\//i.test(s.ref))
+            .map((s) => ({ "@type": "CreativeWork", "name": s.label, "url": s.ref })),
+        } : {}),
+        ...(related.length > 0 ? {
+          "relatedLink": related.map((r) => `${canonicalOrigin}${baseNoSlash}/wiki/${r.slug}`),
+        } : {}),
+      },
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Knowledge Base",
+            "item": `${canonicalOrigin}${baseNoSlash}/`,
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": page.title,
+            "item": `${canonicalOrigin}${baseNoSlash}/wiki/${page.slug}`,
+          },
+        ],
+      },
+    ],
+  } : null;
+
+  useJsonLd(wikiPageSchema);
 
   useEffect(() => {
     if (!headings.length) return;

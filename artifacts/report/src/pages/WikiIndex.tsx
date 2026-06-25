@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import { Search, BookOpen, Clock, ChevronRight, Lock, Sparkles, LayoutGrid, Network } from "lucide-react";
 import WikiGraph from "../components/WikiGraph";
+import { useJsonLd } from "@/lib/useJsonLd";
 
 interface WikiPageSummary {
   id: number;
@@ -188,6 +189,46 @@ export default function WikiIndex() {
   }, [filteredSlugsKey]);
 
   const usingAI = aiResults !== null && query.trim().length >= 3;
+
+  const canonicalOrigin = typeof window !== "undefined" ? window.location.origin : "";
+  const indexSchema = pages && pages.length > 0 ? {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "CollectionPage",
+        "@id": `${canonicalOrigin}${baseUrl}/`,
+        "url": `${canonicalOrigin}${baseUrl}/`,
+        "name": "Hong Kong Bible of AI Adoption — State of AI in HK Marketing",
+        "description": "A living knowledge base on AI adoption in Hong Kong marketing, curated by the IAB Hong Kong AI and Technology Committee.",
+        "publisher": {
+          "@type": "Organization",
+          "name": "IAB Hong Kong",
+          "url": "https://iabhongkong.com/",
+        },
+        "hasPart": pages.map((p) => ({
+          "@type": "WebPage",
+          "@id": `${canonicalOrigin}${baseUrl}/wiki/${p.slug}`,
+          "url": `${canonicalOrigin}${baseUrl}/wiki/${p.slug}`,
+          "name": p.title,
+          ...(p.excerpt ? { "description": p.excerpt } : {}),
+          "dateModified": p.updatedAt,
+          ...(p.tags.length > 0 ? { "keywords": p.tags.join(", ") } : {}),
+        })),
+      },
+      {
+        "@type": "ItemList",
+        "name": "Knowledge Base Entries",
+        "itemListElement": pages.map((p, i) => ({
+          "@type": "ListItem",
+          "position": i + 1,
+          "url": `${canonicalOrigin}${baseUrl}/wiki/${p.slug}`,
+          "name": p.title,
+        })),
+      },
+    ],
+  } : null;
+
+  useJsonLd(indexSchema);
 
   const formatDate = (iso: string) => {
     const d = new Date(iso);
