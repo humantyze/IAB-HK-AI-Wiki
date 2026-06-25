@@ -308,10 +308,11 @@ router.get("/uploads/:id/impact", requireSuperAuth, async (req, res) => {
 
   const affectedSectionIds = [...new Set(affectedVersions.map((v) => v.sectionId))];
 
-  let sectionsReverted = 0;
+  const sectionsRevertedList: Array<{ slug: string; title: string }> = [];
+
   for (const sectionId of affectedSectionIds) {
     const [currentSection] = await db
-      .select({ currentVersionId: sectionsTable.currentVersionId })
+      .select({ currentVersionId: sectionsTable.currentVersionId, slug: sectionsTable.slug, title: sectionsTable.title })
       .from(sectionsTable)
       .where(eq(sectionsTable.id, sectionId))
       .limit(1);
@@ -322,11 +323,15 @@ router.get("/uploads/:id/impact", requireSuperAuth, async (req, res) => {
       currentSection?.currentVersionId !== undefined &&
       deletingVersionIds.includes(currentSection.currentVersionId)
     ) {
-      sectionsReverted++;
+      sectionsRevertedList.push({ slug: currentSection.slug, title: currentSection.title });
     }
   }
 
-  res.json({ sectionsReverted, versionsDeleted: affectedVersions.length });
+  res.json({
+    sectionsReverted: sectionsRevertedList.length,
+    versionsDeleted: affectedVersions.length,
+    sectionsRevertedList,
+  });
 });
 
 router.delete("/uploads/:id", requireSuperAuth, async (req, res) => {

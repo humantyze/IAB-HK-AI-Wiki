@@ -792,15 +792,38 @@ export default function SuperAdminDashboard() {
               Checking impact…
             </div>
           ) : deleteImpact ? (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-lg border border-border/40 bg-background/40 p-3 text-center">
-                <div className="text-2xl font-bold font-serif text-amber-400">{deleteImpact.sectionsReverted}</div>
-                <div className="text-[9px] font-display uppercase tracking-widest text-foreground/50 mt-0.5">Section(s) Reverted</div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg border border-border/40 bg-background/40 p-3 text-center">
+                  <div className="text-2xl font-bold font-serif text-amber-400">{deleteImpact.sectionsReverted}</div>
+                  <div className="text-[9px] font-display uppercase tracking-widest text-foreground/50 mt-0.5">Section(s) Reverted</div>
+                </div>
+                <div className="rounded-lg border border-border/40 bg-background/40 p-3 text-center">
+                  <div className="text-2xl font-bold font-serif text-orange-400">{deleteImpact.versionsDeleted}</div>
+                  <div className="text-[9px] font-display uppercase tracking-widest text-foreground/50 mt-0.5">Version(s) Removed</div>
+                </div>
               </div>
-              <div className="rounded-lg border border-border/40 bg-background/40 p-3 text-center">
-                <div className="text-2xl font-bold font-serif text-orange-400">{deleteImpact.versionsDeleted}</div>
-                <div className="text-[9px] font-display uppercase tracking-widest text-foreground/50 mt-0.5">Version(s) Removed</div>
-              </div>
+              {deleteImpact.sectionsRevertedList.length > 0 ? (
+                <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-1.5">
+                  <div className="text-[9px] font-display uppercase tracking-widest text-amber-400 mb-2">Sections that will roll back</div>
+                  {deleteImpact.sectionsRevertedList.map((s) => (
+                    <div key={s.slug} className="flex items-center gap-2 text-xs text-foreground/80">
+                      <RotateCcw className="w-3 h-3 text-amber-400 shrink-0" />
+                      <span>{s.title}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : deleteImpact.versionsDeleted === 0 ? (
+                <div className="flex items-center gap-2 text-xs text-foreground/60 rounded-lg border border-border/30 bg-background/30 p-3">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-green-400 shrink-0" />
+                  No sections will be affected — this contribution did not update any current versions.
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-xs text-foreground/60 rounded-lg border border-border/30 bg-background/30 p-3">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-green-400 shrink-0" />
+                  No sections will roll back — none of this contribution's versions are currently active.
+                </div>
+              )}
             </div>
           ) : null}
 

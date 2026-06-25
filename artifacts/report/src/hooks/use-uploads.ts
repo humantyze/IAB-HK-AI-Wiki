@@ -89,9 +89,15 @@ export function useSubmitUpload() {
   });
 }
 
+export interface UploadImpactSection {
+  slug: string;
+  title: string;
+}
+
 export interface UploadImpact {
   sectionsReverted: number;
   versionsDeleted: number;
+  sectionsRevertedList: UploadImpactSection[];
 }
 
 export function useUploadImpact() {
