@@ -4,6 +4,11 @@ import { extractWikiPages, synthesizeWikiGaps } from "./ai-service";
 import { logger } from "./logger";
 
 export async function runWikiSeed(): Promise<{ pagesCreated: number; pagesUpdated: number }> {
+  // Wipe all existing wiki pages so Build Wiki is always a clean rebuild
+  // from the current section state — not an accumulation of prior content.
+  await db.delete(wikiPagesTable);
+  logger.info("Wiki pages cleared before rebuild");
+
   const rows = await db
     .select({
       slug: sectionsTable.slug,
