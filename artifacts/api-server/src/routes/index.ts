@@ -6,6 +6,7 @@ import superAuthRouter from "./super-auth";
 import uploadsRouter from "./uploads";
 import wikiRouter from "./wiki";
 import regressRouter from "./regress";
+import backupRouter from "./backup";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(superAuthRouter);
 router.use(uploadsRouter);
 router.use(wikiRouter);
 router.use(regressRouter);
+router.use(backupRouter);
 
 export default router;

@@ -1,10 +1,12 @@
 import path from "path";
 import { fileURLToPath } from "url";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
+import cron from "node-cron";
 import app from "./app";
 import { db } from "@workspace/db";
 import { logger } from "./lib/logger";
 import { seedWikiIfEmpty } from "./lib/wiki-seed";
+import { runBackup } from "./lib/backup";
 
 const rawPort = process.env["PORT"];
 
@@ -44,6 +46,25 @@ async function main() {
   seedWikiIfEmpty().catch((e) => {
     logger.error({ err: e }, "Unexpected error during wiki auto-seed");
   });
+
+  cron.schedule(
+    "0 2 * * *",
+    async () => {
+      logger.info("Daily backup cron: starting");
+      try {
+        const result = await runBackup(false);
+        if (result.skipped) {
+          logger.info({ reason: result.reason }, "Daily backup cron: skipped");
+        } else {
+          logger.info({ fileName: result.fileName, driveFileId: result.driveFileId }, "Daily backup cron: completed");
+        }
+      } catch (err) {
+        logger.error({ err }, "Daily backup cron: failed");
+      }
+    },
+    { timezone: "Asia/Hong_Kong" },
+  );
+  logger.info("Daily backup cron scheduled (02:00 HKT)");
 }
 
 main().catch((e) => {

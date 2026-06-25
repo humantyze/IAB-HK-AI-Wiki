@@ -5,7 +5,7 @@ import { Link, useLocation } from "wouter";
 import {
   LogOut, History, Settings,
   ImageIcon, CheckCircle2, UploadCloud, BookOpen, RefreshCw, AlertCircle,
-  Trash2, RotateCcw, Calendar, X,
+  Trash2, RotateCcw, Calendar, X, DatabaseBackup, CloudUpload,
 } from "lucide-react";
 
 import { useSuperAuth } from "@/hooks/use-super-auth";
@@ -53,6 +53,16 @@ export default function SuperAdminDashboard() {
   const [wikiSeeding, setWikiSeeding] = useState(false);
   const [wikiSeedResult, setWikiSeedResult] = useState<{ pagesCreated: number; pagesUpdated: number } | null>(null);
 
+  interface BackupEntry {
+    id: number;
+    createdAt: string;
+    backedUpAt: string;
+    driveFileId: string | null;
+    fileName: string;
+  }
+  const [lastBackup, setLastBackup] = useState<BackupEntry | null | undefined>(undefined);
+  const [backupRunning, setBackupRunning] = useState(false);
+
   const deleteUpload = useDeleteUpload();
   const uploadImpact = useUploadImpact();
   const regressPreview = useRegressPreview();
@@ -70,6 +80,44 @@ export default function SuperAdminDashboard() {
     versionsRemoved: number;
   } | null>(null);
   const [regressConfirmOpen, setRegressConfirmOpen] = useState(false);
+
+  const fetchBackupStatus = async () => {
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/super-admin/backup/status`, { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json() as { last: BackupEntry | null };
+        setLastBackup(data.last);
+      }
+    } catch {
+      setLastBackup(null);
+    }
+  };
+
+  const handleBackupNow = async () => {
+    setBackupRunning(true);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/super-admin/backup/run`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json() as { fileName?: string; driveFileId?: string | null; error?: string; skipped?: boolean };
+      if (!res.ok) {
+        toast({ title: "Backup Failed", description: String(data.error ?? "Unknown error"), variant: "destructive" });
+      } else if (data.skipped) {
+        toast({ title: "Backup Skipped", description: "No new data since last backup." });
+      } else {
+        toast({ title: "Backup Complete", description: data.fileName ?? "Backup uploaded to Google Drive." });
+        await fetchBackupStatus();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Request failed";
+      toast({ title: "Backup Failed", description: message, variant: "destructive" });
+    } finally {
+      setBackupRunning(false);
+    }
+  };
 
   const fetchWikiCount = async () => {
     try {
@@ -115,6 +163,7 @@ export default function SuperAdminDashboard() {
     }
     if (!authLoading && isAuthenticated) {
       fetchWikiCount();
+      fetchBackupStatus();
     }
   }, [authLoading, isAuthenticated, setLocation]);
 
@@ -348,6 +397,9 @@ export default function SuperAdminDashboard() {
             </TabsTrigger>
             <TabsTrigger value="images" className="flex-1 py-3 px-2 sm:px-4 rounded-lg font-display tracking-tight sm:tracking-[0.12em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-accent/10 data-[state=active]:text-accent transition-all">
               <ImageIcon className="hidden sm:inline-flex w-4 h-4 sm:mr-2" />Images
+            </TabsTrigger>
+            <TabsTrigger value="backup" className="flex-1 py-3 px-2 sm:px-4 rounded-lg font-display tracking-tight sm:tracking-[0.12em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-sky-500/10 data-[state=active]:text-sky-400 transition-all">
+              <DatabaseBackup className="hidden sm:inline-flex w-4 h-4 sm:mr-2" />Backup
             </TabsTrigger>
           </TabsList>
 
@@ -800,6 +852,101 @@ export default function SuperAdminDashboard() {
               </div>
             </Card>
           </TabsContent>
+
+          {/* BACKUP TAB */}
+          <TabsContent value="backup" className="mt-8 outline-none">
+            <Card className="border-sky-500/20 shadow-[0_10px_50px_rgba(0,180,255,0.03)] bg-card/40 backdrop-blur-md rounded-2xl overflow-hidden">
+              <div className="h-1 w-full bg-gradient-to-r from-sky-500 to-transparent" />
+              <CardHeader className="pb-4 sm:pb-8 pt-6 sm:pt-10 px-4 sm:px-10">
+                <CardTitle className="font-serif text-xl sm:text-3xl font-bold flex items-center gap-3">
+                  <DatabaseBackup className="w-6 h-6 text-sky-400" />
+                  Database Backup
+                </CardTitle>
+                <CardDescription className="text-sm sm:text-base mt-2 font-light text-foreground/70">
+                  Back up the entire database to Google Drive. Runs automatically every day at 02:00 HKT if new data has been added — or trigger one manually anytime.
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="px-4 sm:px-10 pb-6 sm:pb-10 space-y-6">
+                {/* Last backup status */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="rounded-xl border border-border/50 bg-background/50 p-6">
+                    <div className="text-[10px] font-display uppercase tracking-widest text-foreground/70 mb-2">Last Backup</div>
+                    {lastBackup === undefined ? (
+                      <div className="w-4 h-4 border border-sky-500/40 border-t-sky-400 rounded-full animate-spin" />
+                    ) : lastBackup === null ? (
+                      <p className="text-sm text-foreground/50">No backups yet</p>
+                    ) : (
+                      <>
+                        <div className="text-sm font-mono text-sky-400 truncate mb-1">{lastBackup.fileName}</div>
+                        <div className="text-xs text-foreground/50">{format(new Date(lastBackup.createdAt), "dd MMM yyyy, HH:mm")}</div>
+                        {lastBackup.driveFileId ? (
+                          <div className="flex items-center gap-1 mt-2 text-xs text-green-400">
+                            <CheckCircle2 className="w-3 h-3" />
+                            Uploaded to Google Drive
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 mt-2 text-xs text-amber-400">
+                            <AlertCircle className="w-3 h-3" />
+                            Drive upload pending
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-border/50 bg-background/50 p-6 flex flex-col justify-between">
+                    <div className="text-[10px] font-display uppercase tracking-widest text-foreground/70 mb-2">Schedule</div>
+                    <div className="flex items-start gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-foreground/80">Daily · 02:00 HKT</div>
+                        <div className="text-xs text-foreground/50 mt-1">Only runs when new data is detected</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Manual backup */}
+                <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-6">
+                  <h3 className="font-display text-sm tracking-widest uppercase text-sky-400 mb-2">Backup Now</h3>
+                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                    Immediately dump the full database and upload it to your Google Drive folder. Useful before major changes or after a large import. This always runs regardless of whether new data exists.
+                  </p>
+                  <Button
+                    onClick={handleBackupNow}
+                    disabled={backupRunning}
+                    className="font-display uppercase tracking-[0.15em] text-[11px] bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 rounded-xl h-11 px-6 transition-all"
+                  >
+                    {backupRunning
+                      ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Backing up…</>
+                      : <><CloudUpload className="w-3.5 h-3.5 mr-2" />Backup Now</>}
+                  </Button>
+                </div>
+
+                {/* Drive note */}
+                <div className="rounded-xl border border-sky-500/10 bg-background/30 p-5">
+                  <div className="flex gap-3">
+                    <CheckCircle2 className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-foreground/70 leading-relaxed">
+                      Backups are sent to{" "}
+                      <a
+                        href="https://drive.google.com/drive/folders/1p8l8LIQpapPyN3x22eNzkvuvYfzCMshH"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline text-sky-400/80 hover:text-sky-400"
+                      >
+                        your Google Drive folder
+                      </a>
+                      . Files are named{" "}
+                      <span className="font-mono text-foreground/80">backup-YYYY-MM-DD-HH-mm.sql</span>.
+                      If the Drive upload fails, the backup is still logged so the next daily run will include all data.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
         </Tabs>
       </main>
 
