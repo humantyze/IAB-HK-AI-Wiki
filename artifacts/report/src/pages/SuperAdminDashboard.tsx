@@ -64,6 +64,8 @@ export default function SuperAdminDashboard() {
     uploadsRemoved: number;
   } | null>(null);
   const [regressConfirmOpen, setRegressConfirmOpen] = useState(false);
+  const [wipeConfirmOpen, setWipeConfirmOpen] = useState(false);
+  const [wiping, setWiping] = useState(false);
 
   const fetchBackupStatus = async () => {
     try {
@@ -227,6 +229,34 @@ export default function SuperAdminDashboard() {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Preview failed";
       toast({ title: "Preview Failed", description: message, variant: "destructive" });
+    }
+  };
+
+  const handleWipe = async () => {
+    setWiping(true);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/admin/wipe`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json() as { wikiPagesDeleted?: number; uploadsDeleted?: number; chunksDeleted?: number; error?: string };
+      if (!res.ok) {
+        toast({ title: "Wipe Failed", description: String(data.error ?? "Unknown error"), variant: "destructive" });
+      } else {
+        setWipeConfirmOpen(false);
+        await refetchUploads();
+        fetchWikiCount();
+        toast({
+          title: "Database Wiped",
+          description: `${data.wikiPagesDeleted} wiki page(s) · ${data.uploadsDeleted} upload(s) · ${data.chunksDeleted} chunk(s) removed.`,
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Request failed";
+      toast({ title: "Wipe Failed", description: message, variant: "destructive" });
+    } finally {
+      setWiping(false);
     }
   };
 
@@ -546,6 +576,18 @@ export default function SuperAdminDashboard() {
                     )}
                   </div>
                 )}
+                <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 mt-2">
+                  <h3 className="font-display text-sm tracking-widest uppercase text-destructive mb-2">Wipe All Data</h3>
+                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                    Permanently delete every wiki page, contribution upload, and knowledge chunk from the database. This cannot be undone. Use only to clear seed or test data before going live.
+                  </p>
+                  <Button
+                    onClick={() => setWipeConfirmOpen(true)}
+                    className="font-display uppercase tracking-[0.15em] text-[11px] bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/30 rounded-xl h-11 px-6"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-2" />Wipe Database
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -647,6 +689,40 @@ export default function SuperAdminDashboard() {
               {deleteUpload.isPending
                 ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Deleting…</>
                 : <><Trash2 className="w-3.5 h-3.5 mr-2" />Delete Contribution</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* WIPE CONFIRM DIALOG */}
+      <Dialog open={wipeConfirmOpen} onOpenChange={setWipeConfirmOpen}>
+        <DialogContent className="bg-card border-border/50 rounded-2xl max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl">Wipe Entire Database?</DialogTitle>
+            <DialogDescription className="text-foreground/70 mt-2 leading-relaxed">
+              This will permanently delete <strong>all</strong> wiki pages, contribution uploads, and knowledge chunks. The backup log is preserved.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-foreground/70 flex gap-2">
+            <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+            This cannot be undone. The database will be completely empty after this operation.
+          </div>
+          <DialogFooter className="gap-3">
+            <Button
+              variant="ghost"
+              onClick={() => setWipeConfirmOpen(false)}
+              className="font-display uppercase tracking-widest text-[11px] text-foreground/60"
+            >
+              <X className="w-3.5 h-3.5 mr-1" />Cancel
+            </Button>
+            <Button
+              onClick={handleWipe}
+              disabled={wiping}
+              className="font-display uppercase tracking-widest text-[11px] bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/30 rounded-xl"
+            >
+              {wiping
+                ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Wiping…</>
+                : <><Trash2 className="w-3.5 h-3.5 mr-2" />Wipe Everything</>}
             </Button>
           </DialogFooter>
         </DialogContent>

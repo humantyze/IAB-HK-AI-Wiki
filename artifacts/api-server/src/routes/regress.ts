@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, gt } from "drizzle-orm";
-import { db, uploadsTable, wikiPagesTable } from "@workspace/db";
+import { db, uploadsTable, wikiPagesTable, knowledgeChunksTable } from "@workspace/db";
 import { requireSuperAuth } from "../middlewares/auth";
 import { logger } from "../lib/logger";
 
@@ -96,6 +96,28 @@ router.post("/admin/regress", requireSuperAuth, async (req, res) => {
   } catch (err) {
     logger.error({ err }, "Regression failed");
     res.status(500).json({ error: "Regression failed. Please try again." });
+  }
+});
+
+router.post("/admin/wipe", requireSuperAuth, async (_req, res) => {
+  try {
+    const deletedChunks = await db.delete(knowledgeChunksTable).returning({ id: knowledgeChunksTable.id });
+    const deletedWiki = await db.delete(wikiPagesTable).returning({ id: wikiPagesTable.id });
+    const deletedUploads = await db.delete(uploadsTable).returning({ id: uploadsTable.id });
+
+    logger.info(
+      { deletedWiki: deletedWiki.length, deletedUploads: deletedUploads.length, deletedChunks: deletedChunks.length },
+      "Database wiped",
+    );
+
+    res.json({
+      wikiPagesDeleted: deletedWiki.length,
+      uploadsDeleted: deletedUploads.length,
+      chunksDeleted: deletedChunks.length,
+    });
+  } catch (err) {
+    logger.error({ err }, "Wipe failed");
+    res.status(500).json({ error: "Wipe failed. Please try again." });
   }
 });
 
