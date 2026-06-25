@@ -12,13 +12,44 @@ const execFileAsync = promisify(execFile);
 const MAX_IMAGES = 10;
 const MIN_IMAGE_BYTES = 5 * 1024;
 
+async function extractTextWithPdfjs(filePath: string): Promise<string> {
+  const { readFile: readFilePdfjs } = await import("fs/promises");
+  const buffer = await readFilePdfjs(filePath);
+  const uint8 = new Uint8Array(buffer);
+
+  // pdfjs-dist legacy build works in Node without a canvas dependency
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs" as string);
+  const pdf = await pdfjs.getDocument({ data: uint8, useSystemFonts: true }).promise;
+
+  const lines: string[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = (content.items as Array<{ str?: string }>)
+      .map((item) => item.str ?? "")
+      .join(" ")
+      .trim();
+    if (pageText) lines.push(pageText);
+  }
+  return lines.join("\n");
+}
+
 export async function extractTextOnly(filePath: string): Promise<string> {
-  const { stdout } = await execFileAsync(
-    "pdftotext",
-    ["-layout", filePath, "-"],
-    { maxBuffer: 10 * 1024 * 1024 },
-  );
-  return stdout.trim();
+  try {
+    const { stdout } = await execFileAsync(
+      "pdftotext",
+      ["-layout", filePath, "-"],
+      { maxBuffer: 10 * 1024 * 1024 },
+    );
+    return stdout.trim();
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
+      logger.info({ filePath }, "pdftotext not found — falling back to pdfjs-dist");
+      return extractTextWithPdfjs(filePath);
+    }
+    throw err;
+  }
 }
 
 /**

@@ -67,7 +67,6 @@ ${jsonSchema}`;
         { role: "user", content: userPrompt },
       ],
       response_format: { type: "json_object" },
-      temperature: 0.3,
     });
 
     const raw = response.choices[0]?.message?.content ?? "{}";
@@ -182,7 +181,6 @@ export async function assignImageToWikiPage(
         },
       ],
       response_format: { type: "json_object" },
-      temperature: 0,
       max_tokens: 64,
     });
 
@@ -251,7 +249,6 @@ JSON schema:
         { role: "user", content: userPrompt },
       ],
       response_format: { type: "json_object" },
-      temperature: 0.4,
     });
 
     const raw = response.choices[0]?.message?.content ?? "{}";
