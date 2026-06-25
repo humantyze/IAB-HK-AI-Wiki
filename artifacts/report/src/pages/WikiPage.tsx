@@ -327,18 +327,18 @@ export default function WikiPage({ params }: WikiPageProps) {
       {/* Header */}
       <header className="border-b border-gray-100 bg-white sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 lg:px-8 py-4 flex items-center gap-6">
-          <div className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2 group">
             <img
               src={`${(import.meta.env.BASE_URL as string)}iabhk-logo.png`}
               alt="IAB Hong Kong"
               style={{ height: "32px", width: "auto" }}
             />
-          </div>
-          <div className="flex items-center gap-1.5 ml-2">
+          </Link>
+          <Link href="/" className="flex items-center gap-1.5 ml-2 group">
             <span className="text-gray-200 text-sm">|</span>
             <BookOpen size={14} style={{ color: "#D63425" }} />
-            <span className="text-sm font-semibold text-gray-700">Knowledge Base</span>
-          </div>
+            <span className="text-sm font-semibold text-gray-700 group-hover:text-[#D63425] transition-colors">Knowledge Base</span>
+          </Link>
           <nav className="flex gap-5 ml-auto text-xs font-medium text-gray-500">
             <Link href="/admin/login" className="flex items-center gap-1.5 hover:text-gray-800 transition-colors">
               <Lock size={11} />
