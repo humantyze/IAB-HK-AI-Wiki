@@ -8,7 +8,7 @@ import { db, uploadsTable, wikiPagesTable } from "@workspace/db";
 import { requireAuth, requireSuperAuth } from "../middlewares/auth";
 import { extractWikiPages } from "../lib/ai-service";
 import { indexSource, removeSource, indexWikiPage } from "../lib/knowledge-index";
-import { extractTextOnly } from "../lib/pdf-extractor";
+import { extractTextOnly, extractImages } from "../lib/pdf-extractor";
 import { logger } from "../lib/logger";
 
 const UploadFormSchema = z.object({
@@ -104,6 +104,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
 
   // Build effective text: pasted input + PDF extraction (both combined when present)
   let effectiveText = data.rawText.trim();
+  let candidateImageUrls: string[] = [];
   if (req.file?.mimetype === "application/pdf") {
     try {
       logger.info({ filename: req.file.originalname }, "Extracting text from PDF");
@@ -115,6 +116,11 @@ router.post("/uploads", requireAuth, (req, res, next) => {
     } catch (err) {
       logger.error({ err, filename: req.file.originalname }, "PDF text extraction failed — using filename as fallback");
       if (!effectiveText) effectiveText = `Uploaded file: ${req.file.originalname}`;
+    }
+    try {
+      candidateImageUrls = await extractImages(req.file.path);
+    } catch (err) {
+      logger.warn({ err, filename: req.file.originalname }, "PDF image extraction failed — continuing without images");
     }
   }
 
@@ -157,7 +163,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
       const sourceLabel = data.contributorName ?? data.contentType.replace(/_/g, " ");
       const sourceRef = `Upload #${updated.id} — ${data.contentType.replace(/_/g, " ")}`;
       setImmediate(() => {
-        extractWikiPages(sourceLabel, effectiveText, sourceRef).catch((err: unknown) => {
+        extractWikiPages(sourceLabel, effectiveText, sourceRef, candidateImageUrls).catch((err: unknown) => {
           logger.error({ err, uploadId: updated.id }, "Non-blocking wiki extraction failed");
         });
       });

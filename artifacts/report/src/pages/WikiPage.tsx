@@ -12,6 +12,7 @@ interface WikiPageData {
   tags: string[];
   relatedSlugs: string[];
   sources: Array<{ label: string; ref: string }>;
+  imageUrl?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -355,6 +356,19 @@ export default function WikiPage({ params }: WikiPageProps) {
           </div>
 
           <div className="h-px bg-gray-100 mb-6" />
+
+          {/* Header image — only shown when the wiki page has an associated graphic */}
+          {page.imageUrl && (
+            <div className="mb-6 rounded-xl overflow-hidden border border-gray-100 bg-gray-50">
+              <img
+                src={`${(import.meta.env.BASE_URL as string).replace(/\/$/, "")}/api/wiki-image?path=${encodeURIComponent(page.imageUrl)}`}
+                alt={page.title}
+                className="w-full max-h-72 object-contain"
+                loading="lazy"
+                onError={(e) => { (e.currentTarget.parentElement as HTMLElement | null)?.remove(); }}
+              />
+            </div>
+          )}
 
           {/* Body */}
           <div className="max-w-none">

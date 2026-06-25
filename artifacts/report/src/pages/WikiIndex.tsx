@@ -11,6 +11,7 @@ interface WikiPageSummary {
   relatedSlugs: string[];
   updatedAt: string;
   excerpt: string;
+  imageUrl?: string | null;
 }
 
 const ALL_TAGS = ["All", "Organizations", "Statistics", "Tools & Platforms", "Regulatory", "Trends", "Case Studies", "Frameworks"];
@@ -341,44 +342,62 @@ export default function WikiIndex() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map((page) => (
-              <Link key={page.slug} href={`/wiki/${page.slug}`}>
-                <div className="group border border-gray-100 rounded-xl p-5 bg-white hover:border-gray-300 hover:shadow-sm transition-all flex flex-col gap-3 cursor-pointer h-full">
-                  <div className="flex flex-wrap gap-1.5">
-                    {page.tags.map((tag) => (
-                      <span
-                        key={tag}
-                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${TAG_COLORS[tag] ?? "bg-gray-100 text-gray-600 border-gray-200"}`}
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                    {page.tags.length === 0 && (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-gray-100 text-gray-500 border-gray-200">
-                        General
-                      </span>
+            {filtered.map((page) => {
+              const imgSrc = page.imageUrl
+                ? `${baseUrl}/api/wiki-image?path=${encodeURIComponent(page.imageUrl)}`
+                : null;
+              return (
+                <Link key={page.slug} href={`/wiki/${page.slug}`}>
+                  <div className="group border border-gray-100 rounded-xl bg-white hover:border-gray-300 hover:shadow-sm transition-all flex flex-col cursor-pointer h-full overflow-hidden">
+                    {imgSrc && (
+                      <div className="w-full h-36 overflow-hidden bg-gray-50 flex-shrink-0">
+                        <img
+                          src={imgSrc}
+                          alt=""
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          loading="lazy"
+                          onError={(e) => { (e.currentTarget.parentElement as HTMLElement | null)?.remove(); }}
+                        />
+                      </div>
                     )}
-                  </div>
+                    <div className="p-5 flex flex-col gap-3 flex-1">
+                      <div className="flex flex-wrap gap-1.5">
+                        {page.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${TAG_COLORS[tag] ?? "bg-gray-100 text-gray-600 border-gray-200"}`}
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                        {page.tags.length === 0 && (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-gray-100 text-gray-500 border-gray-200">
+                            General
+                          </span>
+                        )}
+                      </div>
 
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-800 group-hover:text-[#D63425] transition-colors leading-snug mb-1.5">
-                      {page.title}
-                    </h3>
-                    <p className="text-xs text-gray-500 leading-relaxed line-clamp-3">
-                      {page.excerpt || "No description available."}
-                    </p>
-                  </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-gray-800 group-hover:text-[#D63425] transition-colors leading-snug mb-1.5">
+                          {page.title}
+                        </h3>
+                        <p className="text-xs text-gray-500 leading-relaxed line-clamp-3">
+                          {page.excerpt || "No description available."}
+                        </p>
+                      </div>
 
-                  <div className="mt-auto flex items-center justify-between pt-2 border-t border-gray-50">
-                    <div className="flex items-center gap-1 text-gray-400">
-                      <Clock size={10} />
-                      <span className="text-[10px]">{formatDate(page.updatedAt)}</span>
+                      <div className="mt-auto flex items-center justify-between pt-2 border-t border-gray-50">
+                        <div className="flex items-center gap-1 text-gray-400">
+                          <Clock size={10} />
+                          <span className="text-[10px]">{formatDate(page.updatedAt)}</span>
+                        </div>
+                        <ChevronRight size={12} className="text-gray-300 group-hover:text-[#D63425] transition-colors" />
+                      </div>
                     </div>
-                    <ChevronRight size={12} className="text-gray-300 group-hover:text-[#D63425] transition-colors" />
                   </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         )}
       </div>

@@ -9,12 +9,14 @@ export interface WikiPageExtract {
   body_markdown: string;
   tags: string[];
   related_slugs: string[];
+  image_url: string | null;
 }
 
 export async function extractWikiPages(
   sourceLabel: string,
   rawText: string,
   sourceRef: string,
+  candidateImageUrls: string[] = [],
 ): Promise<{ created: number; updated: number }> {
   const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
   const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
@@ -28,6 +30,14 @@ export async function extractWikiPages(
     const { default: OpenAI } = await import("openai");
     const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 120_000 });
 
+    const imageInstructions = candidateImageUrls.length > 0
+      ? `\n\nThis source also contains extracted images. For each wiki page, pick the single most relevant image from the list below (or null if none fits the page content). Use the exact path string.\nCandidate image paths:\n${candidateImageUrls.map((u, i) => `${i + 1}. ${u}`).join("\n")}\nAdd to each wiki page:\n- image_url: exact path string chosen, or null`
+      : "";
+
+    const jsonSchema = candidateImageUrls.length > 0
+      ? `{ "wikiPages": [ { "slug": "...", "title": "...", "body_markdown": "...", "tags": [...], "related_slugs": [...], "image_url": "path-or-null" } ] }`
+      : `{ "wikiPages": [ { "slug": "...", "title": "...", "body_markdown": "...", "tags": [...], "related_slugs": [...] } ] }`;
+
     const systemPrompt = `You are a knowledge extraction assistant for a report called "State of AI in Hong Kong's Marketing Industry".
 
 Your task: read the provided text and extract distinct named entities, concepts, statistics, tools, organisations, regulations, and trends that deserve their own wiki page. Each wiki page should be focused and atomic — one clear concept per page.
@@ -37,7 +47,7 @@ For each entity/concept return:
 - title: human-readable title
 - body_markdown: 200-600 words of concise, factual markdown content about this entity. Use ## and ### headings, bullet points, and bold for key terms.
 - tags: 1-3 tags from this list only: ["Organizations", "Statistics", "Tools & Platforms", "Regulatory", "Trends", "Case Studies", "Frameworks"]
-- related_slugs: slugs of other wiki pages in this same batch that are clearly related (can be empty array)
+- related_slugs: slugs of other wiki pages in this same batch that are clearly related (can be empty array)${imageInstructions}
 
 Rules:
 - Extract 3-12 wiki pages per source — focus on the most significant and distinct entities
@@ -46,7 +56,7 @@ Rules:
 - Return ONLY valid JSON with no markdown fences
 
 JSON schema:
-{ "wikiPages": [ { "slug": "...", "title": "...", "body_markdown": "...", "tags": [...], "related_slugs": [...] } ] }`;
+${jsonSchema}`;
 
     const userPrompt = `Source: ${sourceLabel}\n\nText:\n${rawText}`;
 
@@ -100,6 +110,7 @@ JSON schema:
             tags: mergedTags,
             relatedSlugs: mergedRelated,
             sources: newSources,
+            imageUrl: existing.imageUrl ?? page.image_url ?? null,
             updatedAt: new Date(),
           })
           .where(eq(wikiPagesTable.slug, page.slug));
@@ -113,6 +124,7 @@ JSON schema:
           tags: page.tags,
           relatedSlugs: page.related_slugs,
           sources: [{ label: sourceLabel, ref: sourceRef }],
+          imageUrl: page.image_url ?? null,
         });
         created++;
       }

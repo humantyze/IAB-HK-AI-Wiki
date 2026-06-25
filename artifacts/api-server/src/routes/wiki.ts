@@ -4,6 +4,7 @@ import { db, wikiPagesTable } from "@workspace/db";
 import { requireSuperAuth } from "../middlewares/auth";
 import { runWikiSeed } from "../lib/wiki-seed";
 import { retrieve } from "../lib/knowledge-index";
+import { generateDownloadUrl } from "../lib/gcsClient";
 import { logger } from "../lib/logger";
 
 function formatPageSummary(p: {
@@ -14,6 +15,7 @@ function formatPageSummary(p: {
   relatedSlugs: unknown;
   updatedAt: Date;
   bodyMarkdown: unknown;
+  imageUrl: string | null;
 }) {
   return {
     id: p.id,
@@ -23,6 +25,7 @@ function formatPageSummary(p: {
     relatedSlugs: (p.relatedSlugs as string[]) ?? [],
     updatedAt: p.updatedAt.toISOString(),
     excerpt: (p.bodyMarkdown as string).replace(/^#+\s.*/gm, "").replace(/[*_`]/g, "").trim().slice(0, 200),
+    imageUrl: p.imageUrl ?? null,
   };
 }
 
@@ -38,6 +41,7 @@ async function fetchAllPageSummaries() {
       relatedSlugs: wikiPagesTable.relatedSlugs,
       updatedAt: wikiPagesTable.updatedAt,
       bodyMarkdown: wikiPagesTable.bodyMarkdown,
+      imageUrl: wikiPagesTable.imageUrl,
     })
     .from(wikiPagesTable)
     .orderBy(asc(wikiPagesTable.title));
@@ -182,9 +186,29 @@ router.get("/wiki/:slug", async (req, res) => {
     tags: (page.tags as string[]) ?? [],
     relatedSlugs: (page.relatedSlugs as string[]) ?? [],
     sources: (page.sources as Array<{ label: string; ref: string }>) ?? [],
+    imageUrl: page.imageUrl ?? null,
     createdAt: page.createdAt.toISOString(),
     updatedAt: page.updatedAt.toISOString(),
   });
+});
+
+router.get("/wiki-image", async (req, res) => {
+  const { path: objectPath } = req.query as { path?: string };
+  if (!objectPath || typeof objectPath !== "string" || objectPath.trim().length === 0) {
+    res.status(400).json({ error: "Missing path query parameter" });
+    return;
+  }
+  if (!objectPath.startsWith("wiki-images/")) {
+    res.status(400).json({ error: "Invalid image path" });
+    return;
+  }
+  try {
+    const signedUrl = await generateDownloadUrl(objectPath);
+    res.redirect(302, signedUrl);
+  } catch (err) {
+    logger.error({ err, objectPath }, "Failed to generate wiki image signed URL");
+    res.status(500).json({ error: "Image unavailable" });
+  }
 });
 
 router.post("/wiki/seed", requireSuperAuth, async (_req, res) => {
