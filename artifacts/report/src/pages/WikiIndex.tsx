@@ -135,10 +135,17 @@ export default function WikiIndex() {
   const [ragCitations, setRagCitations] = useState<KnowledgeCitation[] | null>(null);
   const [ragGrounded, setRagGrounded] = useState(false);
   const [searchDone, setSearchDone] = useState(false);
+  const [isRagStreaming, setIsRagStreaming] = useState(false);
+  // citationAnimGen[n]: 0 = not yet seen, 1 = first reveal (pop-in), 2+ = re-referenced (pulse)
+  const [citationAnimGen, setCitationAnimGen] = useState<Record<number, number>>({});
   const [viewMode, setViewMode] = useState<"grid" | "graph">("grid");
   const [graphFilteredPages, setGraphFilteredPages] = useState<WikiPageSummary[]>([]);
   const graphDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Refs for animation tracking (synchronous, no stale-closure risk)
+  const streamedTextRef = useRef("");
+  const knownCitCountRef = useRef<Record<number, number>>({});
+  const citationAnimGenRef = useRef<Record<number, number>>({});
 
   const baseUrl = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
 
@@ -159,6 +166,11 @@ export default function WikiIndex() {
     setRagCitations(null);
     setRagGrounded(false);
     setSearchDone(false);
+    setIsRagStreaming(false);
+    setCitationAnimGen({});
+    streamedTextRef.current = "";
+    knownCitCountRef.current = {};
+    citationAnimGenRef.current = {};
 
     if (activeQuery.trim().length < 3) {
       setIsSearching(false);
@@ -168,6 +180,7 @@ export default function WikiIndex() {
     setIsSearching(true);
     const controller = new AbortController();
     abortRef.current = controller;
+
     const fetchOpts = (body: object) => ({
       method: "POST" as const,
       headers: { "Content-Type": "application/json" },
@@ -176,32 +189,96 @@ export default function WikiIndex() {
       body: JSON.stringify(body),
     });
 
-    (async () => {
-      try {
-        const [searchSettled, ragSettled] = await Promise.allSettled([
-          fetch(`${baseUrl}/api/wiki/search`, fetchOpts({ query: activeQuery.trim() })),
-          fetch(`${baseUrl}/api/knowledge/search`, fetchOpts({ query: activeQuery.trim() })),
-        ]);
+    const handleToken = (token: string) => {
+      streamedTextRef.current += token;
+      setRagAnswer((prev) => (prev ?? "") + token);
 
-        if (searchSettled.status === "fulfilled" && searchSettled.value.ok) {
-          const result = await searchSettled.value.json() as { ranked: boolean; pages: WikiPageSummary[]; summary?: string };
-          if (result.ranked && Array.isArray(result.pages)) {
-            setAiResults(result.pages);
-            setAiSummary(result.summary && result.summary.trim().length > 0 ? result.summary.trim() : null);
-            setSearchFallbackPages(null);
-          } else {
-            setAiResults(null);
-            setAiSummary(null);
-            setSearchFallbackPages(Array.isArray(result.pages) ? result.pages : null);
-          }
-        } else if (searchSettled.status === "rejected" && (searchSettled.reason as Error).name !== "AbortError") {
-          setAiResults(null);
-          setAiSummary(null);
-          setSearchFallbackPages(null);
+      // Scan accumulated text for all complete [N] markers and detect new occurrences.
+      const counts: Record<number, number> = {};
+      for (const m of streamedTextRef.current.matchAll(/\[(\d+)\]/g)) {
+        const n = parseInt(m[1]);
+        counts[n] = (counts[n] ?? 0) + 1;
+      }
+      const genUpdates: Record<number, number> = {};
+      let hasUpdates = false;
+      for (const [nStr, count] of Object.entries(counts)) {
+        const n = parseInt(nStr);
+        const prevCount = knownCitCountRef.current[n] ?? 0;
+        if (count > prevCount) {
+          const currentGen = citationAnimGenRef.current[n] ?? 0;
+          const newGen = currentGen === 0 ? 1 : currentGen + 1;
+          genUpdates[n] = newGen;
+          citationAnimGenRef.current[n] = newGen;
+          hasUpdates = true;
         }
+      }
+      knownCitCountRef.current = counts;
+      if (hasUpdates) setCitationAnimGen((prev) => ({ ...prev, ...genUpdates }));
+    };
 
-        if (ragSettled.status === "fulfilled" && ragSettled.value.ok) {
-          const rag = await ragSettled.value.json() as { answer: string | null; grounded: boolean; citations: KnowledgeCitation[] };
+    const handleRag = async () => {
+      let r: Response;
+      try {
+        r = await fetch(`${baseUrl}/api/knowledge/search`, fetchOpts({ query: activeQuery.trim() }));
+      } catch (err) {
+        if ((err as Error).name !== "AbortError") {
+          setRagAnswer(null);
+          setRagCitations(null);
+        }
+        return;
+      }
+      if (!r.ok) return;
+
+      const ct = r.headers.get("content-type") ?? "";
+
+      if (ct.includes("text/event-stream") && r.body) {
+        // Streaming SSE path
+        setRagGrounded(true);
+        setIsRagStreaming(true);
+        const reader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            // SSE events are separated by \n\n
+            const events = buffer.split("\n\n");
+            buffer = events.pop() ?? "";
+
+            for (const block of events) {
+              if (!block.trim()) continue;
+              let eventType = "";
+              const dataLines: string[] = [];
+              for (const line of block.split("\n")) {
+                if (line.startsWith("event: ")) eventType = line.slice(7).trim();
+                else if (line.startsWith("data: ")) dataLines.push(line.slice(6));
+                else if (line === "data:") dataLines.push("");
+              }
+              const data = dataLines.join("\n");
+
+              if (eventType === "citations") {
+                try { setRagCitations(JSON.parse(data) as KnowledgeCitation[]); } catch { /* ignore parse errors */ }
+              } else if (eventType === "token") {
+                try { handleToken(JSON.parse(data) as string); } catch { /* ignore parse errors */ }
+              }
+              // "done" and "error" events: loop naturally ends on stream close
+            }
+          }
+        } catch (err) {
+          if ((err as Error).name !== "AbortError") {
+            // Partial answer is fine — keep whatever streamed
+          }
+        } finally {
+          setIsRagStreaming(false);
+        }
+      } else {
+        // JSON fallback (no model configured, passages-only response)
+        try {
+          const rag = await r.json() as { answer: string | null; grounded: boolean; citations: KnowledgeCitation[] };
           setRagGrounded(rag.grounded);
           if (rag.grounded && rag.answer && rag.answer.trim().length > 0) {
             setRagAnswer(rag.answer.trim());
@@ -210,15 +287,40 @@ export default function WikiIndex() {
             setRagAnswer(null);
             setRagCitations(rag.citations ?? []);
           }
-        }
+        } catch { /* ignore */ }
+      }
+    };
+
+    const handleWikiSearch = async () => {
+      let r: Response;
+      try {
+        r = await fetch(`${baseUrl}/api/wiki/search`, fetchOpts({ query: activeQuery.trim() }));
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
           setAiResults(null);
           setAiSummary(null);
           setSearchFallbackPages(null);
-          setRagAnswer(null);
-          setRagCitations(null);
         }
+        return;
+      }
+      if (!r.ok) return;
+      try {
+        const result = await r.json() as { ranked: boolean; pages: WikiPageSummary[]; summary?: string };
+        if (result.ranked && Array.isArray(result.pages)) {
+          setAiResults(result.pages);
+          setAiSummary(result.summary && result.summary.trim().length > 0 ? result.summary.trim() : null);
+          setSearchFallbackPages(null);
+        } else {
+          setAiResults(null);
+          setAiSummary(null);
+          setSearchFallbackPages(Array.isArray(result.pages) ? result.pages : null);
+        }
+      } catch { /* ignore */ }
+    };
+
+    (async () => {
+      try {
+        await Promise.all([handleWikiSearch(), handleRag()]);
       } finally {
         if (abortRef.current === controller) {
           setIsSearching(false);
@@ -247,6 +349,11 @@ export default function WikiIndex() {
     setRagGrounded(false);
     setSearchDone(false);
     setIsSearching(false);
+    setIsRagStreaming(false);
+    setCitationAnimGen({});
+    streamedTextRef.current = "";
+    knownCitCountRef.current = {};
+    citationAnimGenRef.current = {};
     if (abortRef.current) abortRef.current.abort();
   };
 
@@ -326,6 +433,12 @@ export default function WikiIndex() {
     const d = new Date(iso);
     return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
   };
+
+  // Show the AI panel as soon as citations arrive (don't wait for full stream / searchDone).
+  const showRagPanel = activeQuery.trim().length >= 3 && (searchDone || ragCitations !== null);
+
+  const hasRagContent = ragAnswer !== null || ragCitations !== null;
+  const panelHasColor = hasRagContent || !!aiSummary;
 
   return (
     <div className="min-h-screen bg-white" style={{ fontFamily: "'Montserrat', sans-serif" }}>
@@ -458,44 +571,69 @@ export default function WikiIndex() {
           </div>
         </div>
       </div>
-      {/* AI answer panel — always shown once search completes */}
-      {activeQuery.trim().length >= 3 && searchDone && !isSearching && (
+
+      {/* AI answer panel — visible as soon as citations arrive (before full stream) */}
+      {showRagPanel && (
         <div className="max-w-6xl mx-auto px-6 lg:px-8 mb-6">
-          <div className={`rounded-xl border overflow-hidden ${ragAnswer || aiSummary ? "border-[#D63425]/15 bg-[#fff8f7]" : "border-gray-100 bg-gray-50"}`}>
-            <div className={`px-5 py-2.5 border-b flex items-center gap-2 ${ragAnswer || aiSummary ? "border-[#D63425]/10 bg-[#D63425]/5" : "border-gray-100 bg-white"}`}>
-              <Sparkles size={11} style={{ color: ragAnswer || aiSummary ? "#D63425" : "#9ca3af" }} />
-              <span className={`text-[10px] font-bold uppercase tracking-widest ${ragAnswer || aiSummary ? "" : "text-gray-400"}`} style={ragAnswer || aiSummary ? { color: "#D63425" } : {}}>
+          <div className={`rounded-xl border overflow-hidden ${panelHasColor ? "border-[#D63425]/15 bg-[#fff8f7]" : "border-gray-100 bg-gray-50"}`}>
+            <div className={`px-5 py-2.5 border-b flex items-center gap-2 ${panelHasColor ? "border-[#D63425]/10 bg-[#D63425]/5" : "border-gray-100 bg-white"}`}>
+              {isRagStreaming ? (
+                <div className="w-2.5 h-2.5 rounded-full border-2 border-[#D63425]/30 border-t-[#D63425] animate-spin" />
+              ) : (
+                <Sparkles size={11} style={{ color: panelHasColor ? "#D63425" : "#9ca3af" }} />
+              )}
+              <span className={`text-[10px] font-bold uppercase tracking-widest ${panelHasColor ? "" : "text-gray-400"}`} style={panelHasColor ? { color: "#D63425" } : {}}>
                 AI Answer
               </span>
             </div>
 
             <div className="px-5 py-4">
-              {ragAnswer ? (
+              {ragAnswer !== null ? (
                 <>
                   <p className="text-sm text-gray-700 leading-relaxed">
                     {renderAnswerWithCitations(ragAnswer, ragCitations ?? [])}
+                    {isRagStreaming && <span className="cite-cursor" />}
                   </p>
                   {ragCitations && ragCitations.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-[#D63425]/10 flex flex-wrap gap-2">
-                      {ragCitations.map((c) => (
-                        <a
-                          key={c.index}
-                          id={`citation-${c.index}`}
-                          href={c.sourceSlug ? `${baseUrl}/wiki/${c.sourceSlug}` : undefined}
-                          className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                            c.sourceSlug
-                              ? "border-[#D63425]/20 bg-white hover:bg-[#D63425]/5 hover:border-[#D63425]/40 cursor-pointer"
-                              : "border-gray-200 bg-white cursor-default"
-                          }`}
-                          style={{ color: c.sourceSlug ? "#D63425" : "#9ca3af" }}
-                        >
-                          <span className="font-bold text-[10px] opacity-60">[{c.index}]</span>
-                          <span className="truncate max-w-[180px]">{c.title}</span>
-                        </a>
-                      ))}
+                      {ragCitations.map((c) => {
+                        const gen = citationAnimGen[c.index] ?? 0;
+                        // During streaming, hide chips not yet referenced by the model.
+                        // Once streaming ends, show all chips regardless of gen.
+                        if (gen === 0 && isRagStreaming) return null;
+                        const animStyle: React.CSSProperties =
+                          gen === 1
+                            ? { animation: "cite-pop-in 0.35s cubic-bezier(0.175,0.885,0.32,1.275) both" }
+                            : gen > 1
+                            ? { animation: "cite-pulse 0.55s ease both" }
+                            : {};
+                        return (
+                          <a
+                            // Key changes on gen → element remounts → animation replays
+                            key={`${c.index}-${gen}`}
+                            id={`citation-${c.index}`}
+                            href={c.sourceSlug ? `${baseUrl}/wiki/${c.sourceSlug}` : undefined}
+                            className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                              c.sourceSlug
+                                ? "border-[#D63425]/20 bg-white hover:bg-[#D63425]/5 hover:border-[#D63425]/40 cursor-pointer"
+                                : "border-gray-200 bg-white cursor-default"
+                            }`}
+                            style={{ color: c.sourceSlug ? "#D63425" : "#9ca3af", ...animStyle }}
+                          >
+                            <span className="font-bold text-[10px] opacity-60">[{c.index}]</span>
+                            <span className="truncate max-w-[180px]">{c.title}</span>
+                          </a>
+                        );
+                      })}
                     </div>
                   )}
                 </>
+              ) : isRagStreaming || (ragCitations !== null && ragCitations.length > 0 && !searchDone) ? (
+                /* Citations received but first token hasn't arrived yet */
+                <div className="flex items-center gap-2 py-1">
+                  <div className="w-3.5 h-3.5 border-2 border-[#D63425]/30 border-t-[#D63425] rounded-full animate-spin shrink-0" />
+                  <span className="text-xs text-gray-400">Generating answer…</span>
+                </div>
               ) : aiSummary ? (
                 <p className="text-sm text-gray-700 leading-relaxed">
                   {parseSummaryWithLinks(

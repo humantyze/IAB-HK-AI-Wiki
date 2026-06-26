@@ -17,8 +17,15 @@ interface Citation {
 /**
  * Semantic RAG over the FULL corpus (report sections + wiki pages + raw
  * uploads). Embeds the query, retrieves the most similar chunks across every
- * source, then synthesises a grounded answer with citations. Falls back to
- * returning the raw retrieved passages when the chat model is unavailable.
+ * source, then synthesises a grounded answer with citations via SSE streaming.
+ *
+ * SSE event format (when model is available):
+ *   event: citations\ndata: <JSON Citation[]>\n\n
+ *   event: token\ndata: <JSON-encoded delta string>\n\n  (many times)
+ *   event: done\ndata: \n\n
+ *
+ * Falls back to plain JSON for: no model configured, retrieval error, or
+ * zero matching chunks.
  */
 router.post("/knowledge/search", async (req, res) => {
   const { query } = req.body as { query?: unknown };
@@ -65,7 +72,7 @@ router.post("/knowledge/search", async (req, res) => {
     return;
   }
 
-  const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  const aiBaseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
   const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
 
   // Render passages with their citation numbers for grounding the prompt.
@@ -76,8 +83,8 @@ router.post("/knowledge/search", async (req, res) => {
     })
     .join("\n\n---\n\n");
 
-  if (!baseUrl || !apiKey) {
-    // No chat model configured — return the retrieved passages directly.
+  if (!aiBaseUrl || !apiKey) {
+    // No chat model configured — return the retrieved passages directly (JSON).
     res.json({
       answer: null,
       grounded: true,
@@ -93,47 +100,77 @@ router.post("/knowledge/search", async (req, res) => {
     return;
   }
 
+  // --- SSE streaming response ---
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const sendEvent = (event: string, data: string) => {
+    if (!res.writableEnded) {
+      res.write(`event: ${event}\ndata: ${data}\n\n`);
+    }
+  };
+
+  // Emit citations immediately so the frontend can render chips before the
+  // first token arrives.
+  sendEvent("citations", JSON.stringify(citations));
+
+  // Abort the LLM call if the client disconnects mid-stream.
+  const clientAbort = new AbortController();
+  req.on("close", () => clientAbort.abort());
+
   try {
     const { default: OpenAI } = await import("openai");
-    const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 30_000 });
+    const client = new OpenAI({ apiKey, baseURL: aiBaseUrl, timeout: 30_000 });
 
-    const response = await client.chat.completions.create({
-      model: "gpt-5-mini",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a retrieval-augmented assistant for a knowledge base about the state of AI in Hong Kong's marketing industry. " +
-            "Answer the user's question using ONLY the numbered context passages provided. " +
-            "Cite the passages you rely on inline using their bracketed numbers, e.g. [1] or [2][3]. " +
-            "If the context does not contain the answer, say so plainly instead of inventing facts. " +
-            "Write a concise, well-structured answer (2-5 sentences or short bullets).",
-        },
-        {
-          role: "user",
-          content: `Question: ${trimmed}\n\nContext passages:\n${context}`,
-        },
-      ],
-      max_completion_tokens: 600,
-    });
+    const stream = await client.chat.completions.create(
+      {
+        model: "gpt-5-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a retrieval-augmented assistant for a knowledge base about the state of AI in Hong Kong's marketing industry. " +
+              "Answer the user's question using ONLY the numbered context passages provided. " +
+              "Cite the passages you rely on inline using their bracketed numbers, e.g. [1] or [2][3]. " +
+              "If the context does not contain the answer, say so plainly instead of inventing facts. " +
+              "Write a concise, well-structured answer (2-5 sentences or short bullets).",
+          },
+          {
+            role: "user",
+            content: `Question: ${trimmed}\n\nContext passages:\n${context}`,
+          },
+        ],
+        max_completion_tokens: 600,
+        stream: true,
+      },
+      { signal: clientAbort.signal },
+    );
 
-    const answer = (response.choices[0]?.message?.content ?? "").trim();
-    logger.info({ query: trimmed, chunks: chunks.length, citations: citations.length }, "Knowledge search complete");
-    res.json({ answer, grounded: true, citations });
+    let charCount = 0;
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content ?? "";
+      if (delta) {
+        // JSON-encode the delta so newlines and special chars survive the wire.
+        sendEvent("token", JSON.stringify(delta));
+        charCount += delta.length;
+      }
+    }
+
+    sendEvent("done", "");
+    logger.info(
+      { query: trimmed, chunks: chunks.length, citations: citations.length, chars: charCount },
+      "Knowledge search streamed",
+    );
   } catch (err) {
-    logger.error({ err }, "Knowledge answer synthesis failed — returning raw passages");
-    res.json({
-      answer: null,
-      grounded: true,
-      citations,
-      passages: chunks.map((c) => ({
-        sourceType: c.sourceType,
-        sourceSlug: c.sourceSlug,
-        title: c.title,
-        content: c.content,
-        similarity: c.similarity,
-      })),
-    });
+    if ((err as Error).name !== "AbortError") {
+      logger.error({ err }, "Knowledge answer synthesis failed during streaming");
+      sendEvent("error", JSON.stringify({ message: "Synthesis failed" }));
+    }
+  } finally {
+    if (!res.writableEnded) res.end();
   }
 });
 
