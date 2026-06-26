@@ -5,6 +5,7 @@ import path from "path";
 import fs from "fs";
 import { z } from "zod";
 import { db, uploadsTable, wikiPagesTable } from "@workspace/db";
+import type { ProcessingError } from "@workspace/db";
 import { requireAuth, requireSuperAuth } from "../middlewares/auth";
 import { extractWikiPages, describeDocumentVisuals } from "../lib/ai-service";
 import { indexSource, removeSource, indexWikiPage } from "../lib/knowledge-index";
@@ -93,10 +94,40 @@ router.get("/uploads", requireSuperAuth, async (_req, res) => {
       rawText: u.rawText,
       filePath: u.filePath,
       status: u.status,
+      processingErrors: (u.processingErrors as ProcessingError[] | null) ?? [],
       createdAt: u.createdAt.toISOString(),
       processedAt: u.processedAt?.toISOString() ?? null,
     })),
   );
+});
+
+router.get("/uploads/:id/status", requireAuth, async (req, res) => {
+  const uploadId = parseInt(String(req.params.id), 10);
+  if (isNaN(uploadId)) {
+    res.status(400).json({ error: "Invalid upload ID" });
+    return;
+  }
+
+  const [upload] = await db
+    .select({
+      id: uploadsTable.id,
+      status: uploadsTable.status,
+      processingErrors: uploadsTable.processingErrors,
+    })
+    .from(uploadsTable)
+    .where(eq(uploadsTable.id, uploadId))
+    .limit(1);
+
+  if (!upload) {
+    res.status(404).json({ error: "Upload not found" });
+    return;
+  }
+
+  res.json({
+    id: upload.id,
+    status: upload.status,
+    processingErrors: (upload.processingErrors as ProcessingError[] | null) ?? [],
+  });
 });
 
 router.post("/uploads", requireAuth, (req, res, next) => {
@@ -126,11 +157,11 @@ router.post("/uploads", requireAuth, (req, res, next) => {
   const uploadedFiles = (req.files as Express.Multer.File[] | undefined) ?? [];
   const filePath = uploadedFiles.length > 0 ? uploadedFiles.map((f) => f.filename).join(", ") : null;
 
-  // Per-file extractions — each file gets its own wiki extraction call later
+  const syncErrors: ProcessingError[] = [];
+
   interface FileExtraction { label: string; text: string; imageUrls: string[] }
   const fileExtractions: FileExtraction[] = [];
 
-  // If the user pasted raw text, treat it as the first extraction unit
   const pastedText = data.rawText.trim();
   if (pastedText) {
     fileExtractions.push({ label: data.contributorName ?? data.contentType.replace(/_/g, " "), text: pastedText, imageUrls: [] });
@@ -143,17 +174,23 @@ router.post("/uploads", requireAuth, (req, res, next) => {
     let fileImageUrls: string[] = [];
 
     if (mime === "application/pdf") {
-      // PDF: text extraction + GPT vision for visual content + pdfimages for thumbnails
+      // CRITICAL: text extraction — no fallback
       try {
         logger.info({ filename: fname }, "Extracting text from PDF");
         const pdfText = await extractTextOnly(file.path);
+        if (!pdfText.trim()) {
+          throw new Error("Extraction returned empty text — file may be scanned or image-only");
+        }
         logger.info({ filename: fname, chars: pdfText.length }, "PDF text extraction complete");
         fileText = pdfText;
       } catch (err) {
-        logger.error({ err, filename: fname }, "PDF text extraction failed — using filename as fallback");
-        fileText = `Uploaded file: ${fname}`;
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error({ err, filename: fname }, "PDF text extraction failed");
+        syncErrors.push({ step: "text_extraction", message: `${fname}: ${message}`, ts: new Date().toISOString() });
+        continue;
       }
 
+      // NON-CRITICAL: visual analysis — record error but continue
       try {
         logger.info({ filename: fname }, "Rendering PDF pages for visual analysis");
         const pageImages = await renderPdfPages(file.path, 4);
@@ -164,26 +201,34 @@ router.post("/uploads", requireAuth, (req, res, next) => {
           }
         }
       } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
         logger.warn({ err, filename: fname }, "PDF visual analysis failed — continuing without visuals");
+        syncErrors.push({ step: "visual_analysis", message: `${fname}: ${message}`, ts: new Date().toISOString() });
       }
 
+      // NON-CRITICAL: image extraction — known to fail in Cloud Run, silent skip
       try {
-        const pdfImages = await extractImages(file.path);
-        fileImageUrls = pdfImages;
+        fileImageUrls = await extractImages(file.path);
       } catch (err) {
         logger.warn({ err, filename: fname }, "PDF image extraction failed — continuing without images");
       }
+
     } else if (isSupportedMimeType(mime)) {
-      // All other supported formats — unified extractor
+      // CRITICAL: non-PDF extraction — no fallback
       try {
         logger.info({ filename: fname, mime }, "Dispatching file extraction");
         const extracted = await dispatchExtraction(file.path, mime, fname);
-        fileText = extracted.text || `Uploaded file: ${fname}`;
+        if (!extracted.text.trim()) {
+          throw new Error("Extraction returned empty text");
+        }
+        fileText = extracted.text;
         fileImageUrls = extracted.imageUrls;
         logger.info({ filename: fname, chars: extracted.text.length, images: extracted.imageUrls.length }, "File extraction complete");
       } catch (err) {
-        logger.error({ err, filename: fname, mime }, "File extraction failed — using fallback text");
-        fileText = `Uploaded file: ${fname}`;
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error({ err, filename: fname, mime }, "File extraction failed");
+        syncErrors.push({ step: "text_extraction", message: `${fname}: ${message}`, ts: new Date().toISOString() });
+        continue;
       }
     }
 
@@ -192,10 +237,43 @@ router.post("/uploads", requireAuth, (req, res, next) => {
     }
   }
 
-  // Combined text stored in DB (for reprocess and knowledge indexing)
   const effectiveText = fileExtractions.map((e) => e.text).join("\n\n---\n\n");
 
-  // Back up all uploaded files to GCS before responding — parallel uploads
+  // If every uploaded file failed extraction AND no pasted text, return 422
+  if (!effectiveText.trim() && uploadedFiles.length > 0 && !pastedText) {
+    const isEmptyFile = syncErrors.some((e) =>
+      e.message.includes("scanned") || e.message.includes("empty text") || e.message.includes("image-only"),
+    );
+    const errorCode = isEmptyFile ? "EXTRACTION_EMPTY" : "TEXT_EXTRACTION_FAILED";
+
+    const [failedUpload] = await db
+      .insert(uploadsTable)
+      .values({
+        uploaderName: data.uploaderName,
+        uploaderEmail: data.uploaderEmail,
+        contributorName: data.contributorName ?? null,
+        contentType: data.contentType,
+        targetSections: [],
+        rawText: "",
+        filePath,
+        status: "failed",
+        processingErrors: syncErrors,
+      })
+      .returning();
+
+    logger.error({ uploadId: failedUpload.id, syncErrors }, "All file extractions failed — upload marked as failed");
+
+    res.status(422).json({
+      errorCode,
+      message: isEmptyFile
+        ? "The file appears to be scanned or image-only and couldn't be read automatically."
+        : "The file could not be read — it may be corrupt or in an unsupported format.",
+      uploadId: failedUpload.id,
+    });
+    return;
+  }
+
+  // NON-CRITICAL: back up uploaded files to GCS
   if (uploadedFiles.length > 0) {
     await Promise.allSettled(
       uploadedFiles.map((f) =>
@@ -217,90 +295,110 @@ router.post("/uploads", requireAuth, (req, res, next) => {
       rawText: effectiveText,
       filePath,
       status: "pending",
+      processingErrors: syncErrors.length > 0 ? syncErrors : null,
     })
     .returning();
 
-  try {
-    const [updated] = await db
+  res.status(201).json({
+    id: uploadRecord.id,
+    uploaderName: uploadRecord.uploaderName,
+    contributorName: uploadRecord.contributorName,
+    contentType: uploadRecord.contentType,
+    targetSections: uploadRecord.targetSections,
+    rawText: uploadRecord.rawText,
+    filePath: uploadRecord.filePath,
+    status: uploadRecord.status,
+    createdAt: uploadRecord.createdAt.toISOString(),
+    processedAt: uploadRecord.processedAt?.toISOString() ?? null,
+  });
+
+  // Non-blocking wiki extraction — one call per file so each prompt stays small
+  if (fileExtractions.length > 0) {
+    const uploadId = uploadRecord.id;
+    const sourceRef = `Upload #${uploadId} — ${data.contentType.replace(/_/g, " ")}`;
+    const capturedExtractions = fileExtractions.slice();
+    const capturedSyncErrors = syncErrors.slice();
+
+    setImmediate(() => {
+      void (async () => {
+        const asyncErrors: ProcessingError[] = [];
+        let totalCreated = 0;
+        let totalUpdated = 0;
+
+        for (const extraction of capturedExtractions) {
+          try {
+            const { created, updated } = await extractWikiPages(
+              extraction.label,
+              extraction.text,
+              sourceRef,
+              extraction.imageUrls,
+            );
+            totalCreated += created;
+            totalUpdated += updated;
+            if (created === 0 && updated === 0) {
+              asyncErrors.push({
+                step: "wiki_extraction",
+                message: `${extraction.label}: AI returned 0 pages from non-empty text`,
+                ts: new Date().toISOString(),
+              });
+            }
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            logger.error({ err, uploadId, file: extraction.label }, "Wiki extraction failed for file");
+            asyncErrors.push({
+              step: "wiki_extraction",
+              message: `${extraction.label}: ${message}`,
+              ts: new Date().toISOString(),
+            });
+          }
+        }
+
+        const allErrors = [...capturedSyncErrors, ...asyncErrors];
+        const noWikiContent = totalCreated === 0 && totalUpdated === 0 && asyncErrors.length > 0;
+        const finalStatus = noWikiContent ? "partial" : "processed";
+
+        await db
+          .update(uploadsTable)
+          .set({
+            status: finalStatus,
+            processedAt: new Date(),
+            processingErrors: allErrors.length > 0 ? allErrors : null,
+          })
+          .where(eq(uploadsTable.id, uploadId));
+
+        logger.info(
+          { uploadId, totalCreated, totalUpdated, wikiErrors: asyncErrors.length, finalStatus },
+          "Upload processing complete",
+        );
+      })();
+    });
+  } else {
+    // Only pasted text — mark processed immediately after knowledge indexing
+    void db
       .update(uploadsTable)
       .set({ status: "processed", processedAt: new Date() })
       .where(eq(uploadsTable.id, uploadRecord.id))
-      .returning();
-
-    res.status(201).json({
-      id: updated.id,
-      uploaderName: updated.uploaderName,
-      contributorName: updated.contributorName,
-      contentType: updated.contentType,
-      targetSections: updated.targetSections,
-      rawText: updated.rawText,
-      filePath: updated.filePath,
-      status: updated.status,
-      createdAt: updated.createdAt.toISOString(),
-      processedAt: updated.processedAt?.toISOString() ?? null,
-    });
-
-    // Non-blocking wiki extraction — one call per file so each prompt stays small
-    if (fileExtractions.length > 0) {
-      const uploadId = updated.id;
-      const sourceRef = `Upload #${uploadId} — ${data.contentType.replace(/_/g, " ")}`;
-      const capturedExtractions = fileExtractions.slice();
-      setImmediate(() => {
-        void (async () => {
-          for (const extraction of capturedExtractions) {
-            try {
-              await extractWikiPages(extraction.label, extraction.text, sourceRef, extraction.imageUrls);
-            } catch (err: unknown) {
-              logger.error({ err, uploadId, file: extraction.label }, "Wiki extraction failed for file");
-            }
-          }
-        })();
-      });
-    }
-
-    // Non-blocking knowledge indexing of the raw upload
-    setImmediate(() => {
-      void (async () => {
-        try {
-          const uploadTitle = `${data.contributorName ? `${data.contributorName} — ` : ""}${data.contentType.replace(/_/g, " ")}`;
-          await indexSource({
-            sourceType: "upload",
-            sourceId: updated.id,
-            sourceSlug: null,
-            title: uploadTitle,
-            text: effectiveText,
-          });
-        } catch (err) {
-          logger.error({ err, uploadId: updated.id }, "Non-blocking knowledge indexing failed");
-        }
-      })();
-    });
-  } catch (err) {
-    logger.error({ err, uploadId: uploadRecord.id }, "Failed to process upload");
-    await db
-      .update(uploadsTable)
-      .set({ status: "error" })
-      .where(eq(uploadsTable.id, uploadRecord.id));
-
-    const [errUpload] = await db
-      .select()
-      .from(uploadsTable)
-      .where(eq(uploadsTable.id, uploadRecord.id))
-      .limit(1);
-
-    res.status(500).json({
-      id: errUpload.id,
-      uploaderName: errUpload.uploaderName,
-      contributorName: errUpload.contributorName,
-      contentType: errUpload.contentType,
-      targetSections: errUpload.targetSections,
-      rawText: errUpload.rawText,
-      filePath: errUpload.filePath,
-      status: errUpload.status,
-      createdAt: errUpload.createdAt.toISOString(),
-      processedAt: errUpload.processedAt?.toISOString() ?? null,
-    });
+      .catch((err) => logger.error({ err, uploadId: uploadRecord.id }, "Failed to mark pasted-text upload as processed"));
   }
+
+  // Non-blocking knowledge indexing of the raw upload text
+  const capturedUploadId = uploadRecord.id;
+  setImmediate(() => {
+    void (async () => {
+      try {
+        const uploadTitle = `${data.contributorName ? `${data.contributorName} — ` : ""}${data.contentType.replace(/_/g, " ")}`;
+        await indexSource({
+          sourceType: "upload",
+          sourceId: capturedUploadId,
+          sourceSlug: null,
+          title: uploadTitle,
+          text: effectiveText,
+        });
+      } catch (err) {
+        logger.error({ err, uploadId: capturedUploadId }, "Non-blocking knowledge indexing failed");
+      }
+    })();
+  });
 });
 
 router.get("/uploads/:id/impact", requireSuperAuth, async (req, res) => {

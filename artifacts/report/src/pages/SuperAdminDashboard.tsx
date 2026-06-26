@@ -6,6 +6,7 @@ import {
   LogOut, History, Settings,
   CheckCircle2, BookOpen, AlertCircle,
   Trash2, RotateCcw, Calendar, X, DatabaseBackup, CloudUpload, ImagePlay, Layers,
+  ChevronDown, ChevronUp,
 } from "lucide-react";
 
 import { useSuperAuth } from "@/hooks/use-super-auth";
@@ -58,6 +59,7 @@ export default function SuperAdminDashboard() {
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [deleteImpact, setDeleteImpact] = useState<UploadImpact | null>(null);
+  const [expandedUploadId, setExpandedUploadId] = useState<number | null>(null);
   const [regressDate, setRegressDate] = useState("");
   const [regressPreviewData, setRegressPreviewData] = useState<{
     wikiPagesRemoved: number;
@@ -443,60 +445,108 @@ export default function SuperAdminDashboard() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {uploads.map((upload) => (
-                      <div key={upload.id} className="flex items-start gap-4 p-4 rounded-xl border border-border/30 bg-background/30 hover:bg-background/50 transition-colors">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <span className="font-mono text-xs text-foreground/40">#{upload.id}</span>
-                            <Badge variant="outline" className="text-[10px] font-display tracking-widest uppercase border-secondary/30 text-secondary/70">
-                              {upload.contentType.replace(/_/g, " ")}
-                            </Badge>
-                            <Badge
-                              variant="outline"
-                              className={`text-[10px] font-display tracking-widest uppercase ${
-                                upload.status === "processed"
-                                  ? "border-green-500/30 text-green-400/70"
-                                  : upload.status === "error"
-                                  ? "border-destructive/30 text-destructive/70"
-                                  : "border-border/30 text-foreground/40"
-                              }`}
-                            >
-                              {upload.status}
-                            </Badge>
+                    {(uploads as Array<{
+                      id: number;
+                      uploaderName?: string | null;
+                      uploaderEmail?: string | null;
+                      contributorName?: string | null;
+                      contentType: string;
+                      targetSections: string[];
+                      rawText: string;
+                      filePath?: string | null;
+                      status: string;
+                      processingErrors?: Array<{ step: string; message: string; ts: string }>;
+                      createdAt: string;
+                      processedAt?: string | null;
+                    }>).map((upload) => {
+                      const errors = upload.processingErrors ?? [];
+                      const hasErrors = errors.length > 0;
+                      const isExpanded = expandedUploadId === upload.id;
+                      const statusColor =
+                        upload.status === "processed"
+                          ? "border-green-500/30 text-green-400/70"
+                          : upload.status === "partial"
+                          ? "border-amber-500/30 text-amber-400/70"
+                          : upload.status === "failed" || upload.status === "error"
+                          ? "border-destructive/30 text-destructive/70"
+                          : "border-border/30 text-foreground/40";
+                      return (
+                        <div key={upload.id} className="rounded-xl border border-border/30 bg-background/30 overflow-hidden">
+                          <div className="flex items-start gap-4 p-4 hover:bg-background/50 transition-colors">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap mb-1">
+                                <span className="font-mono text-xs text-foreground/40">#{upload.id}</span>
+                                <Badge variant="outline" className="text-[10px] font-display tracking-widest uppercase border-secondary/30 text-secondary/70">
+                                  {upload.contentType.replace(/_/g, " ")}
+                                </Badge>
+                                <Badge variant="outline" className={`text-[10px] font-display tracking-widest uppercase ${statusColor}`}>
+                                  {upload.status}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-foreground/80 font-medium truncate">
+                                {upload.uploaderName ?? "Anonymous"}
+                              </p>
+                              <div className="flex items-center gap-3 flex-wrap mt-0.5">
+                                <p className="text-xs text-foreground/50">
+                                  {new Date(upload.createdAt).toLocaleString("en-HK", {
+                                    day: "numeric", month: "short", year: "numeric",
+                                    hour: "2-digit", minute: "2-digit",
+                                    timeZone: "Asia/Hong_Kong",
+                                  })} HKT
+                                </p>
+                                {upload.uploaderEmail && (
+                                  <span className="text-xs text-foreground/40">{upload.uploaderEmail}</span>
+                                )}
+                                {upload.contributorName && (
+                                  <span className="text-xs text-foreground/40">Source: {upload.contributorName}</span>
+                                )}
+                              </div>
+                              {upload.filePath && (
+                                <p className="text-xs font-mono text-foreground/35 mt-1 truncate">
+                                  {upload.filePath.replace(/^\d+-\d+-/, "")}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0 mt-1">
+                              {hasErrors && (
+                                <button
+                                  onClick={() => setExpandedUploadId(isExpanded ? null : upload.id)}
+                                  className="text-foreground/30 hover:text-amber-400 transition-colors p-1"
+                                  title={isExpanded ? "Hide errors" : "Show processing errors"}
+                                >
+                                  {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleDeleteButtonClick(upload.id)}
+                                className="text-foreground/30 hover:text-destructive transition-colors p-1"
+                                title="Delete contribution"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </div>
-                          <p className="text-sm text-foreground/80 font-medium truncate">
-                            {upload.uploaderName ?? "Anonymous"}
-                          </p>
-                          <div className="flex items-center gap-3 flex-wrap mt-0.5">
-                            <p className="text-xs text-foreground/50">
-                              {new Date(upload.createdAt).toLocaleString("en-HK", {
-                                day: "numeric", month: "short", year: "numeric",
-                                hour: "2-digit", minute: "2-digit",
-                                timeZone: "Asia/Hong_Kong",
-                              })} HKT
-                            </p>
-                            {upload.uploaderEmail && (
-                              <span className="text-xs text-foreground/40">{upload.uploaderEmail}</span>
-                            )}
-                            {upload.contributorName && (
-                              <span className="text-xs text-foreground/40">Source: {upload.contributorName}</span>
-                            )}
-                          </div>
-                          {upload.filePath && (
-                            <p className="text-xs font-mono text-foreground/35 mt-1 truncate">
-                              {upload.filePath.replace(/^\d+-\d+-/, "")}
-                            </p>
+                          {hasErrors && isExpanded && (
+                            <div className="border-t border-border/20 px-4 py-3 bg-background/40 space-y-1.5">
+                              <p className="text-[10px] font-display uppercase tracking-widest text-foreground/40 mb-2">Processing Errors</p>
+                              {errors.map((err, i) => (
+                                <div key={i} className="flex items-start gap-2 text-xs text-foreground/60 font-mono">
+                                  <span className={`shrink-0 mt-0.5 text-[10px] uppercase font-display tracking-wide ${
+                                    err.step === "text_extraction" || err.step === "wiki_extraction"
+                                      ? "text-destructive/70"
+                                      : "text-amber-400/70"
+                                  }`}>[{err.step}]</span>
+                                  <span className="break-all leading-relaxed">{err.message}</span>
+                                  <span className="shrink-0 text-foreground/30 ml-auto whitespace-nowrap">
+                                    {new Date(err.ts).toLocaleTimeString("en-HK", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Hong_Kong" })}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
                           )}
                         </div>
-                        <button
-                          onClick={() => handleDeleteButtonClick(upload.id)}
-                          className="text-foreground/30 hover:text-destructive transition-colors p-1 shrink-0 mt-1"
-                          title="Delete contribution"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>

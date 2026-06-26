@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, gt, asc } from "drizzle-orm";
 import { db, uploadsTable, wikiPagesTable, knowledgeChunksTable } from "@workspace/db";
+import type { ProcessingError } from "@workspace/db";
 import { requireSuperAuth } from "../middlewares/auth";
 import { extractWikiPages } from "../lib/ai-service";
 import { indexSource } from "../lib/knowledge-index";
@@ -103,8 +104,8 @@ router.post("/admin/regress", requireSuperAuth, async (req, res) => {
 
 /**
  * Re-runs wiki extraction and knowledge indexing for every upload that has
- * stored raw text. Useful after a wipe to rebuild all wiki pages from the
- * original source material without re-uploading files.
+ * stored raw text. Updates each upload's status and processingErrors in the DB
+ * as it goes — admins can refresh the uploads list to see results.
  */
 router.post("/admin/reprocess-uploads", requireSuperAuth, async (_req, res) => {
   const uploads = await db.select().from(uploadsTable).orderBy(asc(uploadsTable.id));
@@ -115,12 +116,34 @@ router.post("/admin/reprocess-uploads", requireSuperAuth, async (_req, res) => {
   setImmediate(async () => {
     let succeeded = 0;
     let failed = 0;
+
     for (const upload of eligible) {
+      const errors: ProcessingError[] = [];
       try {
         const sourceLabel = upload.contributorName ?? upload.contentType.replace(/_/g, " ");
         const sourceRef = `Upload #${upload.id} — ${upload.contentType.replace(/_/g, " ")}`;
         const uploadTitle = `${upload.contributorName ? `${upload.contributorName} — ` : ""}${upload.contentType.replace(/_/g, " ")}`;
-        await extractWikiPages(sourceLabel, upload.rawText, sourceRef, []);
+
+        const { created, updated } = await extractWikiPages(sourceLabel, upload.rawText, sourceRef, []);
+
+        if (created === 0 && updated === 0) {
+          errors.push({
+            step: "wiki_extraction",
+            message: "AI returned 0 pages from non-empty text during reprocess",
+            ts: new Date().toISOString(),
+          });
+          await db
+            .update(uploadsTable)
+            .set({ status: "partial", processedAt: new Date(), processingErrors: errors })
+            .where(eq(uploadsTable.id, upload.id));
+          failed++;
+        } else {
+          await db
+            .update(uploadsTable)
+            .set({ status: "processed", processedAt: new Date(), processingErrors: null })
+            .where(eq(uploadsTable.id, upload.id));
+        }
+
         await indexSource({
           sourceType: "upload",
           sourceId: upload.id,
@@ -128,9 +151,17 @@ router.post("/admin/reprocess-uploads", requireSuperAuth, async (_req, res) => {
           title: uploadTitle,
           text: upload.rawText,
         });
+
         succeeded++;
       } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
         logger.error({ err, uploadId: upload.id }, "Reprocess failed for upload");
+        errors.push({ step: "wiki_extraction", message, ts: new Date().toISOString() });
+        await db
+          .update(uploadsTable)
+          .set({ status: "partial", processedAt: new Date(), processingErrors: errors })
+          .where(eq(uploadsTable.id, upload.id))
+          .catch((dbErr) => logger.error({ dbErr, uploadId: upload.id }, "Failed to write reprocess errors to DB"));
         failed++;
       }
     }

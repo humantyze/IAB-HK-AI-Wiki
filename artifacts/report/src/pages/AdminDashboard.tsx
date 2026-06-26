@@ -7,11 +7,12 @@ import {
   LogOut, Upload as UploadIcon, Hand,
   Paperclip, X, Sparkles, FileText,
   BookOpen, Check, PlusCircle, Eye, Layers, Image,
+  AlertTriangle, AlertCircle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
-import { useSubmitUpload } from "@/hooks/use-uploads";
+import { useSubmitUpload, UploadError } from "@/hooks/use-uploads";
 import { useToast } from "@/hooks/use-toast";
 
 import { Button } from "@/components/ui/button";
@@ -69,6 +70,41 @@ function getStepsForFile(file: File | null): StepDef[] {
   ];
 }
 
+interface ErrorCopy {
+  headline: string;
+  body: string;
+  action: string;
+}
+
+function getErrorCopy(code: string): ErrorCopy {
+  switch (code) {
+    case "EXTRACTION_EMPTY":
+      return {
+        headline: "We couldn't read your file",
+        body: "The PDF appears to be scanned or image-only and couldn't be read automatically.",
+        action: "Please upload a text-based PDF, or reach out to the IAB HK team.",
+      };
+    case "TEXT_EXTRACTION_FAILED":
+      return {
+        headline: "We couldn't read your file",
+        body: "The file could not be read — it may be corrupt or in an unsupported format.",
+        action: "Please upload a text-based PDF, or reach out to the IAB HK team.",
+      };
+    case "UNSUPPORTED_FILE_TYPE":
+      return {
+        headline: "File type not supported",
+        body: "Only PDF, DOCX, and Markdown files can be processed.",
+        action: "Convert your document and try again.",
+      };
+    default:
+      return {
+        headline: "Something went wrong",
+        body: "An unexpected error occurred while processing your file.",
+        action: "Please try again, or contact the IAB HK team if it keeps happening.",
+      };
+  }
+}
+
 export default function AdminDashboard() {
   const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const [, setLocation] = useLocation();
@@ -81,11 +117,15 @@ export default function AdminDashboard() {
   const [submitStep, setSubmitStep] = useState(0);
   const [activeSteps, setActiveSteps] = useState<StepDef[]>([]);
 
+  const [uploadError, setUploadError] = useState<{ code: string } | null>(null);
+
   const [submitResult, setSubmitResult] = useState<{
     fileNames: string[];
     wikiCountBefore: number;
+    uploadId: number;
   } | null>(null);
   const [wikiCountAfter, setWikiCountAfter] = useState<number | null>(null);
+  const [uploadWarning, setUploadWarning] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
 
   useEffect(() => {
@@ -123,21 +163,40 @@ export default function AdminDashboard() {
     let attempts = 0;
     const MAX_ATTEMPTS = 36;
     const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+
     const poll = async () => {
       if (attempts >= MAX_ATTEMPTS) { setIsPolling(false); return; }
       attempts++;
       try {
-        const res = await fetch(`${baseUrl}/api/wiki`, { credentials: "include" });
-        if (res.ok) {
-          const data = await res.json();
+        // Poll wiki count for new pages
+        const wikiRes = await fetch(`${baseUrl}/api/wiki`, { credentials: "include" });
+        if (wikiRes.ok) {
+          const data = await wikiRes.json();
           const count = Array.isArray(data) ? data.length : 0;
           if (count > submitResult.wikiCountBefore) {
             setWikiCountAfter(count);
+            setIsPolling(false);
+            return;
+          }
+        }
+
+        // Also poll upload status for partial/failed outcome
+        const statusRes = await fetch(`${baseUrl}/api/uploads/${submitResult.uploadId}/status`, { credentials: "include" });
+        if (statusRes.ok) {
+          const statusData = await statusRes.json() as { status: string };
+          if (statusData.status === "partial") {
+            setUploadWarning("Your file was received but content could not be extracted. The IAB HK team has been notified.");
+            setWikiCountAfter(submitResult.wikiCountBefore);
+            setIsPolling(false);
+          } else if (statusData.status === "failed") {
+            setUploadWarning("Processing failed after submission. The IAB HK team has been notified.");
+            setWikiCountAfter(submitResult.wikiCountBefore);
             setIsPolling(false);
           }
         }
       } catch { /* ignore */ }
     };
+
     const timer = setTimeout(poll, 15000);
     const interval = setInterval(poll, 5000);
     return () => { clearTimeout(timer); clearInterval(interval); };
@@ -158,6 +217,7 @@ export default function AdminDashboard() {
       return;
     }
 
+    setUploadError(null);
     setActiveSteps(getStepsForFile(selectedFiles[0] ?? null));
     setSubmitStep(0);
     setIsSubmitting(true);
@@ -172,7 +232,7 @@ export default function AdminDashboard() {
         }
       } catch { /* non-critical */ }
 
-      await submitUpload.mutateAsync({
+      const result = await submitUpload.mutateAsync({
         uploaderName: values.uploaderName,
         uploaderEmail: values.uploaderEmail,
         contributorName: values.contributorName,
@@ -185,12 +245,16 @@ export default function AdminDashboard() {
       form.reset({ uploaderName: values.uploaderName, uploaderEmail: values.uploaderEmail, rawText: "", contentType: values.contentType, contributorName: values.contributorName });
       setSelectedFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
-      setSubmitResult({ fileNames, wikiCountBefore });
+      setSubmitResult({ fileNames, wikiCountBefore, uploadId: result.id });
       setWikiCountAfter(null);
+      setUploadWarning(null);
       setIsPolling(true);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Submission failed";
-      toast({ title: "Submission Failed", description: message, variant: "destructive" });
+      if (err instanceof UploadError) {
+        setUploadError({ code: err.errorCode });
+      } else {
+        setUploadError({ code: "SERVER_ERROR" });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -306,10 +370,19 @@ export default function AdminDashboard() {
               <div className="py-10 sm:py-16 flex flex-col items-center">
                 <div className="w-full max-w-md space-y-6">
                   <div className="text-center">
-                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-green-500/10 border border-green-500/20 mb-5">
-                      <Check className="w-6 h-6 text-green-400" />
+                    <div className={`inline-flex items-center justify-center w-14 h-14 rounded-2xl border mb-5 ${
+                      uploadWarning
+                        ? "bg-amber-500/10 border-amber-500/20"
+                        : "bg-green-500/10 border-green-500/20"
+                    }`}>
+                      {uploadWarning
+                        ? <AlertTriangle className="w-6 h-6 text-amber-400" />
+                        : <Check className="w-6 h-6 text-green-400" />
+                      }
                     </div>
-                    <h3 className="font-serif text-xl font-bold text-foreground/90 mb-1">Content Received</h3>
+                    <h3 className="font-serif text-xl font-bold text-foreground/90 mb-1">
+                      {uploadWarning ? "File Received" : "Content Received"}
+                    </h3>
                     {submitResult.fileNames.length > 0 && (
                       <div className="space-y-0.5 mt-1">
                         {submitResult.fileNames.map((name) => (
@@ -319,42 +392,52 @@ export default function AdminDashboard() {
                     )}
                   </div>
 
-                  <div className={`flex items-center gap-4 px-5 py-4 rounded-xl border transition-all duration-500 ${
-                    wikiCountAfter !== null
-                      ? "border-primary/30 bg-primary/5"
-                      : "border-primary/20 bg-primary/5 shadow-[0_0_20px_rgba(0,240,255,0.05)]"
-                  }`}>
-                    <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 border-primary/60 bg-primary/10">
-                      {wikiCountAfter !== null ? (
-                        <Check className="w-3.5 h-3.5 text-primary" />
-                      ) : (
-                        <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  {uploadWarning ? (
+                    <div className="flex items-start gap-4 px-5 py-4 rounded-xl border border-amber-500/30 bg-amber-500/5">
+                      <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-amber-400/90">Content not extracted</p>
+                        <p className="text-xs text-foreground/60 mt-1 leading-relaxed">{uploadWarning}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={`flex items-center gap-4 px-5 py-4 rounded-xl border transition-all duration-500 ${
+                      wikiCountAfter !== null
+                        ? "border-primary/30 bg-primary/5"
+                        : "border-primary/20 bg-primary/5 shadow-[0_0_20px_rgba(0,240,255,0.05)]"
+                    }`}>
+                      <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 border-primary/60 bg-primary/10">
+                        {wikiCountAfter !== null ? (
+                          <Check className="w-3.5 h-3.5 text-primary" />
+                        ) : (
+                          <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        {wikiCountAfter !== null ? (
+                          <>
+                            <p className="text-sm font-medium text-primary/80">Wiki pages generated</p>
+                            <p className="text-xs text-foreground/50 mt-0.5">
+                              {wikiCountAfter - submitResult.wikiCountBefore} new page{wikiCountAfter - submitResult.wikiCountBefore !== 1 ? "s" : ""} added to the knowledge base
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-sm font-medium text-foreground/80">AI is generating wiki pages…</p>
+                            <p className="text-xs text-foreground/50 mt-0.5">This typically takes 60–90 seconds. You can leave this page.</p>
+                          </>
+                        )}
+                      </div>
+                      {wikiCountAfter !== null && (
+                        <span className="text-lg font-bold text-primary shrink-0">
+                          +{wikiCountAfter - submitResult.wikiCountBefore}
+                        </span>
                       )}
                     </div>
-                    <div className="flex-1">
-                      {wikiCountAfter !== null ? (
-                        <>
-                          <p className="text-sm font-medium text-primary/80">Wiki pages generated</p>
-                          <p className="text-xs text-foreground/50 mt-0.5">
-                            {wikiCountAfter - submitResult.wikiCountBefore} new page{wikiCountAfter - submitResult.wikiCountBefore !== 1 ? "s" : ""} added to the knowledge base
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-sm font-medium text-foreground/80">AI is generating wiki pages…</p>
-                          <p className="text-xs text-foreground/50 mt-0.5">This typically takes 60–90 seconds. You can leave this page.</p>
-                        </>
-                      )}
-                    </div>
-                    {wikiCountAfter !== null && (
-                      <span className="text-lg font-bold text-primary shrink-0">
-                        +{wikiCountAfter - submitResult.wikiCountBefore}
-                      </span>
-                    )}
-                  </div>
+                  )}
 
                   <Button
-                    onClick={() => { setSubmitResult(null); setWikiCountAfter(null); setIsPolling(false); }}
+                    onClick={() => { setSubmitResult(null); setWikiCountAfter(null); setUploadWarning(null); setIsPolling(false); }}
                     className="w-full h-12 font-display uppercase tracking-[0.2em] text-xs bg-background/50 hover:bg-background/80 text-foreground/70 border border-border/50 rounded-xl transition-all"
                   >
                     <PlusCircle className="w-4 h-4 mr-2" />Submit Another
@@ -366,6 +449,30 @@ export default function AdminDashboard() {
             {!isSubmitting && !submitResult && (
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-10">
+
+                  {uploadError && (
+                    <div className="flex items-start gap-4 px-5 py-4 rounded-xl border border-destructive/40 bg-destructive/5">
+                      <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-destructive/90">
+                          {getErrorCopy(uploadError.code).headline}
+                        </p>
+                        <p className="text-xs text-foreground/70 mt-1 leading-relaxed">
+                          {getErrorCopy(uploadError.code).body}
+                        </p>
+                        <p className="text-xs text-foreground/50 mt-1.5 italic">
+                          {getErrorCopy(uploadError.code).action}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setUploadError(null)}
+                        className="text-foreground/30 hover:text-foreground/60 transition-colors shrink-0"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <FormField
@@ -451,7 +558,7 @@ export default function AdminDashboard() {
                         <FormControl>
                           <Textarea
                             placeholder="Paste raw data, reports, or transcriptions here — or leave blank and attach a PDF below to let the AI read it directly..."
-                            className="min-h-[300px] bg-background/30 border-border/50 rounded-xl font-mono text-sm p-6 focus-visible:ring-primary/30 leading-relaxed resize-y"
+                            className="bg-background/50 border-border/50 min-h-[160px] rounded-xl focus-visible:ring-primary/30 resize-none text-sm font-light"
                             {...field}
                           />
                         </FormControl>
@@ -460,20 +567,22 @@ export default function AdminDashboard() {
                     )}
                   />
 
-                  <div>
-                    <label className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70 block mb-3">
-                      Attach files <span className="text-foreground/50 normal-case tracking-normal font-sans text-[11px]">(Optional — text above takes priority; multiple files allowed)</span>
-                    </label>
+                  <div className="space-y-3">
+                    <div className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70">
+                      Attach File <span className="text-foreground/50 normal-case tracking-normal font-sans text-[11px]">(Optional — PDF, DOCX, PPTX, images)</span>
+                    </div>
+
                     {selectedFiles.length > 0 && (
-                      <div className="space-y-2 mb-2">
-                        {selectedFiles.map((f, idx) => (
-                          <div key={f.name + idx} className="flex items-center gap-3 p-4 border border-primary/30 rounded-xl bg-primary/5">
-                            <Paperclip className="w-4 h-4 text-primary shrink-0" />
-                            <span className="text-sm text-foreground/80 flex-1 truncate font-mono">{f.name}</span>
+                      <div className="space-y-2">
+                        {selectedFiles.map((file, idx) => (
+                          <div key={`${file.name}-${idx}`} className="flex items-center gap-3 px-4 py-3 rounded-xl border border-primary/20 bg-primary/5">
+                            <Paperclip className="w-4 h-4 text-primary/60 shrink-0" />
+                            <span className="flex-1 text-sm text-foreground/80 font-mono truncate">{file.name}</span>
+                            <span className="text-xs text-foreground/40 shrink-0">{(file.size / 1024 / 1024).toFixed(1)} MB</span>
                             <button
                               type="button"
                               onClick={() => setSelectedFiles((prev) => prev.filter((_, i) => i !== idx))}
-                              className="text-foreground/50 hover:text-destructive transition-colors"
+                              className="text-foreground/30 hover:text-destructive transition-colors shrink-0"
                             >
                               <X className="w-4 h-4" />
                             </button>
@@ -481,18 +590,18 @@ export default function AdminDashboard() {
                         ))}
                       </div>
                     )}
-                    <label className="flex flex-col items-center justify-center gap-1 h-20 border border-dashed border-border/50 rounded-xl bg-background/20 hover:bg-background/40 hover:border-primary/30 transition-all cursor-pointer group">
-                      <UploadIcon className="w-4 h-4 text-foreground/50 group-hover:text-primary transition-colors" />
-                      <span className="text-sm text-foreground/50 group-hover:text-foreground/80 transition-colors font-display uppercase tracking-widest text-[10px]">
-                        {selectedFiles.length > 0 ? "Click to add more files" : "Click to attach files"}
+
+                    <label className="flex items-center gap-3 px-5 py-4 rounded-xl border border-dashed border-border/40 bg-background/20 hover:bg-background/40 hover:border-primary/30 transition-all cursor-pointer group">
+                      <UploadIcon className="w-4 h-4 text-foreground/40 group-hover:text-primary/60 transition-colors" />
+                      <span className="text-sm text-foreground/50 group-hover:text-foreground/70 transition-colors font-light">
+                        {selectedFiles.length > 0 ? "Add another file" : "Click to attach a file"}
                       </span>
-                      <span className="text-[10px] text-foreground/35 font-sans normal-case tracking-normal">PDF, DOCX, DOC, PPTX, MD, TXT, JPG, PNG, WEBP, GIF, TIFF — up to 50 MB</span>
                       <input
                         ref={fileInputRef}
                         type="file"
-                        multiple
                         className="hidden"
-                        accept=".pdf,.docx,.doc,.pptx,.md,.txt,.jpg,.jpeg,.png,.webp,.gif,.tiff,.tif,.csv"
+                        accept=".pdf,.docx,.doc,.pptx,.md,.txt,.jpg,.jpeg,.png,.webp,.gif,.tiff"
+                        multiple
                         onChange={(e) => {
                           const incoming = Array.from(e.target.files ?? []);
                           setSelectedFiles((prev) => {

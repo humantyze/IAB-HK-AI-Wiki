@@ -14,10 +14,21 @@ interface UploadData {
   files?: File[];
 }
 
+export class UploadError extends Error {
+  constructor(
+    public readonly errorCode: string,
+    message: string,
+    public readonly uploadId: number | null = null,
+  ) {
+    super(message);
+    this.name = "UploadError";
+  }
+}
+
 export function useSubmitUpload() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (data: UploadData) => {
+    mutationFn: async (data: UploadData): Promise<{ id: number; status: string; [key: string]: unknown }> => {
       const formData = new FormData();
       formData.append("uploaderName", data.uploaderName);
       formData.append("uploaderEmail", data.uploaderEmail);
@@ -38,10 +49,17 @@ export function useSubmitUpload() {
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Upload failed" }));
-        throw new Error(err.error || "Upload failed");
+        const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+        if (res.status === 422 && typeof body.errorCode === "string") {
+          throw new UploadError(
+            body.errorCode,
+            typeof body.message === "string" ? body.message : "Upload processing failed",
+            typeof body.uploadId === "number" ? body.uploadId : null,
+          );
+        }
+        throw new Error(typeof body.error === "string" ? body.error : "Upload failed");
       }
-      return res.json();
+      return res.json() as Promise<{ id: number; status: string; [key: string]: unknown }>;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/uploads"] });
