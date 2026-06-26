@@ -163,6 +163,7 @@ router.post("/admin/reprocess-uploads", requireSuperAuth, async (_req, res) => {
       const message = err instanceof Error ? err.message : String(err);
       logger.error({ err, uploadId: upload.id }, "Knowledge indexing failed during reprocess");
       errors.push({ step: "knowledge_indexing", message, ts: new Date().toISOString() });
+      finalStatus = "partial";
     }
 
     await db

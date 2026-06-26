@@ -168,36 +168,39 @@ export default function AdminDashboard() {
       if (attempts >= MAX_ATTEMPTS) { setIsPolling(false); return; }
       attempts++;
       try {
-        // Poll wiki count for new pages
-        const wikiRes = await fetch(`${baseUrl}/api/wiki`, { credentials: "include" });
-        if (wikiRes.ok) {
-          const data = await wikiRes.json();
-          const count = Array.isArray(data) ? data.length : 0;
-          if (count > submitResult.wikiCountBefore) {
-            setWikiCountAfter(count);
-            setIsPolling(false);
-            return;
-          }
-        }
-
-        // Also poll upload status for partial/failed outcome
+        // Primary: poll upload status so partial outcomes are never masked by early wiki-count growth
         const statusRes = await fetch(`${baseUrl}/api/uploads/${submitResult.uploadId}/status`, { credentials: "include" });
-        if (statusRes.ok) {
-          const statusData = await statusRes.json() as { status: string };
-          if (statusData.status === "partial") {
-            setUploadWarning("Your file was received but content could not be extracted. The IAB HK team has been notified.");
-            setWikiCountAfter(submitResult.wikiCountBefore);
-            setIsPolling(false);
-          } else if (statusData.status === "failed") {
-            setUploadWarning("Processing failed after submission. The IAB HK team has been notified.");
-            setWikiCountAfter(submitResult.wikiCountBefore);
-            setIsPolling(false);
+        if (!statusRes.ok) return;
+        const statusData = await statusRes.json() as { status: string };
+
+        if (statusData.status === "processed" || statusData.status === "partial" || statusData.status === "failed") {
+          // Processing complete — fetch final wiki count regardless of outcome
+          let finalCount = submitResult.wikiCountBefore;
+          try {
+            const wikiRes = await fetch(`${baseUrl}/api/wiki`, { credentials: "include" });
+            if (wikiRes.ok) {
+              const data = await wikiRes.json();
+              finalCount = Array.isArray(data) ? data.length : finalCount;
+            }
+          } catch { /* ignore */ }
+
+          setWikiCountAfter(finalCount);
+
+          if (statusData.status === "partial" || statusData.status === "failed") {
+            setUploadWarning(
+              "Your file was received but some content could not be fully processed. " +
+              "The IAB HK team has been notified.",
+            );
           }
+
+          setIsPolling(false);
         }
+        // status "pending" → processing still in flight, continue polling
       } catch { /* ignore */ }
     };
 
-    const timer = setTimeout(poll, 15000);
+    // First check after 10 s, then every 5 s
+    const timer = setTimeout(poll, 10000);
     const interval = setInterval(poll, 5000);
     return () => { clearTimeout(timer); clearInterval(interval); };
   }, [isPolling, submitResult]);

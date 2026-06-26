@@ -375,9 +375,10 @@ router.post("/uploads", requireAuth, (req, res, next) => {
         }
 
         const allErrors = [...capturedSyncErrors, ...asyncErrors];
-        // partial if: some files failed extraction (capturedSyncErrors) OR wiki produced nothing
+        // partial if: any file failed extraction, wiki produced nothing, or knowledge indexing failed
         const noWikiContent = totalCreated === 0 && totalUpdated === 0 && asyncErrors.some((e) => e.step === "wiki_extraction");
-        const finalStatus = (noWikiContent || capturedSyncErrors.length > 0) ? "partial" : "processed";
+        const hasIndexingError = asyncErrors.some((e) => e.step === "knowledge_indexing");
+        const finalStatus = (noWikiContent || capturedSyncErrors.length > 0 || hasIndexingError) ? "partial" : "processed";
 
         await db
           .update(uploadsTable)
