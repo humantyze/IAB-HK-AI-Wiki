@@ -6,8 +6,9 @@ import { Link, useLocation } from "wouter";
 import {
   LogOut, Upload as UploadIcon, Hand,
   Paperclip, X, Sparkles, FileText,
-  BookOpen, Check, PlusCircle,
+  BookOpen, Check, PlusCircle, Eye, Layers, Image,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
 import { useSubmitUpload } from "@/hooks/use-uploads";
@@ -28,6 +29,46 @@ const uploadSchema = z.object({
   rawText: z.string().optional(),
 });
 
+type StepDef = { label: string; detail: string; Icon: LucideIcon; afterSeconds: number };
+
+function getStepsForFile(file: File | null): StepDef[] {
+  const mime = file?.type ?? "";
+  const name = file?.name?.toLowerCase() ?? "";
+
+  if (mime === "application/pdf") {
+    return [
+      { label: "Reading document", detail: "Extracting text from PDF pages…", Icon: FileText, afterSeconds: 0 },
+      { label: "Analysing images", detail: "Using AI vision to interpret charts and diagrams…", Icon: Eye, afterSeconds: 5 },
+      { label: "Building wiki pages", detail: "Generating knowledge pages from extracted content…", Icon: BookOpen, afterSeconds: 22 },
+    ];
+  }
+  if (mime.includes("presentationml") || name.endsWith(".pptx")) {
+    return [
+      { label: "Reading presentation", detail: "Opening and parsing slide structure…", Icon: FileText, afterSeconds: 0 },
+      { label: "Parsing slides", detail: "Extracting text, images, and speaker notes from each slide…", Icon: Layers, afterSeconds: 4 },
+      { label: "Building wiki pages", detail: "Generating knowledge pages from slide content…", Icon: BookOpen, afterSeconds: 18 },
+    ];
+  }
+  if (mime.includes("wordprocessingml") || name.endsWith(".docx") || name.endsWith(".doc")) {
+    return [
+      { label: "Reading document", detail: "Parsing document structure and formatting…", Icon: FileText, afterSeconds: 0 },
+      { label: "Extracting content", detail: "Pulling text, tables, and embedded elements…", Icon: Layers, afterSeconds: 3 },
+      { label: "Building wiki pages", detail: "Generating knowledge pages from document content…", Icon: BookOpen, afterSeconds: 12 },
+    ];
+  }
+  if (mime.startsWith("image/")) {
+    return [
+      { label: "Reading image", detail: "Loading and preparing image for analysis…", Icon: Image, afterSeconds: 0 },
+      { label: "Analysing with AI", detail: "Using computer vision to interpret visual content…", Icon: Eye, afterSeconds: 2 },
+      { label: "Building wiki pages", detail: "Generating knowledge pages from visual content…", Icon: BookOpen, afterSeconds: 14 },
+    ];
+  }
+  return [
+    { label: "Processing content", detail: "Parsing and preparing submitted material…", Icon: FileText, afterSeconds: 0 },
+    { label: "Building wiki pages", detail: "Extracting knowledge pages from your content…", Icon: BookOpen, afterSeconds: 8 },
+  ];
+}
+
 export default function AdminDashboard() {
   const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const [, setLocation] = useLocation();
@@ -38,6 +79,7 @@ export default function AdminDashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStep, setSubmitStep] = useState(0);
+  const [activeSteps, setActiveSteps] = useState<StepDef[]>([]);
 
   const [submitResult, setSubmitResult] = useState<{
     fileName: string | null;
@@ -45,11 +87,6 @@ export default function AdminDashboard() {
   } | null>(null);
   const [wikiCountAfter, setWikiCountAfter] = useState<number | null>(null);
   const [isPolling, setIsPolling] = useState(false);
-
-  const SUBMIT_STEPS = [
-    { label: "Processing content", detail: "Parsing and preparing submitted material…", Icon: FileText },
-    { label: "Building wiki entries", detail: "Extracting knowledge pages from your content…", Icon: BookOpen },
-  ] as const;
 
   useEffect(() => {
     if (!isSubmitting) {
@@ -59,10 +96,16 @@ export default function AdminDashboard() {
     let elapsed = 0;
     const interval = setInterval(() => {
       elapsed += 1;
-      if (elapsed >= 8) setSubmitStep(1);
+      setSubmitStep((prev) => {
+        const next = prev + 1;
+        if (next < activeSteps.length && elapsed >= activeSteps[next].afterSeconds) {
+          return next;
+        }
+        return prev;
+      });
     }, 1000);
     return () => clearInterval(interval);
-  }, [isSubmitting]);
+  }, [isSubmitting, activeSteps]);
 
   const form = useForm<z.infer<typeof uploadSchema>>({
     resolver: zodResolver(uploadSchema),
@@ -115,6 +158,8 @@ export default function AdminDashboard() {
       return;
     }
 
+    setActiveSteps(getStepsForFile(selectedFile));
+    setSubmitStep(0);
     setIsSubmitting(true);
     try {
       const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -211,7 +256,7 @@ export default function AdminDashboard() {
                   </div>
 
                   <div className="space-y-2">
-                    {SUBMIT_STEPS.map((step, idx) => {
+                    {activeSteps.map((step, idx) => {
                       const done = idx < submitStep;
                       const active = idx === submitStep;
                       return (
