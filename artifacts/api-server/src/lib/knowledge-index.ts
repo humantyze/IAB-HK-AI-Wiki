@@ -1,4 +1,4 @@
-import { and, eq, sql, cosineDistance, gt, desc, inArray } from "drizzle-orm";
+import { and, eq, sql, cosineDistance, desc, inArray, or } from "drizzle-orm";
 import {
   db,
   knowledgeChunksTable,
@@ -7,8 +7,14 @@ import {
   type KnowledgeSourceType,
   type InsertKnowledgeChunk,
 } from "@workspace/db";
-import { embed, embedBatch, chunkText } from "./embeddings";
+import { embedQuery, embedPassages, chunkText } from "./embeddings";
+import { rerank } from "./reranker";
 import { logger } from "./logger";
+
+// An upload's chunks are only retrievable once it has finished processing
+// successfully ("processed") or with non-critical issues ("partial"). Uploads
+// that are still "pending" or have "failed" must never surface in search.
+const ELIGIBLE_UPLOAD_STATUSES = ["processed", "partial"];
 
 interface IndexSourceInput {
   sourceType: KnowledgeSourceType;
@@ -36,7 +42,7 @@ async function buildChunkRows(input: IndexSourceInput): Promise<InsertKnowledgeC
 
   // Prefix each chunk with the title so isolated chunks keep topical context.
   const toEmbed = chunks.map((c) => (title ? `${title}\n\n${c}` : c));
-  const vectors = await embedBatch(toEmbed);
+  const vectors = await embedPassages(toEmbed);
 
   return chunks.map((content, i) => ({
     sourceType,
@@ -120,44 +126,154 @@ export interface RetrievedChunk {
 export interface RetrieveOptions {
   limit?: number;
   sourceTypes?: KnowledgeSourceType[];
-  minSimilarity?: number;
+  /** Minimum reranker relevance score (0-1) to keep a chunk. */
+  minScore?: number;
+  /** Candidates to gather per retrieval method before fusion. */
+  candidatePool?: number;
+  /** How many fused candidates to rerank (capped for CPU latency). */
+  rerankTopK?: number;
+  /** Disable the cross-encoder reranker (e.g. when an LLM ranks afterwards). */
+  rerank?: boolean;
 }
 
-/** Embed the query and return the most similar chunks across the corpus. */
+interface Candidate {
+  id: number;
+  sourceType: KnowledgeSourceType;
+  sourceId: number;
+  sourceSlug: string | null;
+  title: string;
+  content: string;
+}
+
+// Reciprocal Rank Fusion constant — dampens the influence of any single rank.
+const RRF_K = 60;
+// bge-reranker sigmoid scores: relevant pairs sit well above this, weak/irrelevant
+// matches fall below. Replaces the old arbitrary cosine cutoff.
+const DEFAULT_MIN_RERANK_SCORE = 0.25;
+
+/**
+ * Hybrid retrieval: fuse dense vector search (semantic, multilingual) with
+ * Postgres full-text keyword search (exact terms, names, numbers) via Reciprocal
+ * Rank Fusion, then re-order the fused candidates with a cross-encoder reranker
+ * and drop anything below a calibrated relevance threshold.
+ *
+ * Upload chunks are filtered to eligible processing statuses so pending/failed
+ * uploads never surface. The keyword score is computed inline with
+ * `to_tsvector('simple', ...)` (no extra column / migration) — the corpus is
+ * small enough that the per-query cost is negligible.
+ */
 export async function retrieve(query: string, opts: RetrieveOptions = {}): Promise<RetrievedChunk[]> {
-  const { limit = 8, sourceTypes, minSimilarity = 0.10 } = opts;
+  const {
+    limit = 8,
+    sourceTypes,
+    minScore = DEFAULT_MIN_RERANK_SCORE,
+    candidatePool = 40,
+    rerankTopK = 16,
+    rerank: doRerank = true,
+  } = opts;
   const trimmed = query.trim();
   if (!trimmed) return [];
 
-  const queryVector = await embed(trimmed);
-  const similarity = sql<number>`1 - (${cosineDistance(knowledgeChunksTable.embedding, queryVector)})`;
+  // Shared filters: only eligible upload statuses, plus optional source-type filter.
+  // LEFT JOIN uploads so the status check applies to upload chunks only; wiki
+  // chunks (no join match) always pass.
+  const uploadEligible = or(
+    sql`${knowledgeChunksTable.sourceType} <> 'upload'`,
+    inArray(uploadsTable.status, ELIGIBLE_UPLOAD_STATUSES),
+  );
+  const typeFilter =
+    sourceTypes && sourceTypes.length > 0
+      ? inArray(knowledgeChunksTable.sourceType, sourceTypes)
+      : undefined;
+  const joinUploads = and(
+    eq(knowledgeChunksTable.sourceType, sql`'upload'`),
+    eq(knowledgeChunksTable.sourceId, uploadsTable.id),
+  );
 
-  const conditions = [gt(similarity, minSimilarity)];
-  if (sourceTypes && sourceTypes.length > 0) {
-    conditions.push(inArray(knowledgeChunksTable.sourceType, sourceTypes));
+  const baseSelect = {
+    id: knowledgeChunksTable.id,
+    sourceType: knowledgeChunksTable.sourceType,
+    sourceId: knowledgeChunksTable.sourceId,
+    sourceSlug: knowledgeChunksTable.sourceSlug,
+    title: knowledgeChunksTable.title,
+    content: knowledgeChunksTable.content,
+  };
+
+  // ---- Dense vector candidates ----
+  const queryVector = await embedQuery(trimmed);
+  const similarity = sql<number>`1 - (${cosineDistance(knowledgeChunksTable.embedding, queryVector)})`;
+  const vectorRows = await db
+    .select(baseSelect)
+    .from(knowledgeChunksTable)
+    .leftJoin(uploadsTable, joinUploads)
+    .where(and(uploadEligible, typeFilter))
+    .orderBy(desc(similarity))
+    .limit(candidatePool);
+
+  // ---- Keyword (full-text) candidates ----
+  const tsquery = sql`websearch_to_tsquery('simple', ${trimmed})`;
+  const tsvector = sql`to_tsvector('simple', coalesce(${knowledgeChunksTable.title}, '') || ' ' || ${knowledgeChunksTable.content})`;
+  const keywordRank = sql<number>`ts_rank_cd(${tsvector}, ${tsquery})`;
+  const keywordRows = await db
+    .select(baseSelect)
+    .from(knowledgeChunksTable)
+    .leftJoin(uploadsTable, joinUploads)
+    .where(and(uploadEligible, typeFilter, sql`${tsvector} @@ ${tsquery}`))
+    .orderBy(desc(keywordRank))
+    .limit(candidatePool);
+
+  // ---- Reciprocal Rank Fusion ----
+  const fused = new Map<number, { candidate: Candidate; score: number }>();
+  const addRanked = (rows: typeof vectorRows) => {
+    rows.forEach((row, i) => {
+      const contribution = 1 / (RRF_K + i + 1);
+      const existing = fused.get(row.id);
+      if (existing) {
+        existing.score += contribution;
+      } else {
+        fused.set(row.id, {
+          candidate: { ...row, sourceType: row.sourceType as KnowledgeSourceType },
+          score: contribution,
+        });
+      }
+    });
+  };
+  addRanked(vectorRows);
+  addRanked(keywordRows);
+
+  if (fused.size === 0) return [];
+
+  const ranked = [...fused.values()].sort((a, b) => b.score - a.score);
+
+  // ---- Cross-encoder rerank (graceful fallback to fused order) ----
+  // When reranking is disabled we return the fused order directly, capped only
+  // by `limit` (not `rerankTopK`) so callers like the wiki pre-filter can ask
+  // for a larger candidate set.
+  let scored: Array<{ candidate: Candidate; score: number }>;
+  if (doRerank) {
+    const toRerank = ranked.slice(0, rerankTopK);
+    try {
+      const passages = toRerank.map((r) => `${r.candidate.title}\n${r.candidate.content}`);
+      const rerankScores = await rerank(trimmed, passages);
+      scored = toRerank
+        .map((r, i) => ({ candidate: r.candidate, score: rerankScores[i] }))
+        .filter((r) => r.score >= minScore)
+        .sort((a, b) => b.score - a.score);
+    } catch (err) {
+      logger.warn({ err }, "Reranker failed — falling back to RRF fusion order");
+      scored = toRerank;
+    }
+  } else {
+    scored = ranked;
   }
 
-  const rows = await db
-    .select({
-      sourceType: knowledgeChunksTable.sourceType,
-      sourceId: knowledgeChunksTable.sourceId,
-      sourceSlug: knowledgeChunksTable.sourceSlug,
-      title: knowledgeChunksTable.title,
-      content: knowledgeChunksTable.content,
-      similarity,
-    })
-    .from(knowledgeChunksTable)
-    .where(and(...conditions))
-    .orderBy(desc(similarity))
-    .limit(limit);
-
-  return rows.map((r) => ({
-    sourceType: r.sourceType as KnowledgeSourceType,
-    sourceId: r.sourceId,
-    sourceSlug: r.sourceSlug,
-    title: r.title,
-    content: r.content,
-    similarity: Number(r.similarity),
+  return scored.slice(0, limit).map((r) => ({
+    sourceType: r.candidate.sourceType,
+    sourceId: r.candidate.sourceId,
+    sourceSlug: r.candidate.sourceSlug,
+    title: r.candidate.title,
+    content: r.candidate.content,
+    similarity: Number(r.score),
   }));
 }
 
@@ -191,10 +307,12 @@ export async function reindexAll(): Promise<{ wiki: number; uploads: number; chu
     wikiCount++;
   }
 
-  // Uploads (raw submitted text)
+  // Uploads (raw submitted text) — only those that finished processing
+  // successfully or partially; pending/failed uploads are never indexed.
   const uploads = await db
     .select({ id: uploadsTable.id, contentType: uploadsTable.contentType, contributorName: uploadsTable.contributorName, rawText: uploadsTable.rawText })
-    .from(uploadsTable);
+    .from(uploadsTable)
+    .where(inArray(uploadsTable.status, ELIGIBLE_UPLOAD_STATUSES));
   let uploadCount = 0;
   for (const u of uploads) {
     if (!u.rawText.trim()) continue;

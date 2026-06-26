@@ -397,6 +397,16 @@ router.post("/uploads", requireAuth, (req, res, next) => {
           })
           .where(eq(uploadsTable.id, uploadId));
 
+        // A failed upload must not stay searchable — pull any chunks that were
+        // indexed earlier in this run back out of the knowledge index.
+        if (finalStatus === "failed") {
+          try {
+            await removeSource("upload", uploadId);
+          } catch (err) {
+            logger.error({ err, uploadId }, "Failed to remove failed upload from knowledge index");
+          }
+        }
+
         logger.info(
           { uploadId, totalCreated, totalUpdated, asyncErrors: asyncErrors.length, syncErrors: capturedSyncErrors.length, finalStatus },
           "Upload processing complete",

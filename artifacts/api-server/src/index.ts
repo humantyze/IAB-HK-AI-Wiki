@@ -2,7 +2,8 @@ import cron from "node-cron";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { indexKnowledgeIfEmpty, cleanupLegacyChunks } from "./lib/knowledge-index";
-import { embed } from "./lib/embeddings";
+import { embedQuery } from "./lib/embeddings";
+import { rerank } from "./lib/reranker";
 import { runBackup } from "./lib/backup";
 
 const rawPort = process.env["PORT"];
@@ -37,12 +38,17 @@ async function main() {
     logger.error({ err: e }, "Unexpected error during legacy chunk cleanup");
   });
 
-  // Pre-warm the local embedding model so the first user search doesn't
-  // trigger a slow model-load that times out or returns empty results.
-  embed("knowledge base pre-warm").then(() => {
+  // Pre-warm the local embedding + reranker models so the first user search
+  // doesn't trigger a slow model-load that times out or returns empty results.
+  embedQuery("knowledge base pre-warm").then(() => {
     logger.info("Embedding model pre-warmed");
   }).catch((e) => {
     logger.warn({ err: e }, "Embedding model pre-warm failed — first search may be slow");
+  });
+  rerank("pre-warm query", ["pre-warm passage"]).then(() => {
+    logger.info("Reranker model pre-warmed");
+  }).catch((e) => {
+    logger.warn({ err: e }, "Reranker model pre-warm failed — first search may be slow");
   });
 
   // Backfill the semantic knowledge index in the background if it is empty.

@@ -15,10 +15,45 @@ on `/api/wiki/search`.
   embeddings endpoint. Do NOT try to call `/embeddings` through
   `AI_INTEGRATIONS_OPENAI_BASE_URL` — it isn't there.
 - We use `@huggingface/transformers` (Transformers.js) with model
-  `Xenova/all-MiniLM-L6-v2` (384 dims), mean-pooled + normalized. No API key,
-  self-contained. Model loads lazily on first embed (~3s) and is cached.
+  `Xenova/multilingual-e5-small` (384 dims), mean-pooled + normalized. No API
+  key, self-contained, loads lazily + cached. **Multilingual** so EN + Chinese
+  queries hit the same English corpus (proven: ZH queries retrieve EN pages).
+- **e5 prefixes are mandatory:** passages stored as `passage: …`, queries as
+  `query: …` (handled inside `embedPassages`/`embedQuery`). Omitting them tanks
+  recall. Swapping the embedding model requires a FULL reindex — vectors from
+  different models are not comparable (same 384-dim column, incompatible space).
 - **Why:** keeps retrieval free and key-less; chat/answer synthesis still uses
-  the OpenAI integration (gpt-4o-mini).
+  the OpenAI integration.
+
+## Hybrid retrieval + cross-encoder reranker
+- `retrieve()` fuses dense vector search with Postgres full-text keyword search
+  via Reciprocal Rank Fusion (RRF, k=60), then reranks the fused top-K with a
+  cross-encoder (`Xenova/bge-reranker-base`, q8, sigmoid → 0-1 score) and drops
+  anything below ~0.25. `similarity` on results now holds the reranker score.
+- Keyword score is computed INLINE: `to_tsvector('simple', title||' '||content)`
+  + `ts_rank_cd` at query time — **no tsvector column, no migration**. Corpus is
+  tiny (~70 chunks) so the seq-scan cost is negligible. This was a deliberate
+  data-safety choice (additive-only, schema untouched). `'simple'` config means
+  Chinese keyword matching is weak — multilingual recall comes from the vector
+  side, not FTS.
+- Reranker is best-effort: on load/run failure it falls back to RRF order. Pass
+  `{ rerank: false }` when an LLM ranks afterwards (e.g. wiki pre-filter) to
+  skip the latency.
+- Both embedding + reranker models are pre-warmed at startup in `index.ts`.
+
+## Upload status gating (search must not show in-flight/failed uploads)
+- Only uploads with status `processed` or `partial` are eligible. `retrieve()`
+  LEFT JOINs `uploads` and filters `sourceType<>'upload' OR status IN (...)`, so
+  status changes take effect at query time without reindexing. `reindexAll` also
+  filters uploads by status, and a run that ends `failed` calls
+  `removeSource('upload', id)`.
+
+## retrieve() limit vs rerankTopK
+- `rerankTopK` (default 16) caps ONLY the rerank candidate slice. With
+  `rerank:false`, results are capped by `limit` against the full fused pool
+  (`candidatePool`=40 each side → up to 80 unique). Callers like the wiki
+  pre-filter (`limit:24, rerank:false`) depend on this — don't reintroduce a
+  blanket `rerankTopK` truncation before the final `slice(0, limit)`.
 
 ## Native-dep packaging gotcha (caused a startup crash)
 - `build.mjs` externalizes `onnxruntime-node`, `sharp`, `protobufjs`, `*.node`.
@@ -43,6 +78,3 @@ on `/api/wiki/search`.
   must rebuild declarations (`npx tsc -b lib/db`) or api-server typecheck reports
   `has no exported member` for the new table even though dev/runtime (esbuild
   bundles from source) works fine.
-- Pre-existing baseline: `artifacts/api-server` typecheck already fails on
-  `parseInt(req.params.id)` (`string | string[]`) in uploads.ts — unrelated to
-  this feature; dev uses esbuild (no typecheck) so the app runs regardless.

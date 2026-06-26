@@ -76,7 +76,7 @@ router.post("/wiki/search", async (req, res) => {
   // keeps the prompt small. Falls back to all pages if retrieval finds nothing.
   let candidatePages = allPages;
   try {
-    const hits = await retrieve(query.trim(), { sourceTypes: ["wiki"], limit: 24 });
+    const hits = await retrieve(query.trim(), { sourceTypes: ["wiki"], limit: 24, rerank: false });
     const orderedSlugs: string[] = [];
     const seen = new Set<string>();
     for (const h of hits) {
