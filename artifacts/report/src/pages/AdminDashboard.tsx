@@ -486,7 +486,7 @@ export default function AdminDashboard() {
                       <span className="text-sm text-foreground/50 group-hover:text-foreground/80 transition-colors font-display uppercase tracking-widest text-[10px]">
                         {selectedFiles.length > 0 ? "Click to add more files" : "Click to attach files"}
                       </span>
-                      <span className="text-[10px] text-foreground/35 font-sans normal-case tracking-normal">PDF, DOCX, DOC, PPTX, MD, TXT, JPG, PNG, WEBP, GIF, TIFF</span>
+                      <span className="text-[10px] text-foreground/35 font-sans normal-case tracking-normal">PDF, DOCX, DOC, PPTX, MD, TXT, JPG, PNG, WEBP, GIF, TIFF — up to 50 MB</span>
                       <input
                         ref={fileInputRef}
                         type="file"

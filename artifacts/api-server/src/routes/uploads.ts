@@ -25,7 +25,8 @@ const ALLOWED_MIME_TYPES: string[] = [
   "text/csv",
 ];
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+const MAX_FILE_SIZE_MB = MAX_FILE_SIZE / (1024 * 1024);
 
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) {
@@ -82,7 +83,11 @@ router.post("/uploads", requireAuth, (req, res, next) => {
   upload.array("files")(req, res, (err) => {
     if (err) {
       if (err instanceof multer.MulterError) {
-        res.status(400).json({ error: `Upload error: ${err.message}` });
+        if (err.code === "LIMIT_FILE_SIZE") {
+          res.status(400).json({ error: `File too large. Maximum allowed size is ${MAX_FILE_SIZE_MB} MB.` });
+        } else {
+          res.status(400).json({ error: `Upload error: ${err.message}` });
+        }
         return;
       }
       res.status(400).json({ error: err.message || "File upload failed" });
