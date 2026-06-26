@@ -5,7 +5,7 @@ import { Link, useLocation } from "wouter";
 import {
   LogOut, History, Settings,
   CheckCircle2, BookOpen, RefreshCw, AlertCircle,
-  Trash2, RotateCcw, Calendar, X, DatabaseBackup, CloudUpload, ImagePlay,
+  Trash2, RotateCcw, Calendar, X, DatabaseBackup, CloudUpload, ImagePlay, Layers,
 } from "lucide-react";
 
 import { useSuperAuth } from "@/hooks/use-super-auth";
@@ -39,6 +39,9 @@ export default function SuperAdminDashboard() {
 
   const [imageBackfilling, setImageBackfilling] = useState(false);
   const [imageBackfillResult, setImageBackfillResult] = useState<{ pagesUpdated: number; uploadsProcessed: number; message?: string } | null>(null);
+
+  const [reprocessing, setReprocessing] = useState(false);
+  const [reprocessResult, setReprocessResult] = useState<{ count: number } | null>(null);
 
   interface BackupEntry {
     id: number;
@@ -103,6 +106,34 @@ export default function SuperAdminDashboard() {
       toast({ title: "Backup Failed", description: message, variant: "destructive" });
     } finally {
       setBackupRunning(false);
+    }
+  };
+
+  const handleReprocess = async () => {
+    setReprocessing(true);
+    setReprocessResult(null);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/admin/reprocess-uploads`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json() as { count?: number; message?: string; error?: string };
+      if (!res.ok) {
+        toast({ title: "Reprocess Failed", description: String(data.error ?? "Unknown error"), variant: "destructive" });
+      } else {
+        const count = data.count ?? 0;
+        setReprocessResult({ count });
+        toast({
+          title: "Reprocess Started",
+          description: `${count} upload(s) queued. Wiki pages will appear over the next few minutes.`,
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Request failed";
+      toast({ title: "Reprocess Failed", description: message, variant: "destructive" });
+    } finally {
+      setReprocessing(false);
     }
   };
 
@@ -389,6 +420,30 @@ export default function SuperAdminDashboard() {
                     {wikiSeeding
                       ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Rebuilding…</>
                       : <><RefreshCw className="w-3.5 h-3.5 mr-2" />Rebuild Wiki</>}
+                  </Button>
+                </div>
+
+                <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-6">
+                  <h3 className="font-display text-sm tracking-widest uppercase text-orange-400 mb-2">Reprocess Uploads → Wiki</h3>
+                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                    Re-run wiki extraction for all uploads using their stored text. Use this to regenerate wiki pages after a wipe, or if pages were missing after a previous upload. Runs one file at a time in the background (~2 min per upload).
+                  </p>
+                  {reprocessResult && (
+                    <div className="mb-4 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-orange-400" />
+                      <span className="text-sm text-foreground/80">
+                        <strong>{reprocessResult.count}</strong> upload(s) queued — wiki pages generating in background
+                      </span>
+                    </div>
+                  )}
+                  <Button
+                    onClick={handleReprocess}
+                    disabled={reprocessing}
+                    className="font-display uppercase tracking-[0.15em] text-[11px] bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-xl h-11 px-6 transition-all"
+                  >
+                    {reprocessing
+                      ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Queueing…</>
+                      : <><Layers className="w-3.5 h-3.5 mr-2" />Reprocess Uploads</>}
                   </Button>
                 </div>
 
