@@ -543,6 +543,24 @@ export default function WikiIndex() {
             <span>Ask</span>
           </button>
         </form>
+
+        {/* Sample questions */}
+        <div className="flex flex-wrap gap-2 mt-3 max-w-xl">
+          {[
+            "How are HK marketers using AI tools today?",
+            "What is agentic media buying?",
+            "What AI regulations affect Hong Kong marketers?",
+          ].map((q) => (
+            <button
+              key={q}
+              type="button"
+              onClick={() => { setQuery(q); setActiveQuery(q); }}
+              className="text-xs px-3 py-1.5 rounded-full border border-gray-200 bg-white text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors"
+            >
+              {q}
+            </button>
+          ))}
+        </div>
       </div>
       {/* Tag filters + count row */}
       <div className="max-w-6xl mx-auto px-6 lg:px-8">
