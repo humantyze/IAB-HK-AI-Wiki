@@ -91,16 +91,16 @@ function parseSummaryWithLinks(summary: string, knownSlugs: Set<string>): React.
   return parts;
 }
 
-function renderAnswerWithCitations(answer: string, citations: KnowledgeCitation[]): React.ReactNode[] {
+function renderInlineWithCitations(text: string, citations: KnowledgeCitation[], keyPrefix: string): React.ReactNode[] {
   const parts: React.ReactNode[] = [];
   const markerRegex = /(\[\d+\])+/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
-  while ((match = markerRegex.exec(answer)) !== null) {
-    if (match.index > lastIndex) parts.push(answer.slice(lastIndex, match.index));
+  while ((match = markerRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
     const nums = [...match[0].matchAll(/\[(\d+)\]/g)].map((m) => parseInt(m[1]));
     parts.push(
-      <sup key={`cite-${match.index}`} className="ml-0.5">
+      <sup key={`${keyPrefix}-cite-${match.index}`} className="ml-0.5">
         {nums.map((n, i) => {
           const cit = citations.find((c) => c.index === n);
           return (
@@ -118,8 +118,22 @@ function renderAnswerWithCitations(answer: string, citations: KnowledgeCitation[
     );
     lastIndex = match.index + match[0].length;
   }
-  if (lastIndex < answer.length) parts.push(answer.slice(lastIndex));
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
   return parts;
+}
+
+function renderAnswerWithCitations(answer: string, citations: KnowledgeCitation[]): React.ReactNode[] {
+  // Split on blank lines into paragraphs; render each as its own <p> so the
+  // prose reads naturally even if the model emits multiple sentences.
+  const paragraphs = answer.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  if (paragraphs.length <= 1) {
+    return renderInlineWithCitations(answer, citations, "p0");
+  }
+  return paragraphs.map((para, i) => (
+    <p key={i} className={i > 0 ? "mt-3" : undefined}>
+      {renderInlineWithCitations(para, citations, `p${i}`)}
+    </p>
+  ));
 }
 
 export default function WikiIndex() {
