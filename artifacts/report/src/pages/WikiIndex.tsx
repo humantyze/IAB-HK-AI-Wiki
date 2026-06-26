@@ -146,6 +146,10 @@ export default function WikiIndex() {
   const streamedTextRef = useRef("");
   const knownCitCountRef = useRef<Record<number, number>>({});
   const citationAnimGenRef = useRef<Record<number, number>>({});
+  // RAF drip — decouple token arrival rate from React render rate
+  const pendingTokensRef = useRef<string[]>([]);
+  const rafRef = useRef<number | null>(null);
+  const streamEndedRef = useRef(false);
 
   const baseUrl = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
 
@@ -171,6 +175,9 @@ export default function WikiIndex() {
     streamedTextRef.current = "";
     knownCitCountRef.current = {};
     citationAnimGenRef.current = {};
+    if (rafRef.current !== null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    pendingTokensRef.current = [];
+    streamEndedRef.current = false;
 
     if (activeQuery.trim().length < 3) {
       setIsSearching(false);
@@ -190,10 +197,33 @@ export default function WikiIndex() {
     });
 
     const handleToken = (token: string) => {
-      streamedTextRef.current += token;
-      setRagAnswer((prev) => (prev ?? "") + token);
+      // Push to drip buffer — the RAF loop flushes into React state
+      // so each animation frame gets its own render (no batching surprise).
+      pendingTokensRef.current.push(token);
 
-      // Scan accumulated text for all complete [N] markers and detect new occurrences.
+      // Start the RAF drain loop only if it isn't already running.
+      if (rafRef.current === null) {
+        const drain = () => {
+          if (pendingTokensRef.current.length > 0) {
+            const batch = pendingTokensRef.current.splice(0, 3);
+            setRagAnswer((prev) => (prev ?? "") + batch.join(""));
+            rafRef.current = requestAnimationFrame(drain);
+          } else if (streamEndedRef.current) {
+            // Buffer empty + stream closed → drop the cursor
+            setIsRagStreaming(false);
+            streamEndedRef.current = false;
+            rafRef.current = null;
+          } else {
+            // Buffer momentarily empty but stream still open → pause RAF;
+            // next token arrival will restart it.
+            rafRef.current = null;
+          }
+        };
+        rafRef.current = requestAnimationFrame(drain);
+      }
+
+      // Citation tracking stays synchronous (refs, no stale-closure risk).
+      streamedTextRef.current += token;
       const counts: Record<number, number> = {};
       for (const m of streamedTextRef.current.matchAll(/\[(\d+)\]/g)) {
         const n = parseInt(m[1]);
@@ -277,7 +307,15 @@ export default function WikiIndex() {
             // Partial answer is fine — keep whatever streamed
           }
         } finally {
-          setIsRagStreaming(false);
+          // Tell the RAF drain loop the stream is closed.
+          // If the buffer still has tokens, the loop drains them first
+          // then calls setIsRagStreaming(false).  If the buffer is already
+          // empty (or no tokens ever arrived), stop the cursor immediately.
+          streamEndedRef.current = true;
+          if (rafRef.current === null) {
+            setIsRagStreaming(false);
+            streamEndedRef.current = false;
+          }
         }
       } else {
         // JSON fallback (no model configured, passages-only response)
