@@ -75,14 +75,14 @@ export default function AdminDashboard() {
   const submitUpload = useSubmitUpload();
   const { toast } = useToast();
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStep, setSubmitStep] = useState(0);
   const [activeSteps, setActiveSteps] = useState<StepDef[]>([]);
 
   const [submitResult, setSubmitResult] = useState<{
-    fileName: string | null;
+    fileNames: string[];
     wikiCountBefore: number;
   } | null>(null);
   const [wikiCountAfter, setWikiCountAfter] = useState<number | null>(null);
@@ -153,7 +153,7 @@ export default function AdminDashboard() {
 
   const handleSubmit = async (values: z.infer<typeof uploadSchema>) => {
     const rawText = values.rawText?.trim() ?? "";
-    if (!rawText && !selectedFile) {
+    if (!rawText && selectedFiles.length === 0) {
       toast({ title: "Content Required", description: "Please provide text content or attach a file.", variant: "destructive" });
       return;
     }
@@ -178,14 +178,14 @@ export default function AdminDashboard() {
         contributorName: values.contributorName,
         rawText: rawText || undefined,
         contentType: values.contentType,
-        file: selectedFile,
+        files: selectedFiles.length > 0 ? selectedFiles : undefined,
       });
 
-      const fileName = selectedFile?.name ?? null;
+      const fileNames = selectedFiles.map((f) => f.name);
       form.reset({ uploaderName: values.uploaderName, uploaderEmail: values.uploaderEmail, rawText: "", contentType: values.contentType, contributorName: values.contributorName });
-      setSelectedFile(null);
+      setSelectedFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
-      setSubmitResult({ fileName, wikiCountBefore });
+      setSubmitResult({ fileNames, wikiCountBefore });
       setWikiCountAfter(null);
       setIsPolling(true);
     } catch (err) {
@@ -310,8 +310,12 @@ export default function AdminDashboard() {
                       <Check className="w-6 h-6 text-green-400" />
                     </div>
                     <h3 className="font-serif text-xl font-bold text-foreground/90 mb-1">Content Received</h3>
-                    {submitResult.fileName && (
-                      <p className="text-sm text-foreground/50 font-mono">{submitResult.fileName}</p>
+                    {submitResult.fileNames.length > 0 && (
+                      <div className="space-y-0.5 mt-1">
+                        {submitResult.fileNames.map((name) => (
+                          <p key={name} className="text-sm text-foreground/50 font-mono truncate">{name}</p>
+                        ))}
+                      </div>
                     )}
                   </div>
 
@@ -458,34 +462,47 @@ export default function AdminDashboard() {
 
                   <div>
                     <label className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70 block mb-3">
-                      Attach file <span className="text-foreground/50 normal-case tracking-normal font-sans text-[11px]">(Optional — text above takes priority)</span>
+                      Attach files <span className="text-foreground/50 normal-case tracking-normal font-sans text-[11px]">(Optional — text above takes priority; multiple files allowed)</span>
                     </label>
-                    {selectedFile ? (
-                      <div className="flex items-center gap-3 p-4 border border-primary/30 rounded-xl bg-primary/5">
-                        <Paperclip className="w-4 h-4 text-primary shrink-0" />
-                        <span className="text-sm text-foreground/80 flex-1 truncate font-mono">{selectedFile.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => { setSelectedFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
-                          className="text-foreground/50 hover:text-destructive transition-colors"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
+                    {selectedFiles.length > 0 && (
+                      <div className="space-y-2 mb-2">
+                        {selectedFiles.map((f, idx) => (
+                          <div key={f.name + idx} className="flex items-center gap-3 p-4 border border-primary/30 rounded-xl bg-primary/5">
+                            <Paperclip className="w-4 h-4 text-primary shrink-0" />
+                            <span className="text-sm text-foreground/80 flex-1 truncate font-mono">{f.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedFiles((prev) => prev.filter((_, i) => i !== idx))}
+                              className="text-foreground/50 hover:text-destructive transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                    ) : (
-                      <label className="flex flex-col items-center justify-center gap-1 h-20 border border-dashed border-border/50 rounded-xl bg-background/20 hover:bg-background/40 hover:border-primary/30 transition-all cursor-pointer group">
-                        <UploadIcon className="w-4 h-4 text-foreground/50 group-hover:text-primary transition-colors" />
-                        <span className="text-sm text-foreground/50 group-hover:text-foreground/80 transition-colors font-display uppercase tracking-widest text-[10px]">Click to attach a file</span>
-                        <span className="text-[10px] text-foreground/35 font-sans normal-case tracking-normal">PDF, DOCX, DOC, PPTX, MD, TXT, JPG, PNG, WEBP, GIF, TIFF</span>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          className="hidden"
-                          accept=".pdf,.docx,.doc,.pptx,.md,.txt,.jpg,.jpeg,.png,.webp,.gif,.tiff,.tif,.csv"
-                          onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
-                        />
-                      </label>
                     )}
+                    <label className="flex flex-col items-center justify-center gap-1 h-20 border border-dashed border-border/50 rounded-xl bg-background/20 hover:bg-background/40 hover:border-primary/30 transition-all cursor-pointer group">
+                      <UploadIcon className="w-4 h-4 text-foreground/50 group-hover:text-primary transition-colors" />
+                      <span className="text-sm text-foreground/50 group-hover:text-foreground/80 transition-colors font-display uppercase tracking-widest text-[10px]">
+                        {selectedFiles.length > 0 ? "Click to add more files" : "Click to attach files"}
+                      </span>
+                      <span className="text-[10px] text-foreground/35 font-sans normal-case tracking-normal">PDF, DOCX, DOC, PPTX, MD, TXT, JPG, PNG, WEBP, GIF, TIFF</span>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        className="hidden"
+                        accept=".pdf,.docx,.doc,.pptx,.md,.txt,.jpg,.jpeg,.png,.webp,.gif,.tiff,.tif,.csv"
+                        onChange={(e) => {
+                          const incoming = Array.from(e.target.files ?? []);
+                          setSelectedFiles((prev) => {
+                            const existingNames = new Set(prev.map((f) => f.name));
+                            return [...prev, ...incoming.filter((f) => !existingNames.has(f.name))];
+                          });
+                          if (fileInputRef.current) fileInputRef.current.value = "";
+                        }}
+                      />
+                    </label>
                   </div>
 
                   <div className="space-y-3">

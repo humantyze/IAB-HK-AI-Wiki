@@ -11,7 +11,7 @@ interface UploadData {
   contributorName?: string;
   contentType: string;
   rawText?: string;
-  file?: File | null;
+  files?: File[];
 }
 
 export function useSubmitUpload() {
@@ -24,7 +24,11 @@ export function useSubmitUpload() {
       if (data.contributorName) formData.append("contributorName", data.contributorName);
       formData.append("contentType", data.contentType);
       if (data.rawText) formData.append("rawText", data.rawText);
-      if (data.file) formData.append("file", data.file);
+      if (data.files) {
+        for (const f of data.files) {
+          formData.append("files", f);
+        }
+      }
 
       const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
       const res = await fetch(`${baseUrl}/api/uploads`, {

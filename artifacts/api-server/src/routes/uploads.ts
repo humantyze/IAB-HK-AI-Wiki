@@ -79,7 +79,7 @@ router.get("/uploads", requireSuperAuth, async (_req, res) => {
 });
 
 router.post("/uploads", requireAuth, (req, res, next) => {
-  upload.single("file")(req, res, (err) => {
+  upload.array("files")(req, res, (err) => {
     if (err) {
       if (err instanceof multer.MulterError) {
         res.status(400).json({ error: `Upload error: ${err.message}` });
@@ -98,20 +98,22 @@ router.post("/uploads", requireAuth, (req, res, next) => {
   }
   const data = parseResult.data;
 
-  const filePath = req.file ? req.file.filename : null;
+  const uploadedFiles = (req.files as Express.Multer.File[] | undefined) ?? [];
+  const filePath = uploadedFiles.length > 0 ? uploadedFiles.map((f) => f.filename).join(", ") : null;
 
-  // Build effective text: pasted input + file extraction (combined when both present)
+  // Build effective text: pasted input + extracted text from each file (combined)
   let effectiveText = data.rawText.trim();
   let candidateImageUrls: string[] = [];
-  if (req.file) {
-    const mime = req.file.mimetype;
-    const fname = req.file.originalname;
+
+  for (const file of uploadedFiles) {
+    const mime = file.mimetype;
+    const fname = file.originalname;
 
     if (mime === "application/pdf") {
       // PDF: text extraction + GPT vision for visual content + pdfimages for thumbnails
       try {
         logger.info({ filename: fname }, "Extracting text from PDF");
-        const pdfText = await extractTextOnly(req.file.path);
+        const pdfText = await extractTextOnly(file.path);
         logger.info({ filename: fname, chars: pdfText.length }, "PDF text extraction complete");
         effectiveText = effectiveText ? `${effectiveText}\n\n---\n\n${pdfText}` : pdfText;
       } catch (err) {
@@ -121,7 +123,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
 
       try {
         logger.info({ filename: fname }, "Rendering PDF pages for visual analysis");
-        const pageImages = await renderPdfPages(req.file.path, 4);
+        const pageImages = await renderPdfPages(file.path, 4);
         if (pageImages.length > 0) {
           const visualDesc = await describeDocumentVisuals(pageImages, fname);
           if (visualDesc) {
@@ -133,7 +135,8 @@ router.post("/uploads", requireAuth, (req, res, next) => {
       }
 
       try {
-        candidateImageUrls = await extractImages(req.file.path);
+        const pdfImages = await extractImages(file.path);
+        candidateImageUrls = candidateImageUrls.concat(pdfImages);
       } catch (err) {
         logger.warn({ err, filename: fname }, "PDF image extraction failed — continuing without images");
       }
@@ -141,7 +144,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
       // All other supported formats — unified extractor
       try {
         logger.info({ filename: fname, mime }, "Dispatching file extraction");
-        const extracted = await dispatchExtraction(req.file.path, mime, fname);
+        const extracted = await dispatchExtraction(file.path, mime, fname);
         if (extracted.text) {
           effectiveText = effectiveText
             ? `${effectiveText}\n\n---\n\n${extracted.text}`
@@ -149,8 +152,8 @@ router.post("/uploads", requireAuth, (req, res, next) => {
         } else if (!effectiveText) {
           effectiveText = `Uploaded file: ${fname}`;
         }
-        candidateImageUrls = extracted.imageUrls;
-        logger.info({ filename: fname, chars: extracted.text.length, images: candidateImageUrls.length }, "File extraction complete");
+        candidateImageUrls = candidateImageUrls.concat(extracted.imageUrls);
+        logger.info({ filename: fname, chars: extracted.text.length, images: extracted.imageUrls.length }, "File extraction complete");
       } catch (err) {
         logger.error({ err, filename: fname, mime }, "File extraction failed — using fallback text");
         if (!effectiveText) effectiveText = `Uploaded file: ${fname}`;
