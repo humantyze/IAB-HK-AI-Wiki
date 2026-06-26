@@ -439,10 +439,30 @@ router.get("/uploads/:id/impact", requireSuperAuth, async (req, res) => {
     return;
   }
 
+  const allWikiPages = await db.select({ id: wikiPagesTable.id, slug: wikiPagesTable.slug, title: wikiPagesTable.title, sources: wikiPagesTable.sources }).from(wikiPagesTable);
+  const affected: Array<{ slug: string; title: string; willBeDeleted: boolean }> = [];
+
+  for (const page of allWikiPages) {
+    const sources = (page.sources as Array<{ label: string; ref: string }>) ?? [];
+    const hasThisUpload = sources.some((s) => {
+      const match = s.ref.match(/^Upload #(\d+)/);
+      return match && Number(match[1]) === uploadId;
+    });
+    if (!hasThisUpload) continue;
+    const otherSources = sources.filter((s) => {
+      const match = s.ref.match(/^Upload #(\d+)/);
+      return !(match && Number(match[1]) === uploadId);
+    });
+    affected.push({ slug: page.slug, title: page.title, willBeDeleted: otherSources.length === 0 });
+  }
+
+  const toDelete = affected.filter((p) => p.willBeDeleted);
+  const toUpdate = affected.filter((p) => !p.willBeDeleted);
+
   res.json({
-    sectionsReverted: 0,
-    versionsDeleted: 0,
-    sectionsRevertedList: [],
+    sectionsReverted: toDelete.length + toUpdate.length,
+    versionsDeleted: toDelete.length,
+    sectionsRevertedList: affected.map((p) => ({ slug: p.slug, title: p.title, action: p.willBeDeleted ? "deleted" : "source_removed" })),
   });
 });
 

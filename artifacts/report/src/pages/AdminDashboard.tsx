@@ -197,8 +197,8 @@ export default function AdminDashboard() {
             );
           } else if (statusData.status === "partial") {
             setUploadWarning(
-              "Your file was received but content could not be extracted. " +
-              "The IAB HK team has been notified.",
+              "Wiki pages were generated, but some optional steps (such as image or visual analysis) " +
+              "could not be completed. Your content has been added to the knowledge base.",
             );
           }
 
@@ -209,9 +209,15 @@ export default function AdminDashboard() {
     };
 
     // First check after 10 s, then every 5 s
-    const timer = setTimeout(poll, 10000);
-    const interval = setInterval(poll, 5000);
-    return () => { clearTimeout(timer); clearInterval(interval); };
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const timer = setTimeout(() => {
+      void poll();
+      intervalId = setInterval(poll, 5000);
+    }, 10000);
+    return () => {
+      clearTimeout(timer);
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [isPolling, submitResult]);
 
   if (authLoading) return (

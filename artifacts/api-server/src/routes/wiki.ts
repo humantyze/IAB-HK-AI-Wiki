@@ -232,7 +232,7 @@ router.post("/wiki/backfill-images", requireSuperAuth, async (_req, res) => {
       .from(uploadsTable);
 
     const pdfUploads = uploads.filter(
-      (u) => u.filePath && u.filePath.toLowerCase().endsWith(".pdf"),
+      (u) => u.filePath && u.filePath.split(",").some((f) => f.trim().toLowerCase().endsWith(".pdf")),
     );
 
     // Fetch all wiki pages that have no image yet
