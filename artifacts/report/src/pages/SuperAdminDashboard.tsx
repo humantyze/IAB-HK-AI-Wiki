@@ -60,6 +60,7 @@ export default function SuperAdminDashboard() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [deleteImpact, setDeleteImpact] = useState<UploadImpact | null>(null);
   const [expandedUploadId, setExpandedUploadId] = useState<number | null>(null);
+  const [expandedWikiUploadId, setExpandedWikiUploadId] = useState<number | null>(null);
   const [regressDate, setRegressDate] = useState("");
   const [regressPreviewData, setRegressPreviewData] = useState<{
     wikiPagesRemoved: number;
@@ -355,6 +356,77 @@ export default function SuperAdminDashboard() {
                   </div>
                   <p className="text-xs text-foreground/70 mt-1">pages in the knowledge base</p>
                 </div>
+
+                {/* Ingestion Pipeline Status */}
+                {uploads && uploads.length > 0 && (() => {
+                  const ingestionUploads = (uploads as Array<{
+                    id: number;
+                    uploaderName?: string | null;
+                    filePath?: string | null;
+                    status: string;
+                    processingErrors?: Array<{ step: string; message: string; ts: string }>;
+                    createdAt: string;
+                  }>).filter((u) => u.status === "partial" || u.status === "failed" || u.status === "error");
+                  if (ingestionUploads.length === 0) return null;
+                  return (
+                    <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-6">
+                      <h3 className="font-display text-sm tracking-widest uppercase text-destructive/80 mb-1">Ingestion Pipeline Status</h3>
+                      <p className="text-xs text-foreground/60 mb-4">Uploads that encountered errors during processing. Expand each row to see technical details.</p>
+                      <div className="space-y-2">
+                        {ingestionUploads.map((upload) => {
+                          const errors = upload.processingErrors ?? [];
+                          const isExpanded = expandedWikiUploadId === upload.id;
+                          const statusColor = upload.status === "partial"
+                            ? "border-amber-500/30 text-amber-400/70"
+                            : "border-destructive/30 text-destructive/70";
+                          return (
+                            <div key={upload.id} className="rounded-lg border border-border/30 bg-background/30 overflow-hidden">
+                              <div className="flex items-center gap-3 px-4 py-3">
+                                <span className="font-mono text-xs text-foreground/40">#{upload.id}</span>
+                                <Badge variant="outline" className={`text-[10px] font-display tracking-widest uppercase ${statusColor}`}>
+                                  {upload.status}
+                                </Badge>
+                                <span className="text-xs text-foreground/60 truncate flex-1">
+                                  {upload.filePath ? upload.filePath.replace(/^\d+-\d+-/, "") : (upload.uploaderName ?? "Text submission")}
+                                </span>
+                                <span className="text-xs text-foreground/40 shrink-0">
+                                  {new Date(upload.createdAt).toLocaleDateString("en-HK", { day: "numeric", month: "short", timeZone: "Asia/Hong_Kong" })}
+                                </span>
+                                {errors.length > 0 && (
+                                  <button
+                                    onClick={() => setExpandedWikiUploadId(isExpanded ? null : upload.id)}
+                                    className="text-foreground/30 hover:text-amber-400 transition-colors p-1 shrink-0"
+                                    title={isExpanded ? "Hide errors" : "Show processing errors"}
+                                  >
+                                    {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                  </button>
+                                )}
+                              </div>
+                              {errors.length > 0 && isExpanded && (
+                                <div className="border-t border-border/20 px-4 py-3 bg-background/40 space-y-1.5">
+                                  <p className="text-[10px] font-display uppercase tracking-widest text-foreground/40 mb-2">Processing Errors</p>
+                                  {errors.map((err, i) => (
+                                    <div key={i} className="flex items-start gap-2 text-xs text-foreground/60 font-mono">
+                                      <span className={`shrink-0 mt-0.5 text-[10px] uppercase font-display tracking-wide ${
+                                        err.step === "text_extraction" || err.step === "wiki_extraction"
+                                          ? "text-destructive/70"
+                                          : "text-amber-400/70"
+                                      }`}>[{err.step}]</span>
+                                      <span className="break-all leading-relaxed">{err.message}</span>
+                                      <span className="shrink-0 text-foreground/30 ml-auto whitespace-nowrap">
+                                        {new Date(err.ts).toLocaleTimeString("en-HK", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Hong_Kong" })}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-6">
                   <h3 className="font-display text-sm tracking-widest uppercase text-orange-400 mb-2">Reprocess Uploads → Wiki</h3>

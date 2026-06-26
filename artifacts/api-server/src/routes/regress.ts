@@ -142,13 +142,13 @@ router.post("/admin/reprocess-uploads", requireSuperAuth, async (_req, res) => {
           message: "AI returned 0 pages from non-empty text during reprocess",
           ts: new Date().toISOString(),
         });
-        finalStatus = "partial";
+        finalStatus = "failed";
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.error({ err, uploadId: upload.id }, "Wiki extraction failed during reprocess");
       errors.push({ step: "wiki_extraction", message, ts: new Date().toISOString() });
-      finalStatus = "partial";
+      finalStatus = "failed";
     }
 
     try {

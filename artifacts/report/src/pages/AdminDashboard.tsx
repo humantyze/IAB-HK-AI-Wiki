@@ -186,9 +186,14 @@ export default function AdminDashboard() {
 
           setWikiCountAfter(finalCount);
 
-          if (statusData.status === "partial" || statusData.status === "failed") {
+          if (statusData.status === "failed") {
             setUploadWarning(
-              "Your file was received but some content could not be fully processed. " +
+              "Your file was uploaded but we couldn't generate any wiki content from it. " +
+              "The IAB HK team has been notified and will review it.",
+            );
+          } else if (statusData.status === "partial") {
+            setUploadWarning(
+              "Your file was received but content could not be extracted. " +
               "The IAB HK team has been notified.",
             );
           }
