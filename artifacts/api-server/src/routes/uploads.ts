@@ -126,13 +126,21 @@ router.post("/uploads", requireAuth, (req, res, next) => {
   const uploadedFiles = (req.files as Express.Multer.File[] | undefined) ?? [];
   const filePath = uploadedFiles.length > 0 ? uploadedFiles.map((f) => f.filename).join(", ") : null;
 
-  // Build effective text: pasted input + extracted text from each file (combined)
-  let effectiveText = data.rawText.trim();
-  let candidateImageUrls: string[] = [];
+  // Per-file extractions — each file gets its own wiki extraction call later
+  interface FileExtraction { label: string; text: string; imageUrls: string[] }
+  const fileExtractions: FileExtraction[] = [];
+
+  // If the user pasted raw text, treat it as the first extraction unit
+  const pastedText = data.rawText.trim();
+  if (pastedText) {
+    fileExtractions.push({ label: data.contributorName ?? data.contentType.replace(/_/g, " "), text: pastedText, imageUrls: [] });
+  }
 
   for (const file of uploadedFiles) {
     const mime = file.mimetype;
     const fname = file.originalname;
+    let fileText = "";
+    let fileImageUrls: string[] = [];
 
     if (mime === "application/pdf") {
       // PDF: text extraction + GPT vision for visual content + pdfimages for thumbnails
@@ -140,10 +148,10 @@ router.post("/uploads", requireAuth, (req, res, next) => {
         logger.info({ filename: fname }, "Extracting text from PDF");
         const pdfText = await extractTextOnly(file.path);
         logger.info({ filename: fname, chars: pdfText.length }, "PDF text extraction complete");
-        effectiveText = effectiveText ? `${effectiveText}\n\n---\n\n${pdfText}` : pdfText;
+        fileText = pdfText;
       } catch (err) {
         logger.error({ err, filename: fname }, "PDF text extraction failed — using filename as fallback");
-        if (!effectiveText) effectiveText = `Uploaded file: ${fname}`;
+        fileText = `Uploaded file: ${fname}`;
       }
 
       try {
@@ -152,7 +160,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
         if (pageImages.length > 0) {
           const visualDesc = await describeDocumentVisuals(pageImages, fname);
           if (visualDesc) {
-            effectiveText = `${effectiveText}\n\n---\n\n## Visual Content (charts, tables, diagrams)\n\n${visualDesc}`;
+            fileText = `${fileText}\n\n---\n\n## Visual Content (charts, tables, diagrams)\n\n${visualDesc}`;
           }
         }
       } catch (err) {
@@ -161,7 +169,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
 
       try {
         const pdfImages = await extractImages(file.path);
-        candidateImageUrls = candidateImageUrls.concat(pdfImages);
+        fileImageUrls = pdfImages;
       } catch (err) {
         logger.warn({ err, filename: fname }, "PDF image extraction failed — continuing without images");
       }
@@ -170,21 +178,22 @@ router.post("/uploads", requireAuth, (req, res, next) => {
       try {
         logger.info({ filename: fname, mime }, "Dispatching file extraction");
         const extracted = await dispatchExtraction(file.path, mime, fname);
-        if (extracted.text) {
-          effectiveText = effectiveText
-            ? `${effectiveText}\n\n---\n\n${extracted.text}`
-            : extracted.text;
-        } else if (!effectiveText) {
-          effectiveText = `Uploaded file: ${fname}`;
-        }
-        candidateImageUrls = candidateImageUrls.concat(extracted.imageUrls);
+        fileText = extracted.text || `Uploaded file: ${fname}`;
+        fileImageUrls = extracted.imageUrls;
         logger.info({ filename: fname, chars: extracted.text.length, images: extracted.imageUrls.length }, "File extraction complete");
       } catch (err) {
         logger.error({ err, filename: fname, mime }, "File extraction failed — using fallback text");
-        if (!effectiveText) effectiveText = `Uploaded file: ${fname}`;
+        fileText = `Uploaded file: ${fname}`;
       }
     }
+
+    if (fileText) {
+      fileExtractions.push({ label: fname, text: fileText, imageUrls: fileImageUrls });
+    }
   }
+
+  // Combined text stored in DB (for reprocess and knowledge indexing)
+  const effectiveText = fileExtractions.map((e) => e.text).join("\n\n---\n\n");
 
   // Back up all uploaded files to GCS before responding — parallel uploads
   if (uploadedFiles.length > 0) {
@@ -231,14 +240,21 @@ router.post("/uploads", requireAuth, (req, res, next) => {
       processedAt: updated.processedAt?.toISOString() ?? null,
     });
 
-    // Non-blocking wiki extraction — fires after a successful upload
-    {
-      const sourceLabel = data.contributorName ?? data.contentType.replace(/_/g, " ");
-      const sourceRef = `Upload #${updated.id} — ${data.contentType.replace(/_/g, " ")}`;
+    // Non-blocking wiki extraction — one call per file so each prompt stays small
+    if (fileExtractions.length > 0) {
+      const uploadId = updated.id;
+      const sourceRef = `Upload #${uploadId} — ${data.contentType.replace(/_/g, " ")}`;
+      const capturedExtractions = fileExtractions.slice();
       setImmediate(() => {
-        extractWikiPages(sourceLabel, effectiveText, sourceRef, candidateImageUrls).catch((err: unknown) => {
-          logger.error({ err, uploadId: updated.id }, "Non-blocking wiki extraction failed");
-        });
+        void (async () => {
+          for (const extraction of capturedExtractions) {
+            try {
+              await extractWikiPages(extraction.label, extraction.text, sourceRef, extraction.imageUrls);
+            } catch (err: unknown) {
+              logger.error({ err, uploadId, file: extraction.label }, "Wiki extraction failed for file");
+            }
+          }
+        })();
       });
     }
 

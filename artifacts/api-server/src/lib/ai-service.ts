@@ -28,7 +28,13 @@ export async function extractWikiPages(
 
   try {
     const { default: OpenAI } = await import("openai");
-    const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 120_000 });
+    const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 600_000 });
+
+    // Cap input to avoid extremely slow / timing-out completions
+    const MAX_TEXT_CHARS = 80_000;
+    const truncatedText = rawText.length > MAX_TEXT_CHARS
+      ? rawText.slice(0, MAX_TEXT_CHARS) + "\n\n[...truncated for length]"
+      : rawText;
 
     const imageInstructions = candidateImageUrls.length > 0
       ? `\n\nThis source also contains extracted images. For each wiki page, pick the single most relevant image from the list below (or null if none fits the page content). Use the exact path string.\nCandidate image paths:\n${candidateImageUrls.map((u, i) => `${i + 1}. ${u}`).join("\n")}\nAdd to each wiki page:\n- image_url: exact path string chosen, or null`
@@ -58,7 +64,7 @@ Rules:
 JSON schema:
 ${jsonSchema}`;
 
-    const userPrompt = `Source: ${sourceLabel}\n\nText:\n${rawText}`;
+    const userPrompt = `Source: ${sourceLabel}\n\nText:\n${truncatedText}`;
 
     const response = await client.chat.completions.create({
       model: "gpt-5",
