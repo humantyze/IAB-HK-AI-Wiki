@@ -7,12 +7,12 @@ import {
   LogOut, Upload as UploadIcon, Hand,
   Paperclip, X, Sparkles, FileText,
   BookOpen, Check, PlusCircle, Eye, Layers, Image,
-  AlertTriangle, AlertCircle,
+  AlertTriangle, AlertCircle, History, ChevronDown, ChevronUp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
-import { useSubmitUpload, UploadError } from "@/hooks/use-uploads";
+import { useSubmitUpload, useUploads, UploadError } from "@/hooks/use-uploads";
 import { useToast } from "@/hooks/use-toast";
 
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 const uploadSchema = z.object({
   uploaderName: z.string().min(1, "Name is required"),
@@ -127,6 +128,9 @@ export default function AdminDashboard() {
   const [wikiCountAfter, setWikiCountAfter] = useState<number | null>(null);
   const [uploadWarning, setUploadWarning] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(false);
+
+  const { data: uploads } = useUploads();
+  const [expandedHistoryId, setExpandedHistoryId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isSubmitting) {
@@ -638,6 +642,91 @@ export default function AdminDashboard() {
             )}
           </CardContent>
         </Card>
+
+        {/* Submission History */}
+        {uploads && uploads.length > 0 && (
+          <div className="mt-10">
+            <div className="flex items-center gap-3 mb-4">
+              <History className="w-4 h-4 text-foreground/40" />
+              <h2 className="font-display text-xs uppercase tracking-widest text-foreground/50">Submission History</h2>
+            </div>
+            <div className="space-y-2">
+              {(uploads as Array<{
+                id: number;
+                uploaderName?: string | null;
+                contentType: string;
+                filePath?: string | null;
+                status: string;
+                processingErrors?: Array<{ step: string; message: string; ts: string }>;
+                createdAt: string;
+              }>).map((upload) => {
+                const errors = upload.processingErrors ?? [];
+                const hasErrors = errors.length > 0;
+                const isExpanded = expandedHistoryId === upload.id;
+                const statusColor =
+                  upload.status === "processed"
+                    ? "border-green-500/30 text-green-400/70"
+                    : upload.status === "partial"
+                    ? "border-amber-500/30 text-amber-400/70"
+                    : upload.status === "failed" || upload.status === "error"
+                    ? "border-destructive/30 text-destructive/70"
+                    : "border-border/30 text-foreground/40";
+                return (
+                  <div key={upload.id} className="rounded-xl border border-border/30 bg-card/30 backdrop-blur-sm overflow-hidden">
+                    <div className="flex items-center gap-3 px-4 py-3 hover:bg-background/30 transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant="outline" className="text-[10px] font-display tracking-widest uppercase border-primary/20 text-primary/60">
+                            {upload.contentType.replace(/_/g, " ")}
+                          </Badge>
+                          <Badge variant="outline" className={`text-[10px] font-display tracking-widest uppercase ${statusColor}`}>
+                            {upload.status}
+                          </Badge>
+                          <span className="text-xs text-foreground/60 truncate">
+                            {upload.filePath ? upload.filePath.replace(/^\d+-\d+-/, "") : (upload.uploaderName ?? "Text submission")}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-xs text-foreground/40 shrink-0">
+                        {new Date(upload.createdAt).toLocaleDateString("en-HK", {
+                          day: "numeric", month: "short", year: "numeric",
+                          timeZone: "Asia/Hong_Kong",
+                        })}
+                      </span>
+                      {hasErrors && (
+                        <button
+                          onClick={() => setExpandedHistoryId(isExpanded ? null : upload.id)}
+                          className="text-foreground/30 hover:text-amber-400 transition-colors p-1 shrink-0"
+                          title={isExpanded ? "Hide errors" : "Show processing errors"}
+                        >
+                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+                      )}
+                    </div>
+                    {hasErrors && isExpanded && (
+                      <div className="border-t border-border/20 px-4 py-3 bg-background/40 space-y-1.5">
+                        <p className="text-[10px] font-display uppercase tracking-widest text-foreground/40 mb-2">Processing Errors</p>
+                        {errors.map((err, i) => (
+                          <div key={i} className="flex items-start gap-2 text-xs text-foreground/60 font-mono">
+                            <span className={`shrink-0 mt-0.5 text-[10px] uppercase font-display tracking-wide ${
+                              err.step === "text_extraction" || err.step === "wiki_extraction"
+                                ? "text-destructive/70"
+                                : "text-amber-400/70"
+                            }`}>[{err.step}]</span>
+                            <span className="break-all leading-relaxed">{err.message}</span>
+                            <span className="shrink-0 text-foreground/30 ml-auto whitespace-nowrap">
+                              {new Date(err.ts).toLocaleTimeString("en-HK", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Hong_Kong" })}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

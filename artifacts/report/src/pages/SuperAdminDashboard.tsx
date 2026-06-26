@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Link, useLocation } from "wouter";
 import {
-  LogOut, History, Settings,
+  LogOut, Settings,
   CheckCircle2, BookOpen, AlertCircle,
   Trash2, RotateCcw, Calendar, X, DatabaseBackup, CloudUpload, ImagePlay, Layers,
   ChevronDown, ChevronUp,
@@ -59,7 +59,6 @@ export default function SuperAdminDashboard() {
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [deleteImpact, setDeleteImpact] = useState<UploadImpact | null>(null);
-  const [expandedUploadId, setExpandedUploadId] = useState<number | null>(null);
   const [expandedWikiUploadId, setExpandedWikiUploadId] = useState<number | null>(null);
   const [regressDate, setRegressDate] = useState("");
   const [regressPreviewData, setRegressPreviewData] = useState<{
@@ -319,9 +318,6 @@ export default function SuperAdminDashboard() {
             <TabsTrigger value="wiki" className="flex-1 py-3 px-2 sm:px-4 rounded-lg font-display tracking-tight sm:tracking-[0.12em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-green-500/10 data-[state=active]:text-green-400 transition-all">
               <BookOpen className="hidden sm:inline-flex w-4 h-4 sm:mr-2" />Wiki
             </TabsTrigger>
-            <TabsTrigger value="history" className="flex-1 py-3 px-2 sm:px-4 rounded-lg font-display tracking-tight sm:tracking-[0.12em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-secondary/10 data-[state=active]:text-secondary transition-all">
-              <History className="hidden sm:inline-flex w-4 h-4 sm:mr-2" />Contributions
-            </TabsTrigger>
             <TabsTrigger value="regress" className="flex-1 py-3 px-2 sm:px-4 rounded-lg font-display tracking-tight sm:tracking-[0.12em] uppercase text-[10px] sm:text-xs data-[state=active]:bg-amber-500/10 data-[state=active]:text-amber-400 transition-all">
               <RotateCcw className="hidden sm:inline-flex w-4 h-4 sm:mr-2" />Regress
             </TabsTrigger>
@@ -401,6 +397,13 @@ export default function SuperAdminDashboard() {
                                     {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                                   </button>
                                 )}
+                                <button
+                                  onClick={() => handleDeleteButtonClick(upload.id)}
+                                  className="text-foreground/30 hover:text-destructive transition-colors p-1 shrink-0"
+                                  title="Delete contribution"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
                               </div>
                               {errors.length > 0 && isExpanded && (
                                 <div className="border-t border-border/20 px-4 py-3 bg-background/40 space-y-1.5">
@@ -492,135 +495,6 @@ export default function SuperAdminDashboard() {
                       : <><ImagePlay className="w-3.5 h-3.5 mr-2" />Backfill Images</>}
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* CONTRIBUTIONS TAB */}
-          <TabsContent value="history" className="mt-8 outline-none">
-            <Card className="border-secondary/20 shadow-[0_10px_50px_rgba(255,100,255,0.03)] bg-card/40 backdrop-blur-md rounded-2xl overflow-hidden">
-              <div className="h-1 w-full bg-gradient-to-r from-secondary to-transparent" />
-              <CardHeader className="pb-4 sm:pb-8 pt-6 sm:pt-10 px-4 sm:px-10">
-                <CardTitle className="font-serif text-xl sm:text-3xl font-bold flex items-center gap-3">
-                  <History className="w-6 h-6 text-secondary" />
-                  Contribution History
-                </CardTitle>
-                <CardDescription className="text-sm sm:text-base mt-2 font-light text-foreground/70">
-                  All data payloads submitted for AI synthesis. Deleting a contribution removes its wiki sources.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="px-4 sm:px-10 pb-6 sm:pb-10">
-                {!uploads || uploads.length === 0 ? (
-                  <div className="text-center py-16 text-foreground/40">
-                    <History className="w-8 h-8 mx-auto mb-3 opacity-50" />
-                    <p className="font-display text-xs uppercase tracking-widest">No contributions yet</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {(uploads as Array<{
-                      id: number;
-                      uploaderName?: string | null;
-                      uploaderEmail?: string | null;
-                      contributorName?: string | null;
-                      contentType: string;
-                      targetSections: string[];
-                      rawText: string;
-                      filePath?: string | null;
-                      status: string;
-                      processingErrors?: Array<{ step: string; message: string; ts: string }>;
-                      createdAt: string;
-                      processedAt?: string | null;
-                    }>).map((upload) => {
-                      const errors = upload.processingErrors ?? [];
-                      const hasErrors = errors.length > 0;
-                      const isExpanded = expandedUploadId === upload.id;
-                      const statusColor =
-                        upload.status === "processed"
-                          ? "border-green-500/30 text-green-400/70"
-                          : upload.status === "partial"
-                          ? "border-amber-500/30 text-amber-400/70"
-                          : upload.status === "failed" || upload.status === "error"
-                          ? "border-destructive/30 text-destructive/70"
-                          : "border-border/30 text-foreground/40";
-                      return (
-                        <div key={upload.id} className="rounded-xl border border-border/30 bg-background/30 overflow-hidden">
-                          <div className="flex items-start gap-4 p-4 hover:bg-background/50 transition-colors">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap mb-1">
-                                <span className="font-mono text-xs text-foreground/40">#{upload.id}</span>
-                                <Badge variant="outline" className="text-[10px] font-display tracking-widest uppercase border-secondary/30 text-secondary/70">
-                                  {upload.contentType.replace(/_/g, " ")}
-                                </Badge>
-                                <Badge variant="outline" className={`text-[10px] font-display tracking-widest uppercase ${statusColor}`}>
-                                  {upload.status}
-                                </Badge>
-                              </div>
-                              <p className="text-sm text-foreground/80 font-medium truncate">
-                                {upload.uploaderName ?? "Anonymous"}
-                              </p>
-                              <div className="flex items-center gap-3 flex-wrap mt-0.5">
-                                <p className="text-xs text-foreground/50">
-                                  {new Date(upload.createdAt).toLocaleString("en-HK", {
-                                    day: "numeric", month: "short", year: "numeric",
-                                    hour: "2-digit", minute: "2-digit",
-                                    timeZone: "Asia/Hong_Kong",
-                                  })} HKT
-                                </p>
-                                {upload.uploaderEmail && (
-                                  <span className="text-xs text-foreground/40">{upload.uploaderEmail}</span>
-                                )}
-                                {upload.contributorName && (
-                                  <span className="text-xs text-foreground/40">Source: {upload.contributorName}</span>
-                                )}
-                              </div>
-                              {upload.filePath && (
-                                <p className="text-xs font-mono text-foreground/35 mt-1 truncate">
-                                  {upload.filePath.replace(/^\d+-\d+-/, "")}
-                                </p>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1 shrink-0 mt-1">
-                              {hasErrors && (
-                                <button
-                                  onClick={() => setExpandedUploadId(isExpanded ? null : upload.id)}
-                                  className="text-foreground/30 hover:text-amber-400 transition-colors p-1"
-                                  title={isExpanded ? "Hide errors" : "Show processing errors"}
-                                >
-                                  {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                </button>
-                              )}
-                              <button
-                                onClick={() => handleDeleteButtonClick(upload.id)}
-                                className="text-foreground/30 hover:text-destructive transition-colors p-1"
-                                title="Delete contribution"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                          {hasErrors && isExpanded && (
-                            <div className="border-t border-border/20 px-4 py-3 bg-background/40 space-y-1.5">
-                              <p className="text-[10px] font-display uppercase tracking-widest text-foreground/40 mb-2">Processing Errors</p>
-                              {errors.map((err, i) => (
-                                <div key={i} className="flex items-start gap-2 text-xs text-foreground/60 font-mono">
-                                  <span className={`shrink-0 mt-0.5 text-[10px] uppercase font-display tracking-wide ${
-                                    err.step === "text_extraction" || err.step === "wiki_extraction"
-                                      ? "text-destructive/70"
-                                      : "text-amber-400/70"
-                                  }`}>[{err.step}]</span>
-                                  <span className="break-all leading-relaxed">{err.message}</span>
-                                  <span className="shrink-0 text-foreground/30 ml-auto whitespace-nowrap">
-                                    {new Date(err.ts).toLocaleTimeString("en-HK", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Hong_Kong" })}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
               </CardContent>
             </Card>
           </TabsContent>
