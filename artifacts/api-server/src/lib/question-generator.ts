@@ -51,9 +51,11 @@ async function _generate(): Promise<{ questions: string[] }> {
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({ apiKey, baseURL: aiBaseUrl, timeout: 45_000 });
 
-  const response = await client.chat.completions.create({
+  // The Replit AI proxy only delivers content via streaming — non-streaming
+  // completions return empty content. Collect all deltas into a single string.
+  const stream = await client.chat.completions.create({
     model: "gpt-5-mini",
-    max_completion_tokens: 700,
+    stream: true,
     messages: [
       {
         role: "system",
@@ -73,7 +75,13 @@ async function _generate(): Promise<{ questions: string[] }> {
     ],
   });
 
-  const raw = response.choices[0]?.message?.content?.trim() ?? "[]";
+  let raw = "";
+  for await (const chunk of stream) {
+    const delta = (chunk as { choices?: Array<{ delta?: { content?: string | null } }> })
+      .choices?.[0]?.delta?.content ?? "";
+    if (delta) raw += delta;
+  }
+  raw = raw.trim();
   let candidates: string[] = [];
   try {
     const match = raw.match(/\[[\s\S]*\]/);

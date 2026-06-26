@@ -1,2 +1,3 @@
 - [pgvector + local embeddings](pgvector-local-embeddings.md) — how semantic RAG works in this repo: local Transformers.js embeddings, externalized native deps must be direct deps, composite db rebuild.
 - [Prerender script keeps in sync with schema](prerender-schema-sync.md) — prerender.mjs queries DB at build time; any dropped table must also be removed from this script or the production build will fail.
+- [Replit AI proxy requires streaming](replit-ai-proxy-streaming.md) — gpt-5/gpt-5-mini return empty content unless stream:true; always collect deltas.
