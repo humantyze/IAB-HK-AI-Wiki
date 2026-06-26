@@ -136,6 +136,26 @@ function renderAnswerWithCitations(answer: string, citations: KnowledgeCitation[
   ));
 }
 
+// 10 questions verified to have rich RAG answers (ranked by token depth).
+const SAMPLE_QUESTIONS = [
+  "What is the Ad Context Protocol and how does it work?",
+  "What is the Agentic Real-Time Framework?",
+  "What is the Prebid Sales Agent and what problem does it solve?",
+  "How do AI agents negotiate media deals autonomously?",
+  "What is the Agentic Advertising Organization?",
+  "How are walled gardens affecting US programmatic display advertising in 2026?",
+  "What is NBCUniversal doing with agentic automation in advertising?",
+  "What did the PubMatic–Butler/Till–Geloso proof of concept demonstrate?",
+  "What is PubMatic forecasting for agentic execution by 2030?",
+  "What share of marketers are interested in agentic media buying?",
+];
+
+function pickThree(pool: string[], exclude: string[] = []): string[] {
+  const available = pool.filter((q) => !exclude.includes(q));
+  const shuffled = [...available].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, 3);
+}
+
 export default function WikiIndex() {
   const { data: pages, isLoading } = useWikiPages();
   const [query, setQuery] = useState("");
@@ -149,6 +169,7 @@ export default function WikiIndex() {
   const [ragCitations, setRagCitations] = useState<KnowledgeCitation[] | null>(null);
   const [ragGrounded, setRagGrounded] = useState(false);
   const [searchDone, setSearchDone] = useState(false);
+  const [shownQuestions, setShownQuestions] = useState<string[]>(() => pickThree(SAMPLE_QUESTIONS));
   const [isRagStreaming, setIsRagStreaming] = useState(false);
   // citationAnimGen[n]: 0 = not yet seen, 1 = first reveal (pop-in), 2+ = re-referenced (pulse)
   const [citationAnimGen, setCitationAnimGen] = useState<Record<number, number>>({});
@@ -443,6 +464,22 @@ export default function WikiIndex() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredSlugsKey]);
 
+  // Rotate one suggested question every 12 s while idle (no active search).
+  useEffect(() => {
+    const id = setInterval(() => {
+      setShownQuestions((prev) => {
+        // Pick one replacement from questions not currently shown.
+        const replacements = pickThree(SAMPLE_QUESTIONS, prev);
+        if (replacements.length === 0) return prev;
+        const next = [...prev];
+        const swapIdx = Math.floor(Math.random() * next.length);
+        next[swapIdx] = replacements[0];
+        return next;
+      });
+    }, 12_000);
+    return () => clearInterval(id);
+  }, []);
+
   const usingAI = aiResults !== null && activeQuery.trim().length >= 3;
 
   const canonicalOrigin = typeof window !== "undefined" ? window.location.origin : "";
@@ -558,13 +595,9 @@ export default function WikiIndex() {
           </button>
         </form>
 
-        {/* Sample questions */}
+        {/* Sample questions — rotate every 12 s */}
         <div className="flex flex-wrap gap-2 mt-3 max-w-xl">
-          {[
-            "How are HK marketers using AI tools today?",
-            "What is agentic media buying?",
-            "What AI regulations affect Hong Kong marketers?",
-          ].map((q) => (
+          {shownQuestions.map((q) => (
             <button
               key={q}
               type="button"
