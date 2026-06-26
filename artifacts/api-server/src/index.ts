@@ -1,7 +1,6 @@
 import cron from "node-cron";
 import app from "./app";
 import { logger } from "./lib/logger";
-import { seedWikiIfEmpty } from "./lib/wiki-seed";
 import { indexKnowledgeIfEmpty, cleanupLegacyChunks } from "./lib/knowledge-index";
 import { embed } from "./lib/embeddings";
 import { runBackup } from "./lib/backup";
@@ -36,10 +35,6 @@ async function main() {
   // Remove any knowledge chunks from removed source types (e.g. legacy "section" rows).
   cleanupLegacyChunks().catch((e) => {
     logger.error({ err: e }, "Unexpected error during legacy chunk cleanup");
-  });
-
-  seedWikiIfEmpty().catch((e) => {
-    logger.error({ err: e }, "Unexpected error during wiki auto-seed");
   });
 
   // Pre-warm the local embedding model so the first user search doesn't

@@ -3,7 +3,6 @@ import { eq, asc, isNull } from "drizzle-orm";
 import path from "path";
 import { db, wikiPagesTable, uploadsTable } from "@workspace/db";
 import { requireSuperAuth } from "../middlewares/auth";
-import { runWikiSeed } from "../lib/wiki-seed";
 import { retrieve } from "../lib/knowledge-index";
 import { generateDownloadUrl } from "../lib/gcsClient";
 import { extractImages } from "../lib/pdf-extractor";
@@ -210,16 +209,6 @@ router.get("/wiki-image", async (req, res) => {
   } catch (err) {
     logger.error({ err, objectPath }, "Failed to generate wiki image signed URL");
     res.status(500).json({ error: "Image unavailable" });
-  }
-});
-
-router.post("/wiki/seed", requireSuperAuth, async (_req, res) => {
-  try {
-    const { pagesCreated, pagesUpdated } = await runWikiSeed();
-    res.json({ pagesCreated, pagesUpdated });
-  } catch (err) {
-    logger.error({ err }, "Wiki seed failed");
-    res.status(500).json({ error: "Wiki seed failed" });
   }
 });
 

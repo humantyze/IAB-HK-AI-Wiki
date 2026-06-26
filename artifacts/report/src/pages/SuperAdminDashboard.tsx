@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { Link, useLocation } from "wouter";
 import {
   LogOut, History, Settings,
-  CheckCircle2, BookOpen, RefreshCw, AlertCircle,
+  CheckCircle2, BookOpen, AlertCircle,
   Trash2, RotateCcw, Calendar, X, DatabaseBackup, CloudUpload, ImagePlay, Layers,
 } from "lucide-react";
 
@@ -34,9 +34,6 @@ export default function SuperAdminDashboard() {
   const queryClient = useQueryClient();
 
   const [wikiPageCount, setWikiPageCount] = useState<number | null>(null);
-  const [wikiSeeding, setWikiSeeding] = useState(false);
-  const [wikiSeedResult, setWikiSeedResult] = useState<{ pagesCreated: number; pagesUpdated: number } | null>(null);
-
   const [imageBackfilling, setImageBackfilling] = useState(false);
   const [imageBackfillResult, setImageBackfillResult] = useState<{ pagesUpdated: number; uploadsProcessed: number; message?: string } | null>(null);
 
@@ -174,31 +171,6 @@ export default function SuperAdminDashboard() {
       }
     } catch {
       // silently ignore
-    }
-  };
-
-  const handleWikiSeed = async () => {
-    setWikiSeeding(true);
-    setWikiSeedResult(null);
-    try {
-      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
-      const res = await fetch(`${baseUrl}/api/wiki/seed`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (res.ok) {
-        const data = await res.json() as { pagesCreated: number; pagesUpdated: number };
-        setWikiSeedResult(data);
-        await fetchWikiCount();
-        toast({ title: "Wiki Reindexed", description: `${data.pagesCreated} pages created, ${data.pagesUpdated} updated.` });
-      } else {
-        toast({ title: "Seed Failed", description: "Wiki seed encountered an error.", variant: "destructive" });
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Request failed";
-      toast({ title: "Seed Failed", description: message, variant: "destructive" });
-    } finally {
-      setWikiSeeding(false);
     }
   };
 
@@ -374,53 +346,12 @@ export default function SuperAdminDashboard() {
               </CardHeader>
 
               <CardContent className="px-4 sm:px-10 pb-6 sm:pb-10 space-y-8">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="rounded-xl border border-border/50 bg-background/50 p-6">
-                    <div className="text-[10px] font-display uppercase tracking-widest text-foreground/70 mb-2">Wiki Pages</div>
-                    <div className="text-4xl font-bold font-serif text-green-400">
-                      {wikiPageCount === null ? "—" : wikiPageCount}
-                    </div>
-                    <p className="text-xs text-foreground/70 mt-1">pages in the knowledge base</p>
+                <div className="rounded-xl border border-border/50 bg-background/50 p-6 inline-block">
+                  <div className="text-[10px] font-display uppercase tracking-widest text-foreground/70 mb-2">Wiki Pages</div>
+                  <div className="text-4xl font-bold font-serif text-green-400">
+                    {wikiPageCount === null ? "—" : wikiPageCount}
                   </div>
-                  <div className="rounded-xl border border-border/50 bg-background/50 p-6 flex flex-col justify-between">
-                    <div>
-                      <div className="text-[10px] font-display uppercase tracking-widest text-foreground/70 mb-2">Last Rebuild Result</div>
-                      {wikiSeedResult ? (
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle2 className="w-4 h-4 text-green-400" />
-                            <span className="text-sm text-foreground/80">
-                              <strong>{wikiSeedResult.pagesCreated}</strong> pages created
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <RefreshCw className="w-4 h-4 text-blue-400" />
-                            <span className="text-sm text-foreground/80">
-                              <strong>{wikiSeedResult.pagesUpdated}</strong> pages updated
-                            </span>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-sm text-foreground/70">Run a rebuild to see results.</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-6">
-                  <h3 className="font-display text-sm tracking-widest uppercase text-green-400 mb-2">Rebuild Wiki Index</h3>
-                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
-                    Use this to reindex wiki pages — for example after manually editing pages or to recover from sync issues. Wiki pages are generated from uploaded PDFs via the contributor portal.
-                  </p>
-                  <Button
-                    onClick={handleWikiSeed}
-                    disabled={wikiSeeding}
-                    className="font-display uppercase tracking-[0.15em] text-[11px] bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/30 rounded-xl h-11 px-6 transition-all"
-                  >
-                    {wikiSeeding
-                      ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Rebuilding…</>
-                      : <><RefreshCw className="w-3.5 h-3.5 mr-2" />Rebuild Wiki</>}
-                  </Button>
+                  <p className="text-xs text-foreground/70 mt-1">pages in the knowledge base</p>
                 </div>
 
                 <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-6">
