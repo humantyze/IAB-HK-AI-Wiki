@@ -4,7 +4,7 @@ import { db, uploadsTable, wikiPagesTable, knowledgeChunksTable } from "@workspa
 import type { ProcessingError } from "@workspace/db";
 import { requireSuperAuth } from "../middlewares/auth";
 import { extractWikiPages } from "../lib/ai-service";
-import { indexSource } from "../lib/knowledge-index";
+import { indexSource, removeSource, indexWikiPage } from "../lib/knowledge-index";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -66,6 +66,8 @@ router.post("/admin/regress", requireSuperAuth, async (req, res) => {
 
     // Clean upload source references from remaining wiki pages
     const deletedUploadIds = new Set(deletedUploads.map((u) => u.id));
+    const cascadeDeletedWikiIds: number[] = [];
+    const updatedWikiSlugs: string[] = [];
     if (deletedUploadIds.size > 0) {
       const remainingWiki = await db.select().from(wikiPagesTable);
       for (const page of remainingWiki) {
@@ -78,11 +80,24 @@ router.post("/admin/regress", requireSuperAuth, async (req, res) => {
         if (filteredSources.length !== sources.length) {
           if (filteredSources.length === 0) {
             await db.delete(wikiPagesTable).where(eq(wikiPagesTable.id, page.id));
+            cascadeDeletedWikiIds.push(page.id);
           } else {
             await db.update(wikiPagesTable).set({ sources: filteredSources }).where(eq(wikiPagesTable.id, page.id));
+            updatedWikiSlugs.push(page.slug);
           }
         }
       }
+    }
+
+    // Reconcile the knowledge index with every delete/update above so a
+    // regression never leaves stale chunks pointing at removed sources.
+    try {
+      for (const w of deletedWiki) await removeSource("wiki", w.id);
+      for (const u of deletedUploads) await removeSource("upload", u.id);
+      for (const id of cascadeDeletedWikiIds) await removeSource("wiki", id);
+      for (const slug of updatedWikiSlugs) await indexWikiPage(slug);
+    } catch (reconcileErr) {
+      logger.error({ err: reconcileErr }, "Knowledge index reconciliation after regress failed");
     }
 
     logger.info(
@@ -151,19 +166,29 @@ router.post("/admin/reprocess-uploads", requireSuperAuth, async (_req, res) => {
       finalStatus = "failed";
     }
 
-    try {
-      await indexSource({
-        sourceType: "upload",
-        sourceId: upload.id,
-        sourceSlug: null,
-        title: uploadTitle,
-        text: upload.rawText,
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error({ err, uploadId: upload.id }, "Knowledge indexing failed during reprocess");
-      errors.push({ step: "knowledge_indexing", message, ts: new Date().toISOString() });
-      finalStatus = "partial";
+    // Only index eligible uploads; a failed upload must never leave chunks
+    // behind, so pull any existing ones when reprocessing ends in failure.
+    if (finalStatus === "failed") {
+      try {
+        await removeSource("upload", upload.id);
+      } catch (err) {
+        logger.error({ err, uploadId: upload.id }, "Failed to remove failed upload from index during reprocess");
+      }
+    } else {
+      try {
+        await indexSource({
+          sourceType: "upload",
+          sourceId: upload.id,
+          sourceSlug: null,
+          title: uploadTitle,
+          text: upload.rawText,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error({ err, uploadId: upload.id }, "Knowledge indexing failed during reprocess");
+        errors.push({ step: "knowledge_indexing", message, ts: new Date().toISOString() });
+        finalStatus = finalStatus === "processed" ? "partial" : finalStatus;
+      }
     }
 
     await db
