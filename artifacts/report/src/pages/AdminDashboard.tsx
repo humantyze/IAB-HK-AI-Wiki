@@ -158,7 +158,7 @@ export default function AdminDashboard() {
       return;
     }
 
-    setActiveSteps(getStepsForFile(selectedFile));
+    setActiveSteps(getStepsForFile(selectedFiles[0] ?? null));
     setSubmitStep(0);
     setIsSubmitting(true);
     try {
