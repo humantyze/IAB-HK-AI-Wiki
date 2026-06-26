@@ -137,7 +137,7 @@ function renderAnswerWithCitations(answer: string, citations: KnowledgeCitation[
 }
 
 // 10 questions verified to have rich RAG answers (ranked by token depth).
-const SAMPLE_QUESTIONS = [
+const FALLBACK_QUESTIONS = [
   "What is the Ad Context Protocol and how does it work?",
   "What is the Agentic Real-Time Framework?",
   "What is the Prebid Sales Agent and what problem does it solve?",
@@ -153,7 +153,24 @@ const SAMPLE_QUESTIONS = [
 function pickThree(pool: string[], exclude: string[] = []): string[] {
   const available = pool.filter((q) => !exclude.includes(q));
   const shuffled = [...available].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, 3);
+  return shuffled.slice(0, Math.min(3, shuffled.length));
+}
+
+function useQuestionPool(): string[] {
+  const [pool, setPool] = React.useState<string[]>(FALLBACK_QUESTIONS);
+  React.useEffect(() => {
+    const baseUrl = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+    fetch(`${baseUrl}/api/knowledge/questions`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((data: unknown) => {
+        const qs = (data as { questions?: string[] }).questions;
+        if (Array.isArray(qs) && qs.length >= 3) {
+          setPool(qs);
+        }
+      })
+      .catch(() => { /* stay on fallback */ });
+  }, []);
+  return pool;
 }
 
 export default function WikiIndex() {
@@ -169,7 +186,8 @@ export default function WikiIndex() {
   const [ragCitations, setRagCitations] = useState<KnowledgeCitation[] | null>(null);
   const [ragGrounded, setRagGrounded] = useState(false);
   const [searchDone, setSearchDone] = useState(false);
-  const [shownQuestions, setShownQuestions] = useState<string[]>(() => pickThree(SAMPLE_QUESTIONS));
+  const questionPool = useQuestionPool();
+  const [shownQuestions, setShownQuestions] = useState<string[]>(() => pickThree(FALLBACK_QUESTIONS));
   const [isRagStreaming, setIsRagStreaming] = useState(false);
   // citationAnimGen[n]: 0 = not yet seen, 1 = first reveal (pop-in), 2+ = re-referenced (pulse)
   const [citationAnimGen, setCitationAnimGen] = useState<Record<number, number>>({});
@@ -464,12 +482,21 @@ export default function WikiIndex() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredSlugsKey]);
 
+  // When the API pool loads (replaces the fallback), refresh shown questions.
+  const prevPoolRef = useRef(FALLBACK_QUESTIONS);
+  useEffect(() => {
+    if (questionPool !== prevPoolRef.current) {
+      prevPoolRef.current = questionPool;
+      setShownQuestions(pickThree(questionPool));
+    }
+  }, [questionPool]);
+
   // Rotate one suggested question every 12 s while idle (no active search).
   useEffect(() => {
     const id = setInterval(() => {
       setShownQuestions((prev) => {
         // Pick one replacement from questions not currently shown.
-        const replacements = pickThree(SAMPLE_QUESTIONS, prev);
+        const replacements = pickThree(questionPool, prev);
         if (replacements.length === 0) return prev;
         const next = [...prev];
         const swapIdx = Math.floor(Math.random() * next.length);
@@ -478,7 +505,7 @@ export default function WikiIndex() {
       });
     }, 12_000);
     return () => clearInterval(id);
-  }, []);
+  }, [questionPool]);
 
   const usingAI = aiResults !== null && activeQuery.trim().length >= 3;
 

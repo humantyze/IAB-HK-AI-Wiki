@@ -13,6 +13,7 @@ import { extractTextOnly, extractImages, renderPdfPages } from "../lib/pdf-extra
 import { dispatchExtraction, SUPPORTED_MIME_TYPES, isSupportedMimeType } from "../lib/doc-extractor";
 import { getBackupBucket } from "../lib/gcsClient";
 import { logger } from "../lib/logger";
+import { generateAndStoreQuestions } from "../lib/question-generator";
 
 const GCS_UPLOADS_PREFIX = "uploaded-files";
 
@@ -404,6 +405,8 @@ router.post("/uploads", requireAuth, (req, res, next) => {
               title: uploadTitle,
               text: fileExtractions.map((e) => e.text).join("\n\n---\n\n"),
             });
+            // Fire-and-forget: regenerate sample questions from updated content
+            setImmediate(() => { void generateAndStoreQuestions(); });
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             logger.error({ err, uploadId }, "Knowledge indexing failed");
@@ -441,6 +444,8 @@ router.post("/uploads", requireAuth, (req, res, next) => {
             title: uploadTitle,
             text: pastedText,
           });
+          // Fire-and-forget: regenerate sample questions from updated content
+          setImmediate(() => { void generateAndStoreQuestions(); });
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           logger.error({ err, uploadId: uploadRecord.id }, "Knowledge indexing failed for pasted-text upload");

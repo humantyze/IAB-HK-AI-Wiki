@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { requireSuperAuth } from "../middlewares/auth";
 import { retrieve, reindexAll, type RetrievedChunk } from "../lib/knowledge-index";
+import { generateAndStoreQuestions, getStoredQuestions } from "../lib/question-generator";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -194,6 +195,28 @@ router.post("/knowledge/search", async (req, res) => {
   }
 });
 
+
+/** Return the currently stored AI-generated sample questions. */
+router.get("/knowledge/questions", async (_req, res) => {
+  try {
+    const questions = await getStoredQuestions();
+    res.json({ questions });
+  } catch (err) {
+    logger.error({ err }, "Failed to fetch stored questions");
+    res.status(500).json({ error: "Failed to fetch questions" });
+  }
+});
+
+/** Regenerate sample questions from current wiki content (super-auth). */
+router.post("/knowledge/regen-questions", requireSuperAuth, async (_req, res) => {
+  try {
+    const result = await generateAndStoreQuestions();
+    res.json(result);
+  } catch (err) {
+    logger.error({ err }, "Question regeneration failed");
+    res.status(500).json({ error: "Question regeneration failed" });
+  }
+});
 
 /** Rebuild the entire vector index from current sections, wiki, and uploads. */
 router.post("/knowledge/reindex", requireSuperAuth, async (_req, res) => {

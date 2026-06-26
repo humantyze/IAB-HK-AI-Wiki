@@ -6,7 +6,7 @@ import {
   LogOut, Settings,
   CheckCircle2, BookOpen, AlertCircle,
   Trash2, RotateCcw, Calendar, X, DatabaseBackup, CloudUpload, ImagePlay, Layers,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, Sparkles,
 } from "lucide-react";
 
 import { useSuperAuth } from "@/hooks/use-super-auth";
@@ -40,6 +40,9 @@ export default function SuperAdminDashboard() {
 
   const [reprocessing, setReprocessing] = useState(false);
   const [reprocessResult, setReprocessResult] = useState<{ count: number } | null>(null);
+
+  const [regenQuestionsRunning, setRegenQuestionsRunning] = useState(false);
+  const [regenQuestionsResult, setRegenQuestionsResult] = useState<{ count: number } | null>(null);
 
   interface BackupEntry {
     id: number;
@@ -133,6 +136,34 @@ export default function SuperAdminDashboard() {
       toast({ title: "Reprocess Failed", description: message, variant: "destructive" });
     } finally {
       setReprocessing(false);
+    }
+  };
+
+  const handleRegenQuestions = async () => {
+    setRegenQuestionsRunning(true);
+    setRegenQuestionsResult(null);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/knowledge/regen-questions`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json() as { questions?: string[]; error?: string };
+      if (!res.ok) {
+        toast({ title: "Regeneration Failed", description: String(data.error ?? "Unknown error"), variant: "destructive" });
+      } else {
+        const count = data.questions?.length ?? 0;
+        setRegenQuestionsResult({ count });
+        toast({
+          title: "Questions Regenerated",
+          description: `${count} sample question${count !== 1 ? "s" : ""} generated from current content.`,
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Request failed";
+      toast({ title: "Regeneration Failed", description: message, variant: "destructive" });
+    } finally {
+      setRegenQuestionsRunning(false);
     }
   };
 
@@ -493,6 +524,30 @@ export default function SuperAdminDashboard() {
                     {imageBackfilling
                       ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Processing…</>
                       : <><ImagePlay className="w-3.5 h-3.5 mr-2" />Backfill Images</>}
+                  </Button>
+                </div>
+
+                <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-6">
+                  <h3 className="font-display text-sm tracking-widest uppercase text-cyan-400 mb-2">Regenerate Sample Questions</h3>
+                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                    Generate 10 sample questions from current wiki content, scored against the knowledge index so only questions with rich answers are shown. Runs automatically after every upload.
+                  </p>
+                  {regenQuestionsResult && (
+                    <div className="mb-4 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-cyan-400" />
+                      <span className="text-sm text-foreground/80">
+                        <strong>{regenQuestionsResult.count}</strong> question{regenQuestionsResult.count !== 1 ? "s" : ""} generated and live
+                      </span>
+                    </div>
+                  )}
+                  <Button
+                    onClick={handleRegenQuestions}
+                    disabled={regenQuestionsRunning}
+                    className="font-display uppercase tracking-[0.15em] text-[11px] bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-xl h-11 px-6 transition-all"
+                  >
+                    {regenQuestionsRunning
+                      ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Generating…</>
+                      : <><Sparkles className="w-3.5 h-3.5 mr-2" />Regenerate Questions</>}
                   </Button>
                 </div>
               </CardContent>
