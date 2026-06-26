@@ -14,7 +14,13 @@ import { logger } from "./logger";
 // An upload's chunks are only retrievable once it has finished processing
 // successfully ("processed") or with non-critical issues ("partial"). Uploads
 // that are still "pending" or have "failed" must never surface in search.
-const ELIGIBLE_UPLOAD_STATUSES = ["processed", "partial"];
+export const ELIGIBLE_UPLOAD_STATUSES = ["processed", "partial"];
+
+// Bump this whenever the embedding MODEL or the CHUNKING strategy changes.
+// Stored vectors are only comparable to query vectors from the SAME model, and
+// chunk boundaries are baked into the stored rows — so a change here must force
+// a one-time full rebuild of knowledge_chunks (see ensureIndexUpToDate).
+const INDEX_VERSION = "multilingual-e5-small+structured-chunks-v1";
 
 interface IndexSourceInput {
   sourceType: KnowledgeSourceType;
@@ -356,17 +362,54 @@ export async function cleanupLegacyChunks(): Promise<void> {
   }
 }
 
-/** Run a one-off backfill in the background if the index is empty. */
-export async function indexKnowledgeIfEmpty(): Promise<void> {
+// Persists which embedding/chunking version the current knowledge_chunks were
+// built with. Created on demand (idempotent, additive — no migration, no source
+// data touched) so it works identically in dev and production.
+async function readIndexVersion(): Promise<string | null> {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS knowledge_index_meta (
+      id integer PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+      version text NOT NULL,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  const res = await db.execute(sql`SELECT version FROM knowledge_index_meta WHERE id = 1 LIMIT 1`);
+  const rows = (res as unknown as { rows: Array<{ version: string }> }).rows ?? [];
+  return rows.length > 0 ? rows[0].version : null;
+}
+
+async function writeIndexVersion(version: string): Promise<void> {
+  await db.execute(sql`
+    INSERT INTO knowledge_index_meta (id, version, updated_at)
+    VALUES (1, ${version}, now())
+    ON CONFLICT (id) DO UPDATE SET version = EXCLUDED.version, updated_at = now()
+  `);
+}
+
+/**
+ * Ensure the knowledge index matches the current embedding-model + chunking
+ * version. Runs exactly ONE full reindex when the version changes (or on a
+ * fresh/empty DB), then records the version so subsequent restarts are no-ops.
+ *
+ * This guarantees a model/chunker swap rebuilds knowledge_chunks automatically
+ * instead of leaving stale vectors from an older model that are not comparable
+ * to the new query embeddings.
+ */
+export async function ensureIndexUpToDate(): Promise<void> {
   try {
+    const stored = await readIndexVersion();
     const count = await countChunks();
-    if (count > 0) {
-      logger.info({ count }, "Knowledge index already populated — skipping backfill");
+    if (stored === INDEX_VERSION && count > 0) {
+      logger.info({ version: stored, count }, "Knowledge index version current — no reindex needed");
       return;
     }
-    logger.info("Knowledge index empty — starting backfill");
+    logger.warn(
+      { stored, current: INDEX_VERSION, count },
+      "Knowledge index stale or empty — running one-time full reindex",
+    );
     await reindexAll();
+    await writeIndexVersion(INDEX_VERSION);
   } catch (err) {
-    logger.error({ err }, "Knowledge backfill failed — retrieval will be degraded until reindex");
+    logger.error({ err }, "ensureIndexUpToDate failed — retrieval may be degraded until manual reindex");
   }
 }

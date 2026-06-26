@@ -42,11 +42,25 @@ on `/api/wiki/search`.
 - Both embedding + reranker models are pre-warmed at startup in `index.ts`.
 
 ## Upload status gating (search must not show in-flight/failed uploads)
-- Only uploads with status `processed` or `partial` are eligible. `retrieve()`
-  LEFT JOINs `uploads` and filters `sourceType<>'upload' OR status IN (...)`, so
-  status changes take effect at query time without reindexing. `reindexAll` also
-  filters uploads by status, and a run that ends `failed` calls
-  `removeSource('upload', id)`.
+- Only `processed`/`partial` uploads are eligible. Enforce eligibility at BOTH
+  layers: index lifecycle AND query time. Ingestion must decide final status and
+  persist it BEFORE calling `indexSource`, and must skip indexing entirely for
+  `failed` — never index while still `pending`. Query-time LEFT JOIN on
+  `uploads.status` is defense-in-depth, not the only guard.
+- **Why:** a code review rejected relying on the query filter alone; ineligible
+  content sitting in the index (even if hidden) is a policy violation and risks
+  leaking if the filter is ever dropped.
+
+## Embedding/chunking version → forced one-time reindex
+- A model swap or chunking change makes existing `knowledge_chunks` vectors
+  incomparable to new query embeddings. Bump `INDEX_VERSION` in
+  `knowledge-index.ts`; `ensureIndexUpToDate()` (run at startup) compares it
+  against a `knowledge_index_meta` row and rebuilds the whole index ONCE.
+- `knowledge_index_meta` is created idempotently via `CREATE TABLE IF NOT
+  EXISTS` (no drizzle migration) so it self-heals in dev and prod regardless of
+  whether migrations auto-run.
+- **Why:** a review flagged that startup only backfilled when EMPTY, so a
+  non-empty prod DB kept stale old-model vectors until a manual reindex.
 
 ## retrieve() limit vs rerankTopK
 - `rerankTopK` (default 16) caps ONLY the rerank candidate slice. With

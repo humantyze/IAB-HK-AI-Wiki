@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import app from "./app";
 import { logger } from "./lib/logger";
-import { indexKnowledgeIfEmpty, cleanupLegacyChunks } from "./lib/knowledge-index";
+import { ensureIndexUpToDate, cleanupLegacyChunks } from "./lib/knowledge-index";
 import { embedQuery } from "./lib/embeddings";
 import { rerank } from "./lib/reranker";
 import { runBackup } from "./lib/backup";
@@ -51,11 +51,13 @@ async function main() {
     logger.warn({ err: e }, "Reranker model pre-warm failed — first search may be slow");
   });
 
-  // Backfill the semantic knowledge index in the background if it is empty.
-  // Runs after wiki auto-seed kicks off so a fresh DB indexes seeded pages too.
+  // Rebuild the semantic knowledge index in the background when it is empty OR
+  // when the embedding-model / chunking version changed (one-time forced
+  // reindex). Runs after wiki auto-seed kicks off so a fresh DB indexes seeded
+  // pages too.
   setTimeout(() => {
-    indexKnowledgeIfEmpty().catch((e) => {
-      logger.error({ err: e }, "Unexpected error during knowledge backfill");
+    ensureIndexUpToDate().catch((e) => {
+      logger.error({ err: e }, "Unexpected error during knowledge reindex check");
     });
   }, 30_000);
 

@@ -358,27 +358,12 @@ router.post("/uploads", requireAuth, (req, res, next) => {
           }
         }
 
-        // NON-CRITICAL: knowledge indexing — record failure but don't affect wiki status
-        try {
-          const uploadTitle = `${data.contributorName ? `${data.contributorName} — ` : ""}${data.contentType.replace(/_/g, " ")}`;
-          await indexSource({
-            sourceType: "upload",
-            sourceId: uploadId,
-            sourceSlug: null,
-            title: uploadTitle,
-            text: fileExtractions.map((e) => e.text).join("\n\n---\n\n"),
-          });
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          logger.error({ err, uploadId }, "Knowledge indexing failed");
-          asyncErrors.push({ step: "knowledge_indexing", message, ts: new Date().toISOString() });
-        }
-
-        const allErrors = [...capturedSyncErrors, ...asyncErrors];
+        // Decide the final status from extraction outcomes BEFORE indexing, so
+        // we never index content that belongs to a pending/failed upload.
         // failed = wiki extraction produced zero content from non-empty text
-        // partial = non-critical failures (visual analysis, some files, knowledge indexing) alongside successful extraction
+        // partial = non-critical failures (visual analysis, some files) alongside successful extraction
         const wikiTotallyFailed = totalCreated === 0 && totalUpdated === 0 && asyncErrors.some((e) => e.step === "wiki_extraction");
-        const hasNonCriticalErrors = capturedSyncErrors.length > 0 || asyncErrors.some((e) => e.step === "knowledge_indexing") || asyncErrors.some((e) => e.step === "visual_analysis");
+        const hasNonCriticalErrors = capturedSyncErrors.length > 0 || asyncErrors.some((e) => e.step === "visual_analysis");
         let finalStatus: string;
         if (wikiTotallyFailed) {
           finalStatus = "failed";
@@ -388,22 +373,49 @@ router.post("/uploads", requireAuth, (req, res, next) => {
           finalStatus = "processed";
         }
 
+        // Persist the eligible status first so the upload is in its final,
+        // searchable state before any chunks exist for it.
         await db
           .update(uploadsTable)
           .set({
             status: finalStatus,
             processedAt: new Date(),
-            processingErrors: allErrors.length > 0 ? allErrors : null,
+            processingErrors: [...capturedSyncErrors, ...asyncErrors].length > 0 ? [...capturedSyncErrors, ...asyncErrors] : null,
           })
           .where(eq(uploadsTable.id, uploadId));
 
-        // A failed upload must not stay searchable — pull any chunks that were
-        // indexed earlier in this run back out of the knowledge index.
         if (finalStatus === "failed") {
+          // Defense-in-depth: a failed upload must never be searchable. Remove
+          // any chunks that might linger (e.g. from a prior reprocessing run).
           try {
             await removeSource("upload", uploadId);
           } catch (err) {
             logger.error({ err, uploadId }, "Failed to remove failed upload from knowledge index");
+          }
+        } else {
+          // Eligible upload — now safe to index. A failure here is non-critical;
+          // downgrade processed -> partial so the issue is visible.
+          try {
+            const uploadTitle = `${data.contributorName ? `${data.contributorName} — ` : ""}${data.contentType.replace(/_/g, " ")}`;
+            await indexSource({
+              sourceType: "upload",
+              sourceId: uploadId,
+              sourceSlug: null,
+              title: uploadTitle,
+              text: fileExtractions.map((e) => e.text).join("\n\n---\n\n"),
+            });
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            logger.error({ err, uploadId }, "Knowledge indexing failed");
+            asyncErrors.push({ step: "knowledge_indexing", message, ts: new Date().toISOString() });
+            finalStatus = finalStatus === "processed" ? "partial" : finalStatus;
+            await db
+              .update(uploadsTable)
+              .set({
+                status: finalStatus,
+                processingErrors: [...capturedSyncErrors, ...asyncErrors],
+              })
+              .where(eq(uploadsTable.id, uploadId));
           }
         }
 
@@ -417,6 +429,9 @@ router.post("/uploads", requireAuth, (req, res, next) => {
     // Only pasted text — run knowledge indexing then mark processed
     setImmediate(() => {
       void (async () => {
+        // Move to an eligible status first so the upload is never indexed while
+        // still "pending", then index. A failure downgrades it to "partial".
+        await db.update(uploadsTable).set({ status: "processed", processedAt: new Date() }).where(eq(uploadsTable.id, uploadRecord.id));
         try {
           const uploadTitle = `${data.contributorName ? `${data.contributorName} — ` : ""}${data.contentType.replace(/_/g, " ")}`;
           await indexSource({
@@ -426,13 +441,11 @@ router.post("/uploads", requireAuth, (req, res, next) => {
             title: uploadTitle,
             text: pastedText,
           });
-          await db.update(uploadsTable).set({ status: "processed", processedAt: new Date() }).where(eq(uploadsTable.id, uploadRecord.id));
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           logger.error({ err, uploadId: uploadRecord.id }, "Knowledge indexing failed for pasted-text upload");
           await db.update(uploadsTable).set({
             status: "partial",
-            processedAt: new Date(),
             processingErrors: [{ step: "knowledge_indexing", message, ts: new Date().toISOString() }],
           }).where(eq(uploadsTable.id, uploadRecord.id)).catch(() => {});
         }
