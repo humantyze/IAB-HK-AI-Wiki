@@ -349,7 +349,7 @@ export default function WikiPage({ params }: WikiPageProps) {
       </header>
 
       {/* Breadcrumb */}
-      <div className="max-w-6xl mx-auto px-6 lg:px-8 pt-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
         <Link href="/" className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors">
           <ArrowLeft size={12} />
           <span>All Pages</span>
@@ -357,9 +357,9 @@ export default function WikiPage({ params }: WikiPageProps) {
       </div>
 
       {/* Layout */}
-      <div className="max-w-6xl mx-auto px-6 lg:px-8 py-6 flex gap-10">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col lg:flex-row gap-6 lg:gap-10">
         {/* Main content */}
-        <main ref={contentRef} className="flex-1 min-w-0">
+        <main ref={contentRef} className="flex-1 min-w-0 w-full">
           {/* Page header */}
           <div className="mb-6">
             <div className="flex flex-wrap gap-1.5 mb-3">
@@ -375,7 +375,7 @@ export default function WikiPage({ params }: WikiPageProps) {
             <h1 className="text-2xl font-bold text-gray-800 mb-2" style={{ letterSpacing: "-0.5px" }}>
               {page.title}
             </h1>
-            <div className="flex items-center gap-3 text-xs text-gray-400">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
               <span className="flex items-center gap-1">
                 <Clock size={11} />
                 Updated {formatDate(page.updatedAt)}
@@ -427,12 +427,12 @@ export default function WikiPage({ params }: WikiPageProps) {
         </main>
 
         {/* Sidebar */}
-        <aside className="w-56 flex-shrink-0">
-          <div className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto space-y-0">
+        <aside className="w-full lg:w-56 lg:flex-shrink-0">
+          <div className="lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto space-y-0">
 
-          {/* On this page — TOC */}
+          {/* On this page — TOC (hidden on mobile since it's not sticky there) */}
           {headings.length > 0 && (
-            <div className="mb-8">
+            <div className="hidden lg:block mb-8">
               <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3 flex items-center gap-1.5">
                 <AlignLeft size={10} />
                 On This Page
