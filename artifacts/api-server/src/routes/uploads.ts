@@ -10,7 +10,27 @@ import { extractWikiPages, describeDocumentVisuals } from "../lib/ai-service";
 import { indexSource, removeSource, indexWikiPage } from "../lib/knowledge-index";
 import { extractTextOnly, extractImages, renderPdfPages } from "../lib/pdf-extractor";
 import { dispatchExtraction, SUPPORTED_MIME_TYPES, isSupportedMimeType } from "../lib/doc-extractor";
+import { getBackupBucket } from "../lib/gcsClient";
 import { logger } from "../lib/logger";
+
+const GCS_UPLOADS_PREFIX = "uploaded-files";
+
+async function backupFileToGCS(localPath: string, filename: string): Promise<void> {
+  const { readFile } = await import("fs/promises");
+  const bucket = getBackupBucket();
+  const data = await readFile(localPath);
+  await bucket.file(`${GCS_UPLOADS_PREFIX}/${filename}`).save(data, {
+    resumable: false,
+    metadata: { cacheControl: "private, max-age=0" },
+  });
+  logger.info({ filename }, "File backed up to GCS");
+}
+
+async function deleteFileFromGCS(filename: string): Promise<void> {
+  const bucket = getBackupBucket();
+  await bucket.file(`${GCS_UPLOADS_PREFIX}/${filename}`).delete({ ignoreNotFound: true });
+  logger.info({ filename }, "File deleted from GCS");
+}
 
 const UploadFormSchema = z.object({
   uploaderName: z.string().min(1, "Name is required"),
@@ -166,6 +186,17 @@ router.post("/uploads", requireAuth, (req, res, next) => {
     }
   }
 
+  // Back up all uploaded files to GCS before responding — parallel uploads
+  if (uploadedFiles.length > 0) {
+    await Promise.allSettled(
+      uploadedFiles.map((f) =>
+        backupFileToGCS(f.path, f.filename).catch((err: unknown) => {
+          logger.warn({ err, filename: f.filename }, "GCS file backup failed — file will only exist on local disk");
+        }),
+      ),
+    );
+  }
+
   const [uploadRecord] = await db
     .insert(uploadsTable)
     .values({
@@ -310,6 +341,18 @@ router.delete("/uploads/:id", requireSuperAuth, async (req, res) => {
   }
 
   await db.delete(uploadsTable).where(eq(uploadsTable.id, uploadId));
+
+  // Non-blocking: delete GCS backup(s) for this upload.
+  if (upload.filePath) {
+    const filenames = upload.filePath.split(", ").map((f) => f.trim()).filter(Boolean);
+    setImmediate(() => {
+      for (const filename of filenames) {
+        deleteFileFromGCS(filename).catch((err: unknown) => {
+          logger.warn({ err, filename }, "GCS file delete failed — object may remain in storage");
+        });
+      }
+    });
+  }
 
   // Non-blocking: reconcile the knowledge index with the deletion.
   setImmediate(() => {

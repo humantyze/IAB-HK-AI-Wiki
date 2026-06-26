@@ -1,7 +1,9 @@
 import { Router, type IRouter } from "express";
-import { eq, gt } from "drizzle-orm";
+import { eq, gt, asc } from "drizzle-orm";
 import { db, uploadsTable, wikiPagesTable, knowledgeChunksTable } from "@workspace/db";
 import { requireSuperAuth } from "../middlewares/auth";
+import { extractWikiPages } from "../lib/ai-service";
+import { indexSource } from "../lib/knowledge-index";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -97,6 +99,43 @@ router.post("/admin/regress", requireSuperAuth, async (req, res) => {
     logger.error({ err }, "Regression failed");
     res.status(500).json({ error: "Regression failed. Please try again." });
   }
+});
+
+/**
+ * Re-runs wiki extraction and knowledge indexing for every upload that has
+ * stored raw text. Useful after a wipe to rebuild all wiki pages from the
+ * original source material without re-uploading files.
+ */
+router.post("/admin/reprocess-uploads", requireSuperAuth, async (_req, res) => {
+  const uploads = await db.select().from(uploadsTable).orderBy(asc(uploadsTable.id));
+  const eligible = uploads.filter((u) => u.rawText && u.rawText.trim().length >= 50);
+
+  res.json({ message: `Reprocessing ${eligible.length} uploads in background`, count: eligible.length });
+
+  setImmediate(async () => {
+    let succeeded = 0;
+    let failed = 0;
+    for (const upload of eligible) {
+      try {
+        const sourceLabel = upload.contributorName ?? upload.contentType.replace(/_/g, " ");
+        const sourceRef = `Upload #${upload.id} — ${upload.contentType.replace(/_/g, " ")}`;
+        const uploadTitle = `${upload.contributorName ? `${upload.contributorName} — ` : ""}${upload.contentType.replace(/_/g, " ")}`;
+        await extractWikiPages(sourceLabel, upload.rawText, sourceRef, []);
+        await indexSource({
+          sourceType: "upload",
+          sourceId: upload.id,
+          sourceSlug: null,
+          title: uploadTitle,
+          text: upload.rawText,
+        });
+        succeeded++;
+      } catch (err) {
+        logger.error({ err, uploadId: upload.id }, "Reprocess failed for upload");
+        failed++;
+      }
+    }
+    logger.info({ succeeded, failed, total: eligible.length }, "Upload reprocess complete");
+  });
 });
 
 router.post("/admin/wipe", requireSuperAuth, async (_req, res) => {
