@@ -102,71 +102,87 @@ router.post("/admin/regress", requireSuperAuth, async (req, res) => {
   }
 });
 
+interface ReprocessResult {
+  id: number;
+  status: string;
+  wikiPagesCreated: number;
+  wikiPagesUpdated: number;
+  errors: ProcessingError[];
+}
+
 /**
  * Re-runs wiki extraction and knowledge indexing for every upload that has
- * stored raw text. Updates each upload's status and processingErrors in the DB
- * as it goes — admins can refresh the uploads list to see results.
+ * stored raw text. Runs synchronously so the caller receives per-upload
+ * results in the response body.
  */
 router.post("/admin/reprocess-uploads", requireSuperAuth, async (_req, res) => {
   const uploads = await db.select().from(uploadsTable).orderBy(asc(uploadsTable.id));
   const eligible = uploads.filter((u) => u.rawText && u.rawText.trim().length >= 50);
 
-  res.json({ message: `Reprocessing ${eligible.length} uploads in background`, count: eligible.length });
+  const results: ReprocessResult[] = [];
 
-  setImmediate(async () => {
-    let succeeded = 0;
-    let failed = 0;
+  for (const upload of eligible) {
+    const errors: ProcessingError[] = [];
+    let wikiPagesCreated = 0;
+    let wikiPagesUpdated = 0;
+    let finalStatus = "processed";
 
-    for (const upload of eligible) {
-      const errors: ProcessingError[] = [];
-      try {
-        const sourceLabel = upload.contributorName ?? upload.contentType.replace(/_/g, " ");
-        const sourceRef = `Upload #${upload.id} — ${upload.contentType.replace(/_/g, " ")}`;
-        const uploadTitle = `${upload.contributorName ? `${upload.contributorName} — ` : ""}${upload.contentType.replace(/_/g, " ")}`;
+    const sourceLabel = upload.contributorName ?? upload.contentType.replace(/_/g, " ");
+    const sourceRef = `Upload #${upload.id} — ${upload.contentType.replace(/_/g, " ")}`;
+    const uploadTitle = `${upload.contributorName ? `${upload.contributorName} — ` : ""}${upload.contentType.replace(/_/g, " ")}`;
 
-        const { created, updated } = await extractWikiPages(sourceLabel, upload.rawText, sourceRef, []);
+    try {
+      const { created, updated } = await extractWikiPages(sourceLabel, upload.rawText, sourceRef, []);
+      wikiPagesCreated = created;
+      wikiPagesUpdated = updated;
 
-        if (created === 0 && updated === 0) {
-          errors.push({
-            step: "wiki_extraction",
-            message: "AI returned 0 pages from non-empty text during reprocess",
-            ts: new Date().toISOString(),
-          });
-          await db
-            .update(uploadsTable)
-            .set({ status: "partial", processedAt: new Date(), processingErrors: errors })
-            .where(eq(uploadsTable.id, upload.id));
-          failed++;
-        } else {
-          await db
-            .update(uploadsTable)
-            .set({ status: "processed", processedAt: new Date(), processingErrors: null })
-            .where(eq(uploadsTable.id, upload.id));
-        }
-
-        await indexSource({
-          sourceType: "upload",
-          sourceId: upload.id,
-          sourceSlug: null,
-          title: uploadTitle,
-          text: upload.rawText,
+      if (created === 0 && updated === 0) {
+        errors.push({
+          step: "wiki_extraction",
+          message: "AI returned 0 pages from non-empty text during reprocess",
+          ts: new Date().toISOString(),
         });
-
-        succeeded++;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        logger.error({ err, uploadId: upload.id }, "Reprocess failed for upload");
-        errors.push({ step: "wiki_extraction", message, ts: new Date().toISOString() });
-        await db
-          .update(uploadsTable)
-          .set({ status: "partial", processedAt: new Date(), processingErrors: errors })
-          .where(eq(uploadsTable.id, upload.id))
-          .catch((dbErr) => logger.error({ dbErr, uploadId: upload.id }, "Failed to write reprocess errors to DB"));
-        failed++;
+        finalStatus = "partial";
       }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error({ err, uploadId: upload.id }, "Wiki extraction failed during reprocess");
+      errors.push({ step: "wiki_extraction", message, ts: new Date().toISOString() });
+      finalStatus = "partial";
     }
-    logger.info({ succeeded, failed, total: eligible.length }, "Upload reprocess complete");
-  });
+
+    try {
+      await indexSource({
+        sourceType: "upload",
+        sourceId: upload.id,
+        sourceSlug: null,
+        title: uploadTitle,
+        text: upload.rawText,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error({ err, uploadId: upload.id }, "Knowledge indexing failed during reprocess");
+      errors.push({ step: "knowledge_indexing", message, ts: new Date().toISOString() });
+    }
+
+    await db
+      .update(uploadsTable)
+      .set({
+        status: finalStatus,
+        processedAt: new Date(),
+        processingErrors: errors.length > 0 ? errors : null,
+      })
+      .where(eq(uploadsTable.id, upload.id))
+      .catch((dbErr) => logger.error({ dbErr, uploadId: upload.id }, "Failed to write reprocess result to DB"));
+
+    results.push({ id: upload.id, status: finalStatus, wikiPagesCreated, wikiPagesUpdated, errors });
+  }
+
+  const succeeded = results.filter((r) => r.status === "processed").length;
+  const failed = results.filter((r) => r.status === "partial").length;
+  logger.info({ succeeded, failed, total: eligible.length }, "Upload reprocess complete");
+
+  res.json({ count: eligible.length, succeeded, failed, results });
 });
 
 router.post("/admin/wipe", requireSuperAuth, async (_req, res) => {

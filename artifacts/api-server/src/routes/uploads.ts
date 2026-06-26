@@ -141,7 +141,12 @@ router.post("/uploads", requireAuth, (req, res, next) => {
         }
         return;
       }
-      res.status(400).json({ error: err.message || "File upload failed" });
+      const msg = err instanceof Error ? err.message : "File upload failed";
+      if (msg.toLowerCase().includes("file type not supported") || msg.toLowerCase().includes("type not supported")) {
+        res.status(400).json({ errorCode: "UNSUPPORTED_FILE_TYPE", message: msg, error: msg });
+      } else {
+        res.status(400).json({ error: msg });
+      }
       return;
     }
     next();
@@ -353,9 +358,26 @@ router.post("/uploads", requireAuth, (req, res, next) => {
           }
         }
 
+        // NON-CRITICAL: knowledge indexing — record failure but don't affect wiki status
+        try {
+          const uploadTitle = `${data.contributorName ? `${data.contributorName} — ` : ""}${data.contentType.replace(/_/g, " ")}`;
+          await indexSource({
+            sourceType: "upload",
+            sourceId: uploadId,
+            sourceSlug: null,
+            title: uploadTitle,
+            text: fileExtractions.map((e) => e.text).join("\n\n---\n\n"),
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          logger.error({ err, uploadId }, "Knowledge indexing failed");
+          asyncErrors.push({ step: "knowledge_indexing", message, ts: new Date().toISOString() });
+        }
+
         const allErrors = [...capturedSyncErrors, ...asyncErrors];
-        const noWikiContent = totalCreated === 0 && totalUpdated === 0 && asyncErrors.length > 0;
-        const finalStatus = noWikiContent ? "partial" : "processed";
+        // partial if: some files failed extraction (capturedSyncErrors) OR wiki produced nothing
+        const noWikiContent = totalCreated === 0 && totalUpdated === 0 && asyncErrors.some((e) => e.step === "wiki_extraction");
+        const finalStatus = (noWikiContent || capturedSyncErrors.length > 0) ? "partial" : "processed";
 
         await db
           .update(uploadsTable)
@@ -367,38 +389,38 @@ router.post("/uploads", requireAuth, (req, res, next) => {
           .where(eq(uploadsTable.id, uploadId));
 
         logger.info(
-          { uploadId, totalCreated, totalUpdated, wikiErrors: asyncErrors.length, finalStatus },
+          { uploadId, totalCreated, totalUpdated, asyncErrors: asyncErrors.length, syncErrors: capturedSyncErrors.length, finalStatus },
           "Upload processing complete",
         );
       })();
     });
   } else {
-    // Only pasted text — mark processed immediately after knowledge indexing
-    void db
-      .update(uploadsTable)
-      .set({ status: "processed", processedAt: new Date() })
-      .where(eq(uploadsTable.id, uploadRecord.id))
-      .catch((err) => logger.error({ err, uploadId: uploadRecord.id }, "Failed to mark pasted-text upload as processed"));
+    // Only pasted text — run knowledge indexing then mark processed
+    setImmediate(() => {
+      void (async () => {
+        try {
+          const uploadTitle = `${data.contributorName ? `${data.contributorName} — ` : ""}${data.contentType.replace(/_/g, " ")}`;
+          await indexSource({
+            sourceType: "upload",
+            sourceId: uploadRecord.id,
+            sourceSlug: null,
+            title: uploadTitle,
+            text: pastedText,
+          });
+          await db.update(uploadsTable).set({ status: "processed", processedAt: new Date() }).where(eq(uploadsTable.id, uploadRecord.id));
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          logger.error({ err, uploadId: uploadRecord.id }, "Knowledge indexing failed for pasted-text upload");
+          await db.update(uploadsTable).set({
+            status: "partial",
+            processedAt: new Date(),
+            processingErrors: [{ step: "knowledge_indexing", message, ts: new Date().toISOString() }],
+          }).where(eq(uploadsTable.id, uploadRecord.id)).catch(() => {});
+        }
+      })();
+    });
   }
 
-  // Non-blocking knowledge indexing of the raw upload text
-  const capturedUploadId = uploadRecord.id;
-  setImmediate(() => {
-    void (async () => {
-      try {
-        const uploadTitle = `${data.contributorName ? `${data.contributorName} — ` : ""}${data.contentType.replace(/_/g, " ")}`;
-        await indexSource({
-          sourceType: "upload",
-          sourceId: capturedUploadId,
-          sourceSlug: null,
-          title: uploadTitle,
-          text: effectiveText,
-        });
-      } catch (err) {
-        logger.error({ err, uploadId: capturedUploadId }, "Non-blocking knowledge indexing failed");
-      }
-    })();
-  });
 });
 
 router.get("/uploads/:id/impact", requireSuperAuth, async (req, res) => {

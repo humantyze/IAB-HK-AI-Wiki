@@ -50,9 +50,10 @@ export function useSubmitUpload() {
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as Record<string, unknown>;
-        if (res.status === 422 && typeof body.errorCode === "string") {
+        const hasErrorCode = typeof body.errorCode === "string";
+        if ((res.status === 422 || res.status === 400) && hasErrorCode) {
           throw new UploadError(
-            body.errorCode,
+            body.errorCode as string,
             typeof body.message === "string" ? body.message : "Upload processing failed",
             typeof body.uploadId === "number" ? body.uploadId : null,
           );
