@@ -16,16 +16,22 @@ interface Citation {
 
 /**
  * Semantic RAG over the FULL corpus (report sections + wiki pages + raw
- * uploads). Embeds the query, retrieves the most similar chunks across every
- * source, then synthesises a grounded answer with citations via SSE streaming.
+ * uploads). Embeds the query, retrieves the most similar chunks, then
+ * synthesises a grounded answer via SSE streaming when the model is available.
  *
- * SSE event format (when model is available):
+ * SSE event format (when model is available and stream succeeds):
  *   event: citations\ndata: <JSON Citation[]>\n\n
  *   event: token\ndata: <JSON-encoded delta string>\n\n  (many times)
  *   event: done\ndata: \n\n
  *
- * Falls back to plain JSON for: no model configured, retrieval error, or
- * zero matching chunks.
+ * Falls back to plain JSON for:
+ *   • No model configured
+ *   • Zero matching chunks
+ *   • OpenAI connection/auth failure (BEFORE any SSE headers are sent)
+ *   • Retrieval error
+ *
+ * If the stream STARTS but then fails mid-way, an event:error is emitted
+ * and the partial answer is preserved on the client.
  */
 router.post("/knowledge/search", async (req, res) => {
   const { query } = req.body as { query?: unknown };
@@ -63,6 +69,14 @@ router.post("/knowledge/search", async (req, res) => {
     });
   }
 
+  const passagesJson = chunks.map((c) => ({
+    sourceType: c.sourceType,
+    sourceSlug: c.sourceSlug,
+    title: c.title,
+    content: c.content,
+    similarity: c.similarity,
+  }));
+
   if (chunks.length === 0) {
     res.json({
       answer: "I couldn't find anything relevant in the knowledge base for that question yet.",
@@ -85,47 +99,22 @@ router.post("/knowledge/search", async (req, res) => {
 
   if (!aiBaseUrl || !apiKey) {
     // No chat model configured — return the retrieved passages directly (JSON).
-    res.json({
-      answer: null,
-      grounded: true,
-      citations,
-      passages: chunks.map((c) => ({
-        sourceType: c.sourceType,
-        sourceSlug: c.sourceSlug,
-        title: c.title,
-        content: c.content,
-        similarity: c.similarity,
-      })),
-    });
+    res.json({ answer: null, grounded: true, citations, passages: passagesJson });
     return;
   }
 
-  // --- SSE streaming response ---
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders();
-
-  const sendEvent = (event: string, data: string) => {
-    if (!res.writableEnded) {
-      res.write(`event: ${event}\ndata: ${data}\n\n`);
-    }
-  };
-
-  // Emit citations immediately so the frontend can render chips before the
-  // first token arrives.
-  sendEvent("citations", JSON.stringify(citations));
-
-  // Abort the LLM call if the client disconnects mid-stream.
+  // Abort the LLM call if the client disconnects.
   const clientAbort = new AbortController();
   req.on("close", () => clientAbort.abort());
 
+  // Attempt to open the OpenAI stream BEFORE committing to SSE response
+  // headers. This preserves the JSON passages fallback when the model is
+  // unreachable or returns an auth/rate error.
+  let openaiStream: AsyncIterable<Record<string, unknown>>;
   try {
     const { default: OpenAI } = await import("openai");
     const client = new OpenAI({ apiKey, baseURL: aiBaseUrl, timeout: 30_000 });
-
-    const stream = await client.chat.completions.create(
+    openaiStream = (await client.chat.completions.create(
       {
         model: "gpt-5-mini",
         messages: [
@@ -147,18 +136,47 @@ router.post("/knowledge/search", async (req, res) => {
         stream: true,
       },
       { signal: clientAbort.signal },
-    );
+    )) as AsyncIterable<Record<string, unknown>>;
+  } catch (err) {
+    if ((err as Error).name === "AbortError") {
+      // Client disconnected before we could start — nothing to send.
+      res.end();
+      return;
+    }
+    // OpenAI unavailable / auth failure → fall back to raw passages (JSON).
+    logger.error({ err }, "Knowledge answer synthesis failed — returning raw passages");
+    res.json({ answer: null, grounded: true, citations, passages: passagesJson });
+    return;
+  }
 
+  // Stream is open — now it is safe to commit to SSE response headers.
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const sendEvent = (event: string, data: string) => {
+    if (!res.writableEnded) {
+      res.write(`event: ${event}\ndata: ${data}\n\n`);
+    }
+  };
+
+  // Emit citations before the first token so the client can show chips
+  // immediately.
+  sendEvent("citations", JSON.stringify(citations));
+
+  try {
     let charCount = 0;
-    for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta?.content ?? "";
+    for await (const chunk of openaiStream) {
+      const c = chunk as { choices?: Array<{ delta?: { content?: string | null } }> };
+      const delta = c.choices?.[0]?.delta?.content ?? "";
       if (delta) {
-        // JSON-encode the delta so newlines and special chars survive the wire.
+        // JSON-encode each delta so newlines and special chars survive the wire.
         sendEvent("token", JSON.stringify(delta));
         charCount += delta.length;
       }
     }
-
     sendEvent("done", "");
     logger.info(
       { query: trimmed, chunks: chunks.length, citations: citations.length, chars: charCount },
@@ -166,8 +184,10 @@ router.post("/knowledge/search", async (req, res) => {
     );
   } catch (err) {
     if ((err as Error).name !== "AbortError") {
-      logger.error({ err }, "Knowledge answer synthesis failed during streaming");
-      sendEvent("error", JSON.stringify({ message: "Synthesis failed" }));
+      // Mid-stream failure — partial answer is already on the client.
+      // Signal the error so the frontend can stop the cursor / finalize.
+      logger.error({ err }, "Knowledge answer synthesis interrupted mid-stream");
+      sendEvent("error", JSON.stringify({ message: "Stream interrupted" }));
     }
   } finally {
     if (!res.writableEnded) res.end();

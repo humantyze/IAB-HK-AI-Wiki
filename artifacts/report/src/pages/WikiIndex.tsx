@@ -264,8 +264,12 @@ export default function WikiIndex() {
                 try { setRagCitations(JSON.parse(data) as KnowledgeCitation[]); } catch { /* ignore parse errors */ }
               } else if (eventType === "token") {
                 try { handleToken(JSON.parse(data) as string); } catch { /* ignore parse errors */ }
+              } else if (eventType === "error") {
+                // Mid-stream failure — partial answer already shown.
+                // The stream closes after this, so the finally block
+                // will call setIsRagStreaming(false) and stop the cursor.
               }
-              // "done" and "error" events: loop naturally ends on stream close
+              // "done": the stream closes naturally after this event
             }
           }
         } catch (err) {
