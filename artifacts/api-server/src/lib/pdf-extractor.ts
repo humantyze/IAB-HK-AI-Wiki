@@ -12,13 +12,21 @@ const execFileAsync = promisify(execFile);
 const MAX_IMAGES = 10;
 const MIN_IMAGE_BYTES = 5 * 1024;
 
-async function extractTextWithPdfParse(filePath: string): Promise<string> {
+async function extractTextWithMuPDF(filePath: string): Promise<string> {
   const { readFile } = await import("fs/promises");
-  const buffer = await readFile(filePath);
-  // pdf-parse is a pure Node.js library — no browser DOM required
-  const pdfParse = (await import("pdf-parse")).default;
-  const data = await pdfParse(buffer);
-  return data.text.trim();
+  const fileData = await readFile(filePath);
+  // mupdf WASM — pure WASM, no browser DOM required, works in Cloud Run
+  const mupdf = await import("mupdf");
+  const doc = mupdf.Document.openDocument(fileData, "application/pdf");
+  const pageCount = doc.countPages();
+  const texts: string[] = [];
+  for (let i = 0; i < pageCount; i++) {
+    const page = doc.loadPage(i);
+    const sText = page.toStructuredText("preserve-whitespace");
+    const text = sText.asText();
+    if (text.trim()) texts.push(text.trim());
+  }
+  return texts.join("\n\n");
 }
 
 /**
@@ -58,8 +66,8 @@ export async function extractTextOnly(filePath: string): Promise<string> {
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ENOENT") {
-      logger.info({ filePath }, "pdftotext not found — falling back to pdf-parse");
-      return extractTextWithPdfParse(filePath);
+      logger.info({ filePath }, "pdftotext not found — falling back to mupdf text extraction");
+      return extractTextWithMuPDF(filePath);
     }
     throw err;
   }

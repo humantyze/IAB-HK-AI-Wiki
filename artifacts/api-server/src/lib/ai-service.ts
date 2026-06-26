@@ -255,7 +255,7 @@ export async function describeDocumentVisuals(
           ],
         },
       ],
-      max_completion_tokens: 1500,
+      max_completion_tokens: 4000,
     });
 
     const raw = response.choices[0]?.message?.content;
