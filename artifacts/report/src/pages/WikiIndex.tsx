@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
-import { Search, BookOpen, Clock, ChevronRight, Lock, Sparkles, LayoutGrid, Network } from "lucide-react";
+import { Search, BookOpen, Clock, ChevronRight, Lock, Sparkles, LayoutGrid, Network, X } from "lucide-react";
 import WikiGraph from "../components/WikiGraph";
 import { useJsonLd } from "@/lib/useJsonLd";
 import { usePageMeta } from "@/hooks/usePageMeta";
@@ -236,6 +236,20 @@ export default function WikiIndex() {
     if (trimmed.length >= 3) setActiveQuery(trimmed);
   };
 
+  const clearSearch = () => {
+    setQuery("");
+    setActiveQuery("");
+    setAiResults(null);
+    setAiSummary(null);
+    setSearchFallbackPages(null);
+    setRagAnswer(null);
+    setRagCitations(null);
+    setRagGrounded(false);
+    setSearchDone(false);
+    setIsSearching(false);
+    if (abortRef.current) abortRef.current.abort();
+  };
+
   const basePages = aiResults !== null ? aiResults : (searchFallbackPages ?? pages ?? []);
 
 
@@ -395,16 +409,25 @@ export default function WikiIndex() {
         </div>
 
         <div className="border-t border-gray-100 pt-4 pb-2 flex items-center justify-between">
-          {isLoading ? (
-            <span className="text-xs text-gray-400">Loading…</span>
-          ) : filtered.length > 0 ? (
-            <span className="text-xs text-gray-400 font-medium">
-              {filtered.length} {filtered.length === 1 ? "page" : "pages"}
-              {activeTag !== "All" ? ` · ${activeTag}` : ""}
-            </span>
-          ) : (
-            <span />
-          )}
+          <div className="flex items-center gap-3">
+            {activeQuery.trim().length >= 3 && (
+              <button
+                onClick={clearSearch}
+                className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:text-gray-800 transition-colors"
+              >
+                <X size={12} />
+                Back to all pages
+              </button>
+            )}
+            {isLoading ? (
+              <span className="text-xs text-gray-400">Loading…</span>
+            ) : filtered.length > 0 ? (
+              <span className="text-xs text-gray-400 font-medium">
+                {filtered.length} {filtered.length === 1 ? "page" : "pages"}
+                {activeTag !== "All" ? ` · ${activeTag}` : ""}
+              </span>
+            ) : null}
+          </div>
           <div className="flex items-center gap-3">
             {usingAI && !isSearching && (
               <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "#D63425" }}>
