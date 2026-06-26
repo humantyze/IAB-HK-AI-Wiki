@@ -1,6 +1,6 @@
 import { db, wikiPagesTable } from "@workspace/db";
 import { indexWikiPage } from "./knowledge-index";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
 
 export interface WikiPageExtract {
@@ -10,6 +10,79 @@ export interface WikiPageExtract {
   tags: string[];
   related_slugs: string[];
   image_url: string | null;
+}
+
+export interface BodySegment {
+  ref: string;
+  label: string;
+  markdown: string;
+}
+
+interface WikiSource {
+  label: string;
+  ref: string;
+}
+
+const LEGACY_APPEND_DELIM = "\n\n---\n\n*Additional content from ";
+
+/** Render a page body deterministically from its per-source segments. */
+export function renderBodyFromSegments(segments: BodySegment[]): string {
+  return segments
+    .map((s, i) =>
+      i === 0
+        ? s.markdown
+        : `\n\n---\n\n*Additional content from ${s.label}:*\n\n${s.markdown}`,
+    )
+    .join("");
+}
+
+/**
+ * Reconstruct per-source segments for a legacy page that predates segment
+ * tracking. Splits on the delimiter the old merge used and maps each part to a
+ * source by position, falling back to a single segment attributed to the first
+ * source when the body can't be split.
+ */
+export function deriveLegacySegments(bodyMarkdown: string, sources: WikiSource[]): BodySegment[] {
+  if (!bodyMarkdown.trim()) return [];
+  if (sources.length === 0) {
+    return [{ ref: "legacy", label: "Original", markdown: bodyMarkdown }];
+  }
+  const parts = bodyMarkdown.split(LEGACY_APPEND_DELIM);
+  const segments: BodySegment[] = [
+    { ref: sources[0].ref, label: sources[0].label, markdown: parts[0] },
+  ];
+  for (let i = 1; i < parts.length; i++) {
+    const src = sources[i] ?? sources[sources.length - 1];
+    const m = parts[i].match(/^(.*?):\*\n\n([\s\S]*)$/);
+    segments.push({ ref: src.ref, label: src.label, markdown: m ? m[2] : parts[i] });
+  }
+  return segments;
+}
+
+/**
+ * Remove every source matching `shouldRemove` from a page — both its citation
+ * and its body segment(s) — and re-derive the body so the removed upload's prose
+ * actually leaves the page (not just the citation). Returns the reconciled
+ * fields plus whether the page has any sources left.
+ */
+export function removeRefFromPage(
+  page: { sources: unknown; bodySegments: unknown; bodyMarkdown: string },
+  shouldRemove: (ref: string) => boolean,
+): { sources: WikiSource[]; bodySegments: BodySegment[]; bodyMarkdown: string; isEmpty: boolean } {
+  const sources = (page.sources as WikiSource[]) ?? [];
+  const existingSegments = (page.bodySegments as BodySegment[]) ?? [];
+  const segments = existingSegments.length > 0
+    ? existingSegments
+    : deriveLegacySegments(page.bodyMarkdown, sources);
+
+  const newSources = sources.filter((s) => !shouldRemove(s.ref));
+  const newSegments = segments.filter((s) => !shouldRemove(s.ref));
+  return {
+    sources: newSources,
+    bodySegments: newSegments,
+    bodyMarkdown: renderBodyFromSegments(newSegments),
+    isEmpty: newSources.length === 0,
+  };
 }
 
 export async function extractWikiPages(
@@ -82,60 +155,80 @@ ${jsonSchema}`;
 
   for (const page of pages) {
     if (!page.slug || !page.title) continue;
+    const slug = page.slug;
 
-    const [existing] = await db
-      .select()
-      .from(wikiPagesTable)
-      .where(eq(wikiPagesTable.slug, page.slug))
-      .limit(1);
+    // Serialize per-slug read-merge-write behind a transaction-scoped advisory
+    // lock keyed on the slug. Without this, two concurrent uploads that extract
+    // the SAME new slug both read "not found", both INSERT, and the second hits
+    // the UNIQUE(slug) constraint — which previously surfaced as "Wiki
+    // extraction failed" and silently dropped the losing upload's content.
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${slug}))`);
 
-    if (existing) {
-      const existingSources = (existing.sources as Array<{ label: string; ref: string }>) ?? [];
-      const alreadyCited = existingSources.some((s) => s.ref === sourceRef);
-      const newSources = alreadyCited
-        ? existingSources
-        : [...existingSources, { label: sourceLabel, ref: sourceRef }];
+      const [existing] = await tx
+        .select()
+        .from(wikiPagesTable)
+        .where(eq(wikiPagesTable.slug, slug))
+        .limit(1);
 
-      const mergedBody = existing.bodyMarkdown.includes(page.body_markdown.slice(0, 50))
-        ? existing.bodyMarkdown
-        : `${existing.bodyMarkdown}\n\n---\n\n*Additional content from ${sourceLabel}:*\n\n${page.body_markdown}`;
+      if (existing) {
+        const existingSources = (existing.sources as WikiSource[]) ?? [];
+        const alreadyCited = existingSources.some((s) => s.ref === sourceRef);
+        const newSources = alreadyCited
+          ? existingSources
+          : [...existingSources, { label: sourceLabel, ref: sourceRef }];
 
-      const existingTags = (existing.tags as string[]) ?? [];
-      const mergedTags = [...new Set([...existingTags, ...page.tags])];
+        // Store this source's prose as its OWN segment (replace in place when it
+        // already exists). This makes re-running extraction idempotent and lets
+        // a later delete of this source remove exactly its contribution while
+        // the body is always re-derived from the surviving segments.
+        const existingSegments = (existing.bodySegments as BodySegment[]) ?? [];
+        const baseSegments = existingSegments.length > 0
+          ? existingSegments
+          : deriveLegacySegments(existing.bodyMarkdown, existingSources);
+        const thisSegment: BodySegment = { ref: sourceRef, label: sourceLabel, markdown: page.body_markdown };
+        const idx = baseSegments.findIndex((s) => s.ref === sourceRef);
+        const mergedSegments = idx >= 0
+          ? baseSegments.map((s, i) => (i === idx ? thisSegment : s))
+          : [...baseSegments, thisSegment];
 
-      const existingRelated = (existing.relatedSlugs as string[]) ?? [];
-      const mergedRelated = [...new Set([...existingRelated, ...page.related_slugs])];
+        const mergedTags = [...new Set([...((existing.tags as string[]) ?? []), ...page.tags])];
+        const mergedRelated = [...new Set([...((existing.relatedSlugs as string[]) ?? []), ...page.related_slugs])];
 
-      await db
-        .update(wikiPagesTable)
-        .set({
-          bodyMarkdown: mergedBody,
-          tags: mergedTags,
-          relatedSlugs: mergedRelated,
-          sources: newSources,
-          imageUrl: existing.imageUrl ?? page.image_url ?? null,
-          updatedAt: new Date(),
-        })
-        .where(eq(wikiPagesTable.slug, page.slug));
+        await tx
+          .update(wikiPagesTable)
+          .set({
+            bodyMarkdown: renderBodyFromSegments(mergedSegments),
+            bodySegments: mergedSegments,
+            tags: mergedTags,
+            relatedSlugs: mergedRelated,
+            sources: newSources,
+            imageUrl: existing.imageUrl ?? page.image_url ?? null,
+            updatedAt: new Date(),
+          })
+          .where(eq(wikiPagesTable.slug, slug));
 
-      updated++;
-    } else {
-      await db.insert(wikiPagesTable).values({
-        slug: page.slug,
-        title: page.title,
-        bodyMarkdown: page.body_markdown,
-        tags: page.tags,
-        relatedSlugs: page.related_slugs,
-        sources: [{ label: sourceLabel, ref: sourceRef }],
-        imageUrl: page.image_url ?? null,
-      });
-      created++;
-    }
+        updated++;
+      } else {
+        const segments: BodySegment[] = [{ ref: sourceRef, label: sourceLabel, markdown: page.body_markdown }];
+        await tx.insert(wikiPagesTable).values({
+          slug,
+          title: page.title,
+          bodyMarkdown: renderBodyFromSegments(segments),
+          bodySegments: segments,
+          tags: page.tags,
+          relatedSlugs: page.related_slugs,
+          sources: [{ label: sourceLabel, ref: sourceRef }],
+          imageUrl: page.image_url ?? null,
+        });
+        created++;
+      }
+    });
 
     try {
-      await indexWikiPage(page.slug);
+      await indexWikiPage(slug);
     } catch (err) {
-      logger.warn({ err, slug: page.slug }, "Failed to index wiki page into knowledge store");
+      logger.warn({ err, slug }, "Failed to index wiki page into knowledge store");
     }
   }
 
@@ -325,28 +418,43 @@ JSON schema:
     let created = 0;
     for (const page of pages) {
       if (!page.slug || !page.title) continue;
+      const slug = page.slug;
 
-      const [existing] = await db
-        .select({ id: wikiPagesTable.id })
-        .from(wikiPagesTable)
-        .where(eq(wikiPagesTable.slug, page.slug))
-        .limit(1);
+      // Lock per-slug so a concurrent upload extracting the same slug can't
+      // collide with the synthesis insert on the UNIQUE(slug) constraint.
+      let didCreate = false;
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${slug}))`);
 
-      if (!existing) {
-        await db.insert(wikiPagesTable).values({
-          slug: page.slug,
-          title: page.title,
-          bodyMarkdown: page.body_markdown,
-          tags: page.tags,
-          relatedSlugs: [],
-          sources: [{ label: "Synthesis — cross-content analysis", ref: "wiki-seed-synthesis" }],
-        });
+        const [existing] = await tx
+          .select({ id: wikiPagesTable.id })
+          .from(wikiPagesTable)
+          .where(eq(wikiPagesTable.slug, slug))
+          .limit(1);
+
+        if (!existing) {
+          const segments: BodySegment[] = [
+            { ref: "wiki-seed-synthesis", label: "Synthesis — cross-content analysis", markdown: page.body_markdown },
+          ];
+          await tx.insert(wikiPagesTable).values({
+            slug,
+            title: page.title,
+            bodyMarkdown: renderBodyFromSegments(segments),
+            bodySegments: segments,
+            tags: page.tags,
+            relatedSlugs: [],
+            sources: [{ label: "Synthesis — cross-content analysis", ref: "wiki-seed-synthesis" }],
+          });
+          didCreate = true;
+        }
+      });
+
+      if (didCreate) {
         created++;
-
         try {
-          await indexWikiPage(page.slug);
+          await indexWikiPage(slug);
         } catch (err) {
-          logger.warn({ err, slug: page.slug }, "Failed to index synthesized wiki page into knowledge store");
+          logger.warn({ err, slug }, "Failed to index synthesized wiki page into knowledge store");
         }
       }
     }

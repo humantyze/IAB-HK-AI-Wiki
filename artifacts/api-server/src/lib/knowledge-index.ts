@@ -343,6 +343,18 @@ export async function reindexAll(): Promise<{ wiki: number; uploads: number; chu
 }
 
 /**
+ * Additively ensure the wiki_pages.body_segments column exists. Created on
+ * demand (ADD COLUMN IF NOT EXISTS — no drizzle migration, no data loss) so the
+ * per-source body-segment tracking self-heals in dev and prod regardless of
+ * whether migrations are run, mirroring the knowledge_index_meta pattern.
+ */
+export async function ensureWikiSchema(): Promise<void> {
+  await db.execute(
+    sql`ALTER TABLE wiki_pages ADD COLUMN IF NOT EXISTS body_segments jsonb NOT NULL DEFAULT '[]'::jsonb`,
+  );
+}
+
+/**
  * Delete any knowledge_chunks rows with a source_type that no longer exists
  * in the schema (e.g. legacy "section" rows from before the sections feature
  * was removed). Safe to call on every startup — a no-op when no stale rows

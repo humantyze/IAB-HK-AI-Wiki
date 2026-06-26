@@ -8,6 +8,7 @@ export const wikiPagesTable = pgTable("wiki_pages", {
   tags: jsonb("tags").notNull().$type<string[]>().default([]),
   relatedSlugs: jsonb("related_slugs").notNull().$type<string[]>().default([]),
   sources: jsonb("sources").notNull().$type<Array<{ label: string; ref: string }>>().default([]),
+  bodySegments: jsonb("body_segments").notNull().$type<Array<{ ref: string; label: string; markdown: string }>>().default([]),
   imageUrl: text("image_url"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

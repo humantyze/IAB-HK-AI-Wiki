@@ -1,10 +1,11 @@
 import cron from "node-cron";
 import app from "./app";
 import { logger } from "./lib/logger";
-import { ensureIndexUpToDate, cleanupLegacyChunks } from "./lib/knowledge-index";
+import { ensureIndexUpToDate, cleanupLegacyChunks, ensureWikiSchema } from "./lib/knowledge-index";
 import { embedQuery } from "./lib/embeddings";
 import { rerank } from "./lib/reranker";
 import { runBackup } from "./lib/backup";
+import { recoverPendingUploads } from "./lib/upload-processing";
 
 const rawPort = process.env["PORT"];
 
@@ -21,6 +22,15 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 async function main() {
+  // Additively self-heal the wiki_pages schema (body_segments column) BEFORE
+  // accepting traffic, so no upload/extraction write can run against a DB that
+  // is missing the column.
+  try {
+    await ensureWikiSchema();
+  } catch (e) {
+    logger.error({ err: e }, "ensureWikiSchema failed — wiki body-segment tracking may be unavailable");
+  }
+
   await new Promise<void>((resolve, reject) => {
     app.listen(port, (err) => {
       if (err) {
@@ -60,6 +70,19 @@ async function main() {
       logger.error({ err: e }, "Unexpected error during knowledge reindex check");
     });
   }, 30_000);
+
+  // Recover uploads stranded in "pending" by a crash/restart during the
+  // fire-and-forget finalize window. Run shortly after boot, then periodically.
+  setTimeout(() => {
+    recoverPendingUploads().catch((e) => {
+      logger.error({ err: e }, "Unexpected error during pending-upload recovery");
+    });
+  }, 20_000);
+  cron.schedule("*/15 * * * *", () => {
+    recoverPendingUploads().catch((e) => {
+      logger.error({ err: e }, "Unexpected error during pending-upload recovery cron");
+    });
+  });
 
   cron.schedule(
     "0 2 * * *",

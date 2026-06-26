@@ -1,10 +1,10 @@
 import { Router, type IRouter } from "express";
 import { eq, gt, asc } from "drizzle-orm";
 import { db, uploadsTable, wikiPagesTable, knowledgeChunksTable } from "@workspace/db";
-import type { ProcessingError } from "@workspace/db";
 import { requireSuperAuth } from "../middlewares/auth";
-import { extractWikiPages } from "../lib/ai-service";
-import { indexSource, removeSource, indexWikiPage } from "../lib/knowledge-index";
+import { removeRefFromPage } from "../lib/ai-service";
+import { removeSource, indexWikiPage } from "../lib/knowledge-index";
+import { reprocessUpload } from "../lib/upload-processing";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -69,22 +69,31 @@ router.post("/admin/regress", requireSuperAuth, async (req, res) => {
     const cascadeDeletedWikiIds: number[] = [];
     const updatedWikiSlugs: string[] = [];
     if (deletedUploadIds.size > 0) {
+      const removeDeleted = (ref: string) => {
+        const match = ref.match(/^Upload #(\d+)/);
+        return match ? deletedUploadIds.has(Number(match[1])) : false;
+      };
       const remainingWiki = await db.select().from(wikiPagesTable);
       for (const page of remainingWiki) {
         const sources = (page.sources as Array<{ label: string; ref: string }>) ?? [];
-        const filteredSources = sources.filter((s) => {
-          const match = s.ref.match(/^Upload #(\d+)/);
-          if (!match) return true;
-          return !deletedUploadIds.has(Number(match[1]));
-        });
-        if (filteredSources.length !== sources.length) {
-          if (filteredSources.length === 0) {
-            await db.delete(wikiPagesTable).where(eq(wikiPagesTable.id, page.id));
-            cascadeDeletedWikiIds.push(page.id);
-          } else {
-            await db.update(wikiPagesTable).set({ sources: filteredSources }).where(eq(wikiPagesTable.id, page.id));
-            updatedWikiSlugs.push(page.slug);
-          }
+        if (!sources.some((s) => removeDeleted(s.ref))) continue;
+        // Strip the deleted uploads' citations AND their body segment(s), then
+        // re-derive the body so reverted content actually leaves the page.
+        const reconciled = removeRefFromPage(page, removeDeleted);
+        if (reconciled.isEmpty) {
+          await db.delete(wikiPagesTable).where(eq(wikiPagesTable.id, page.id));
+          cascadeDeletedWikiIds.push(page.id);
+        } else {
+          await db
+            .update(wikiPagesTable)
+            .set({
+              sources: reconciled.sources,
+              bodySegments: reconciled.bodySegments,
+              bodyMarkdown: reconciled.bodyMarkdown,
+              updatedAt: new Date(),
+            })
+            .where(eq(wikiPagesTable.id, page.id));
+          updatedWikiSlugs.push(page.slug);
         }
       }
     }
@@ -117,91 +126,19 @@ router.post("/admin/regress", requireSuperAuth, async (req, res) => {
   }
 });
 
-interface ReprocessResult {
-  id: number;
-  status: string;
-  wikiPagesCreated: number;
-  wikiPagesUpdated: number;
-  errors: ProcessingError[];
-}
-
 /**
  * Re-runs wiki extraction and knowledge indexing for every upload that has
  * stored raw text. Runs synchronously so the caller receives per-upload
- * results in the response body.
+ * results in the response body. Shares the exact per-upload pipeline used by
+ * the crash-recovery sweep (reprocessUpload).
  */
 router.post("/admin/reprocess-uploads", requireSuperAuth, async (_req, res) => {
   const uploads = await db.select().from(uploadsTable).orderBy(asc(uploadsTable.id));
   const eligible = uploads.filter((u) => u.rawText && u.rawText.trim().length >= 50);
 
-  const results: ReprocessResult[] = [];
-
+  const results = [];
   for (const upload of eligible) {
-    const errors: ProcessingError[] = [];
-    let wikiPagesCreated = 0;
-    let wikiPagesUpdated = 0;
-    let finalStatus = "processed";
-
-    const sourceLabel = upload.contributorName ?? upload.contentType.replace(/_/g, " ");
-    const sourceRef = `Upload #${upload.id} — ${upload.contentType.replace(/_/g, " ")}`;
-    const uploadTitle = `${upload.contributorName ? `${upload.contributorName} — ` : ""}${upload.contentType.replace(/_/g, " ")}`;
-
-    try {
-      const { created, updated } = await extractWikiPages(sourceLabel, upload.rawText, sourceRef, []);
-      wikiPagesCreated = created;
-      wikiPagesUpdated = updated;
-
-      if (created === 0 && updated === 0) {
-        errors.push({
-          step: "wiki_extraction",
-          message: "AI returned 0 pages from non-empty text during reprocess",
-          ts: new Date().toISOString(),
-        });
-        finalStatus = "failed";
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      logger.error({ err, uploadId: upload.id }, "Wiki extraction failed during reprocess");
-      errors.push({ step: "wiki_extraction", message, ts: new Date().toISOString() });
-      finalStatus = "failed";
-    }
-
-    // Only index eligible uploads; a failed upload must never leave chunks
-    // behind, so pull any existing ones when reprocessing ends in failure.
-    if (finalStatus === "failed") {
-      try {
-        await removeSource("upload", upload.id);
-      } catch (err) {
-        logger.error({ err, uploadId: upload.id }, "Failed to remove failed upload from index during reprocess");
-      }
-    } else {
-      try {
-        await indexSource({
-          sourceType: "upload",
-          sourceId: upload.id,
-          sourceSlug: null,
-          title: uploadTitle,
-          text: upload.rawText,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        logger.error({ err, uploadId: upload.id }, "Knowledge indexing failed during reprocess");
-        errors.push({ step: "knowledge_indexing", message, ts: new Date().toISOString() });
-        finalStatus = finalStatus === "processed" ? "partial" : finalStatus;
-      }
-    }
-
-    await db
-      .update(uploadsTable)
-      .set({
-        status: finalStatus,
-        processedAt: new Date(),
-        processingErrors: errors.length > 0 ? errors : null,
-      })
-      .where(eq(uploadsTable.id, upload.id))
-      .catch((dbErr) => logger.error({ dbErr, uploadId: upload.id }, "Failed to write reprocess result to DB"));
-
-    results.push({ id: upload.id, status: finalStatus, wikiPagesCreated, wikiPagesUpdated, errors });
+    results.push(await reprocessUpload(upload));
   }
 
   const succeeded = results.filter((r) => r.status === "processed").length;

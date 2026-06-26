@@ -7,7 +7,7 @@ import { z } from "zod";
 import { db, uploadsTable, wikiPagesTable } from "@workspace/db";
 import type { ProcessingError } from "@workspace/db";
 import { requireAuth, requireSuperAuth } from "../middlewares/auth";
-import { extractWikiPages, describeDocumentVisuals } from "../lib/ai-service";
+import { extractWikiPages, describeDocumentVisuals, removeRefFromPage } from "../lib/ai-service";
 import { indexSource, removeSource, indexWikiPage } from "../lib/knowledge-index";
 import { extractTextOnly, extractImages, renderPdfPages } from "../lib/pdf-extractor";
 import { dispatchExtraction, SUPPORTED_MIME_TYPES, isSupportedMimeType } from "../lib/doc-extractor";
@@ -507,24 +507,34 @@ router.delete("/uploads/:id", requireSuperAuth, async (req, res) => {
     return;
   }
 
+  // Strip this upload from every wiki page it contributed to — both the
+  // citation AND its body segment(s), so the deleted upload's prose actually
+  // leaves the page (it previously stayed and remained searchable).
+  const isThisUpload = (ref: string) => {
+    const match = ref.match(/^Upload #(\d+)/);
+    return match ? Number(match[1]) === uploadId : false;
+  };
   const allWikiPages = await db.select().from(wikiPagesTable);
   const deletedWikiPageIds: number[] = [];
   const updatedWikiSlugs: string[] = [];
   for (const page of allWikiPages) {
     const sources = (page.sources as Array<{ label: string; ref: string }>) ?? [];
-    const filtered = sources.filter((s) => {
-      const match = s.ref.match(/^Upload #(\d+)/);
-      if (!match) return true;
-      return Number(match[1]) !== uploadId;
-    });
-    if (filtered.length !== sources.length) {
-      if (filtered.length === 0) {
-        await db.delete(wikiPagesTable).where(eq(wikiPagesTable.id, page.id));
-        deletedWikiPageIds.push(page.id);
-      } else {
-        await db.update(wikiPagesTable).set({ sources: filtered }).where(eq(wikiPagesTable.id, page.id));
-        updatedWikiSlugs.push(page.slug);
-      }
+    if (!sources.some((s) => isThisUpload(s.ref))) continue;
+    const reconciled = removeRefFromPage(page, isThisUpload);
+    if (reconciled.isEmpty) {
+      await db.delete(wikiPagesTable).where(eq(wikiPagesTable.id, page.id));
+      deletedWikiPageIds.push(page.id);
+    } else {
+      await db
+        .update(wikiPagesTable)
+        .set({
+          sources: reconciled.sources,
+          bodySegments: reconciled.bodySegments,
+          bodyMarkdown: reconciled.bodyMarkdown,
+          updatedAt: new Date(),
+        })
+        .where(eq(wikiPagesTable.id, page.id));
+      updatedWikiSlugs.push(page.slug);
     }
   }
 
