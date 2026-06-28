@@ -407,13 +407,13 @@ async function writeIndexVersion(version: string): Promise<void> {
  * instead of leaving stale vectors from an older model that are not comparable
  * to the new query embeddings.
  */
-export async function ensureIndexUpToDate(): Promise<void> {
+export async function ensureIndexUpToDate(): Promise<boolean> {
   try {
     const stored = await readIndexVersion();
     const count = await countChunks();
     if (stored === INDEX_VERSION && count > 0) {
       logger.info({ version: stored, count }, "Knowledge index version current — no reindex needed");
-      return;
+      return false;
     }
     logger.warn(
       { stored, current: INDEX_VERSION, count },
@@ -421,7 +421,9 @@ export async function ensureIndexUpToDate(): Promise<void> {
     );
     await reindexAll();
     await writeIndexVersion(INDEX_VERSION);
+    return true;
   } catch (err) {
     logger.error({ err }, "ensureIndexUpToDate failed — retrieval may be degraded until manual reindex");
+    return false;
   }
 }

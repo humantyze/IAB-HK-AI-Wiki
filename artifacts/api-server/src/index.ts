@@ -6,6 +6,7 @@ import { embedQuery } from "./lib/embeddings";
 import { rerank } from "./lib/reranker";
 import { runBackup } from "./lib/backup";
 import { recoverPendingUploads } from "./lib/upload-processing";
+import { ensureQuestionsFresh } from "./lib/question-generator";
 
 const rawPort = process.env["PORT"];
 
@@ -66,9 +67,16 @@ async function main() {
   // reindex). Runs after wiki auto-seed kicks off so a fresh DB indexes seeded
   // pages too.
   setTimeout(() => {
-    ensureIndexUpToDate().catch((e) => {
-      logger.error({ err: e }, "Unexpected error during knowledge reindex check");
-    });
+    ensureIndexUpToDate()
+      .then((reindexed) => {
+        // Make sure the homepage sample questions exist (so it never silently
+        // falls back to the stale hardcoded list) and re-verify them against
+        // the rebuilt embeddings whenever a reindex actually ran.
+        return ensureQuestionsFresh(reindexed);
+      })
+      .catch((e) => {
+        logger.error({ err: e }, "Unexpected error during knowledge reindex check");
+      });
   }, 30_000);
 
   // Recover uploads stranded in "pending" by a crash/restart during the
