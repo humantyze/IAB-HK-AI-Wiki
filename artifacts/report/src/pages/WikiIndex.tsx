@@ -741,22 +741,37 @@ export default function WikiIndex() {
                             : gen > 1
                             ? { animation: "cite-pulse 0.55s ease both" }
                             : {};
-                        return (
-                          <a
-                            // Key changes on gen → element remounts → animation replays
-                            key={`${c.index}-${gen}`}
-                            id={`citation-${c.index}`}
-                            href={c.sourceSlug ? `${baseUrl}/wiki/${c.sourceSlug}` : undefined}
-                            className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                              c.sourceSlug
-                                ? "border-[#D63425]/20 bg-white hover:bg-[#D63425]/5 hover:border-[#D63425]/40 cursor-pointer"
-                                : "border-gray-200 bg-white cursor-default"
-                            }`}
-                            style={{ color: c.sourceSlug ? "#D63425" : "#9ca3af", ...animStyle }}
-                          >
+                        const citationClass = `inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                          c.sourceSlug
+                            ? "border-[#D63425]/20 bg-white hover:bg-[#D63425]/5 hover:border-[#D63425]/40 cursor-pointer"
+                            : "border-gray-200 bg-white cursor-default"
+                        }`;
+                        const citationStyle = { color: c.sourceSlug ? "#D63425" : "#9ca3af", ...animStyle };
+                        const citationContent = (
+                          <>
                             <span className="font-bold text-[10px] opacity-60">[{c.index}]</span>
                             <span className="truncate max-w-[180px]">{c.title}</span>
-                          </a>
+                          </>
+                        );
+                        return c.sourceSlug ? (
+                          <Link
+                            key={`${c.index}-${gen}`}
+                            id={`citation-${c.index}`}
+                            href={`/wiki/${c.sourceSlug}`}
+                            className={citationClass}
+                            style={citationStyle}
+                          >
+                            {citationContent}
+                          </Link>
+                        ) : (
+                          <span
+                            key={`${c.index}-${gen}`}
+                            id={`citation-${c.index}`}
+                            className={citationClass}
+                            style={citationStyle}
+                          >
+                            {citationContent}
+                          </span>
                         );
                       })}
                     </div>
