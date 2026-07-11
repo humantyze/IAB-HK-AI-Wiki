@@ -20,11 +20,16 @@ async function extractTextWithMuPDF(filePath: string): Promise<string> {
   const doc = mupdf.Document.openDocument(fileData, "application/pdf");
   const pageCount = doc.countPages();
   const texts: string[] = [];
-  for (let i = 0; i < pageCount; i++) {
-    const page = doc.loadPage(i);
-    const sText = page.toStructuredText("preserve-whitespace");
-    const text = sText.asText();
-    if (text.trim()) texts.push(text.trim());
+  try {
+    for (let i = 0; i < pageCount; i++) {
+      const page = doc.loadPage(i);
+      const sText = page.toStructuredText("preserve-whitespace");
+      const text = sText.asText();
+      if (text.trim()) texts.push(text.trim());
+      page.destroy();
+    }
+  } finally {
+    doc.destroy();
   }
   return texts.join("\n\n");
 }
@@ -54,27 +59,32 @@ export async function renderPdfPagesBatched(
   const doc = mupdf.Document.openDocument(fileData, "application/pdf");
   const total = Math.min(doc.countPages(), maxPages);
 
-  for (let start = 0; start < total; start += batchSize) {
-    const end = Math.min(start + batchSize, total);
-    const batch: Buffer[] = [];
+  try {
+    for (let start = 0; start < total; start += batchSize) {
+      const end = Math.min(start + batchSize, total);
+      const batch: Buffer[] = [];
 
-    for (let i = start; i < end; i++) {
-      const page = doc.loadPage(i);
-      // 1.5× scale ≈ 108 DPI — legible for charts and tables
-      const pixmap = page.toPixmap(
-        [1.5, 0, 0, 1.5, 0, 0],
-        mupdf.ColorSpace.DeviceRGB,
-        false,
-      );
-      batch.push(Buffer.from(pixmap.asPNG()));
-      pixmap.destroy(); // free WASM heap immediately — not GC'd otherwise
+      for (let i = start; i < end; i++) {
+        const page = doc.loadPage(i);
+        // 1.5× scale ≈ 108 DPI — legible for charts and tables
+        const pixmap = page.toPixmap(
+          [1.5, 0, 0, 1.5, 0, 0],
+          mupdf.ColorSpace.DeviceRGB,
+          false,
+        );
+        batch.push(Buffer.from(pixmap.asPNG()));
+        pixmap.destroy(); // free WASM heap immediately — not GC'd otherwise
+        page.destroy();   // free page resources in WASM heap
+      }
+
+      await onBatch(batch, start);
+
+      // Yield to the event loop so the batch buffers become GC-eligible
+      // before allocating the next batch
+      await new Promise<void>((resolve) => setImmediate(resolve));
     }
-
-    await onBatch(batch, start);
-
-    // Yield to the event loop so the batch buffers become GC-eligible
-    // before allocating the next batch
-    await new Promise<void>((resolve) => setImmediate(resolve));
+  } finally {
+    doc.destroy(); // always free the document's WASM heap regardless of errors
   }
 }
 
