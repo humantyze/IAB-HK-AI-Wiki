@@ -30,28 +30,63 @@ async function extractTextWithMuPDF(filePath: string): Promise<string> {
 }
 
 /**
- * Render up to `maxPages` pages of a PDF as PNG image buffers using MuPDF WASM.
- * Works in Cloud Run with no system dependencies.
- * Returns an empty array if rendering fails for any reason.
+ * Render up to `maxPages` pages of a PDF in batches of `batchSize`, calling
+ * `onBatch` after each batch before rendering the next. Pixmaps are explicitly
+ * destroyed after PNG extraction so WASM heap memory is freed between batches
+ * rather than accumulating for the full page count.
+ *
+ * @param filePath  Absolute path to the PDF file
+ * @param maxPages  Total page cap (default 6)
+ * @param batchSize Pages per batch — each batch is rendered, passed to the
+ *                  callback, then freed before the next batch starts (default 2)
+ * @param onBatch   Async callback invoked with the PNG buffers for each batch
+ *                  and the 0-based index of the first page in that batch
  */
-export async function renderPdfPages(filePath: string, maxPages = 4): Promise<Buffer[]> {
+export async function renderPdfPagesBatched(
+  filePath: string,
+  maxPages: number,
+  batchSize: number,
+  onBatch: (buffers: Buffer[], startPage: number) => Promise<void>,
+): Promise<void> {
   const { readFile } = await import("fs/promises");
   const fileData = await readFile(filePath);
-  // Dynamic import keeps the WASM module out of the esbuild bundle
   const mupdf = await import("mupdf");
   const doc = mupdf.Document.openDocument(fileData, "application/pdf");
-  const count = Math.min(doc.countPages(), maxPages);
-  const results: Buffer[] = [];
-  for (let i = 0; i < count; i++) {
-    const page = doc.loadPage(i);
-    // 1.5× scale ≈ 108 DPI — legible for charts and tables
-    const pixmap = page.toPixmap(
-      [1.5, 0, 0, 1.5, 0, 0],
-      mupdf.ColorSpace.DeviceRGB,
-      false,
-    );
-    results.push(Buffer.from(pixmap.asPNG()));
+  const total = Math.min(doc.countPages(), maxPages);
+
+  for (let start = 0; start < total; start += batchSize) {
+    const end = Math.min(start + batchSize, total);
+    const batch: Buffer[] = [];
+
+    for (let i = start; i < end; i++) {
+      const page = doc.loadPage(i);
+      // 1.5× scale ≈ 108 DPI — legible for charts and tables
+      const pixmap = page.toPixmap(
+        [1.5, 0, 0, 1.5, 0, 0],
+        mupdf.ColorSpace.DeviceRGB,
+        false,
+      );
+      batch.push(Buffer.from(pixmap.asPNG()));
+      pixmap.destroy(); // free WASM heap immediately — not GC'd otherwise
+    }
+
+    await onBatch(batch, start);
+
+    // Yield to the event loop so the batch buffers become GC-eligible
+    // before allocating the next batch
+    await new Promise<void>((resolve) => setImmediate(resolve));
   }
+}
+
+/**
+ * @deprecated Use renderPdfPagesBatched for memory-safe rendering.
+ * Kept for any callers that need a simple array return.
+ */
+export async function renderPdfPages(filePath: string, maxPages = 4): Promise<Buffer[]> {
+  const results: Buffer[] = [];
+  await renderPdfPagesBatched(filePath, maxPages, maxPages, async (batch) => {
+    results.push(...batch);
+  });
   return results;
 }
 

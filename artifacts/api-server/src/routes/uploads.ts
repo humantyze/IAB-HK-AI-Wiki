@@ -9,7 +9,7 @@ import type { ProcessingError } from "@workspace/db";
 import { requireAuth, requireSuperAuth } from "../middlewares/auth";
 import { extractWikiPages, describeDocumentVisuals, removeRefFromPage } from "../lib/ai-service";
 import { indexSource, removeSource, indexWikiPage } from "../lib/knowledge-index";
-import { extractTextOnly, extractImages, renderPdfPages } from "../lib/pdf-extractor";
+import { extractTextOnly, extractImages, renderPdfPagesBatched } from "../lib/pdf-extractor";
 import { dispatchExtraction, SUPPORTED_MIME_TYPES, isSupportedMimeType } from "../lib/doc-extractor";
 import { getBackupBucket } from "../lib/gcsClient";
 import { logger } from "../lib/logger";
@@ -196,15 +196,18 @@ router.post("/uploads", requireAuth, (req, res, next) => {
         continue;
       }
 
-      // NON-CRITICAL: visual analysis — record error but continue
+      // NON-CRITICAL: visual analysis — process in batches of 2 pages to avoid
+      // accumulating WASM pixmaps in memory; each batch is described then freed
       try {
-        logger.info({ filename: fname }, "Rendering PDF pages for visual analysis");
-        const pageImages = await renderPdfPages(file.path, 4);
-        if (pageImages.length > 0) {
-          const visualDesc = await describeDocumentVisuals(pageImages, fname);
-          if (visualDesc) {
-            fileText = `${fileText}\n\n---\n\n## Visual Content (charts, tables, diagrams)\n\n${visualDesc}`;
-          }
+        logger.info({ filename: fname }, "Rendering PDF pages for visual analysis (batched)");
+        const batchDescriptions: string[] = [];
+        await renderPdfPagesBatched(file.path, 6, 2, async (batchBuffers, startPage) => {
+          logger.info({ filename: fname, startPage, pages: batchBuffers.length }, "Describing PDF batch");
+          const desc = await describeDocumentVisuals(batchBuffers, fname);
+          if (desc) batchDescriptions.push(desc);
+        });
+        if (batchDescriptions.length > 0) {
+          fileText = `${fileText}\n\n---\n\n## Visual Content (charts, tables, diagrams)\n\n${batchDescriptions.join("\n\n")}`;
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
