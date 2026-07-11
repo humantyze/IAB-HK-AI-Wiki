@@ -1,61 +1,44 @@
-import { logger } from "./logger";
+import OpenAI from "openai";
 
-// Multilingual model so English + Chinese/Cantonese content embed into the same
-// space. multilingual-e5-small is 384-dim (same as the previous MiniLM model),
-// so the existing pgvector column stays compatible — but every stored vector
-// must be regenerated because vectors from different models are not comparable.
-const MODEL_ID = "Xenova/multilingual-e5-small";
-export const EMBEDDING_DIM = 384;
+export const EMBEDDING_DIM = 1536;
 
-// e5 models are trained with instruction prefixes and REQUIRE them at inference:
-// passages are stored with "passage: " and search queries with "query: ".
-// Omitting these significantly degrades retrieval quality.
-const QUERY_PREFIX = "query: ";
-const PASSAGE_PREFIX = "passage: ";
+let client: OpenAI | null = null;
 
-type FeatureExtractor = (
-  input: string | string[],
-  opts: { pooling: "mean"; normalize: boolean },
-) => Promise<{ tolist: () => number[][] }>;
-
-let extractorPromise: Promise<FeatureExtractor> | null = null;
-
-async function getExtractor(): Promise<FeatureExtractor> {
-  if (!extractorPromise) {
-    extractorPromise = (async () => {
-      const { pipeline, env } = await import("@huggingface/transformers");
-      // Allow remote model download (HF hub) and cache locally between runs.
-      env.allowRemoteModels = true;
-      logger.info({ model: MODEL_ID }, "Loading local embedding model");
-      const pipe = (await pipeline("feature-extraction", MODEL_ID)) as unknown as FeatureExtractor;
-      logger.info({ model: MODEL_ID }, "Embedding model ready");
-      return pipe;
-    })().catch((err) => {
-      extractorPromise = null;
-      throw err;
-    });
+function getClient(): OpenAI {
+  if (!client) {
+    const baseURL = process.env["AI_INTEGRATIONS_OPENAI_BASE_URL"];
+    const apiKey = process.env["AI_INTEGRATIONS_OPENAI_API_KEY"];
+    if (!baseURL || !apiKey) {
+      throw new Error(
+        "AI_INTEGRATIONS_OPENAI_BASE_URL and AI_INTEGRATIONS_OPENAI_API_KEY must be set for embeddings",
+      );
+    }
+    client = new OpenAI({ baseURL, apiKey });
   }
-  return extractorPromise;
+  return client;
 }
 
 async function embedRaw(texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
-  const extractor = await getExtractor();
   const cleaned = texts.map((t) => t.replace(/\s+/g, " ").trim() || " ");
-  const output = await extractor(cleaned, { pooling: "mean", normalize: true });
-  return output.tolist();
+  const res = await getClient().embeddings.create({
+    model: "text-embedding-3-small",
+    input: cleaned,
+    dimensions: EMBEDDING_DIM,
+  });
+  return res.data.map((d) => d.embedding);
 }
 
-/** Embed a search query into a normalized 384-dim vector (e5 "query:" prefix). */
+/** Embed a search query into a normalized 1536-dim vector. */
 export async function embedQuery(text: string): Promise<number[]> {
-  const [vec] = await embedRaw([`${QUERY_PREFIX}${text}`]);
+  const [vec] = await embedRaw([text]);
   return vec;
 }
 
 /** Embed many passages for storage. Returns one normalized vector per input. */
 export async function embedPassages(texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
-  return embedRaw(texts.map((t) => `${PASSAGE_PREFIX}${t}`));
+  return embedRaw(texts);
 }
 
 type Block = { type: "heading" | "table" | "para"; text: string };
@@ -83,7 +66,6 @@ function splitIntoBlocks(text: string): Block[] {
       continue;
     }
 
-    // Markdown heading — its own block; becomes context for following content.
     if (/^#{1,6}\s/.test(trimmed)) {
       flushPara();
       blocks.push({ type: "heading", text: trimmed });
@@ -91,7 +73,6 @@ function splitIntoBlocks(text: string): Block[] {
       continue;
     }
 
-    // Table — keep all consecutive pipe rows together so rows aren't cut.
     if (trimmed.startsWith("|")) {
       flushPara();
       const tableLines: string[] = [];
@@ -125,7 +106,7 @@ function hardSplit(text: string, targetChars: number, overlapChars: number): str
 function splitTable(table: string, targetChars: number): string[] {
   const rows = table.split("\n");
   if (rows.length <= 2) return [table];
-  const header = rows.slice(0, 2).join("\n"); // header row + separator row
+  const header = rows.slice(0, 2).join("\n");
   const bodyRows = rows.slice(2);
   const parts: string[] = [];
   let current = header;
@@ -145,8 +126,7 @@ function splitTable(table: string, targetChars: number): string[] {
  * Split markdown/plain text into chunks suitable for embedding, respecting
  * document structure: paragraphs, markdown headings, and tables. Headings carry
  * forward as context for the chunks beneath them, and tables are never cut
- * mid-row, so chart captions and table rows keep their meaning. Chunks target
- * ~1200 characters with ~150 char overlap.
+ * mid-row. Chunks target ~1200 characters with ~150 char overlap.
  */
 export function chunkText(text: string, targetChars = 1200, overlapChars = 150): string[] {
   const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
@@ -171,8 +151,6 @@ export function chunkText(text: string, targetChars = 1200, overlapChars = 150):
     }
     const piece = block.text;
 
-    // A single block bigger than the target: flush, then hard-split it,
-    // keeping the section heading on each resulting part for context.
     if (piece.length > targetChars) {
       pushCurrent();
       current = "";
@@ -189,8 +167,6 @@ export function chunkText(text: string, targetChars = 1200, overlapChars = 150):
     const candidate = current ? `${current}\n\n${piece}` : piece;
     if (candidate.length > targetChars && current.length > 0) {
       pushCurrent();
-      // Start a new chunk: re-establish heading context plus a small overlap
-      // tail from the previous chunk so the boundary keeps continuity.
       const tail = current.slice(-overlapChars).trim();
       const headerPrefix = currentHeading && !piece.startsWith("#") ? `${currentHeading}\n\n` : "";
       const overlapPrefix = tail && headerPrefix === "" ? `${tail}\n\n` : "";

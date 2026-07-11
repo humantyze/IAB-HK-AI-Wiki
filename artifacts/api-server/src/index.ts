@@ -2,8 +2,6 @@ import cron from "node-cron";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { ensureIndexUpToDate, cleanupLegacyChunks, ensureWikiSchema } from "./lib/knowledge-index";
-import { embedQuery } from "./lib/embeddings";
-import { rerank } from "./lib/reranker";
 import { runBackup } from "./lib/backup";
 import { recoverPendingUploads } from "./lib/upload-processing";
 
@@ -46,19 +44,6 @@ async function main() {
   // Remove any knowledge chunks from removed source types (e.g. legacy "section" rows).
   cleanupLegacyChunks().catch((e) => {
     logger.error({ err: e }, "Unexpected error during legacy chunk cleanup");
-  });
-
-  // Pre-warm the local embedding + reranker models so the first user search
-  // doesn't trigger a slow model-load that times out or returns empty results.
-  embedQuery("knowledge base pre-warm").then(() => {
-    logger.info("Embedding model pre-warmed");
-  }).catch((e) => {
-    logger.warn({ err: e }, "Embedding model pre-warm failed — first search may be slow");
-  });
-  rerank("pre-warm query", ["pre-warm passage"]).then(() => {
-    logger.info("Reranker model pre-warmed");
-  }).catch((e) => {
-    logger.warn({ err: e }, "Reranker model pre-warm failed — first search may be slow");
   });
 
   // Rebuild the semantic knowledge index in the background when it is empty OR

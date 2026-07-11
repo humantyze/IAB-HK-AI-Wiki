@@ -8,7 +8,6 @@ import {
   type InsertKnowledgeChunk,
 } from "@workspace/db";
 import { embedQuery, embedPassages, chunkText } from "./embeddings";
-import { rerank } from "./reranker";
 import { logger } from "./logger";
 
 // An upload's chunks are only retrievable once it has finished processing
@@ -20,7 +19,7 @@ export const ELIGIBLE_UPLOAD_STATUSES = ["processed", "partial"];
 // Stored vectors are only comparable to query vectors from the SAME model, and
 // chunk boundaries are baked into the stored rows — so a change here must force
 // a one-time full rebuild of knowledge_chunks (see ensureIndexUpToDate).
-const INDEX_VERSION = "multilingual-e5-small+structured-chunks-v1";
+const INDEX_VERSION = "openai-text-embedding-3-small-1536d-v1";
 
 interface IndexSourceInput {
   sourceType: KnowledgeSourceType;
@@ -132,14 +131,8 @@ export interface RetrievedChunk {
 export interface RetrieveOptions {
   limit?: number;
   sourceTypes?: KnowledgeSourceType[];
-  /** Minimum reranker relevance score (0-1) to keep a chunk. */
-  minScore?: number;
   /** Candidates to gather per retrieval method before fusion. */
   candidatePool?: number;
-  /** How many fused candidates to rerank (capped for CPU latency). */
-  rerankTopK?: number;
-  /** Disable the cross-encoder reranker (e.g. when an LLM ranks afterwards). */
-  rerank?: boolean;
 }
 
 interface Candidate {
@@ -153,29 +146,25 @@ interface Candidate {
 
 // Reciprocal Rank Fusion constant — dampens the influence of any single rank.
 const RRF_K = 60;
-// bge-reranker sigmoid scores: relevant pairs sit well above this, weak/irrelevant
-// matches fall below. Replaces the old arbitrary cosine cutoff.
-const DEFAULT_MIN_RERANK_SCORE = 0.25;
+// Minimum cosine similarity (from vector search) to keep a fused candidate.
+// Chunks that appear only in keyword results with no vector signal are dropped.
+const MIN_SIMILARITY_FLOOR = 0.3;
 
 /**
- * Hybrid retrieval: fuse dense vector search (semantic, multilingual) with
- * Postgres full-text keyword search (exact terms, names, numbers) via Reciprocal
- * Rank Fusion, then re-order the fused candidates with a cross-encoder reranker
- * and drop anything below a calibrated relevance threshold.
+ * Hybrid retrieval: fuse dense vector search (semantic) with Postgres full-text
+ * keyword search (exact terms, names, numbers) via Reciprocal Rank Fusion, then
+ * apply a cosine similarity floor to drop low-signal candidates.
  *
  * Upload chunks are filtered to eligible processing statuses so pending/failed
  * uploads never surface. The keyword score is computed inline with
- * `to_tsvector('simple', ...)` (no extra column / migration) — the corpus is
- * small enough that the per-query cost is negligible.
+ * `to_tsvector('simple', ...)` — the corpus is small enough that the per-query
+ * cost is negligible.
  */
 export async function retrieve(query: string, opts: RetrieveOptions = {}): Promise<RetrievedChunk[]> {
   const {
     limit = 8,
     sourceTypes,
-    minScore = DEFAULT_MIN_RERANK_SCORE,
     candidatePool = 40,
-    rerankTopK = 16,
-    rerank: doRerank = true,
   } = opts;
   const trimmed = query.trim();
   if (!trimmed) return [];
@@ -205,16 +194,21 @@ export async function retrieve(query: string, opts: RetrieveOptions = {}): Promi
     content: knowledgeChunksTable.content,
   };
 
-  // ---- Dense vector candidates ----
+  // ---- Dense vector candidates (with similarity score for floor filtering) ----
   const queryVector = await embedQuery(trimmed);
-  const similarity = sql<number>`1 - (${cosineDistance(knowledgeChunksTable.embedding, queryVector)})`;
+  const similarityExpr = sql<number>`1 - (${cosineDistance(knowledgeChunksTable.embedding, queryVector)})`;
   const vectorRows = await db
-    .select(baseSelect)
+    .select({ ...baseSelect, similarity: similarityExpr })
     .from(knowledgeChunksTable)
     .leftJoin(uploadsTable, joinUploads)
     .where(and(uploadEligible, typeFilter))
-    .orderBy(desc(similarity))
+    .orderBy(desc(similarityExpr))
     .limit(candidatePool);
+
+  // Track per-chunk cosine similarity for the post-fusion floor filter.
+  const vectorSimilarity = new Map<number, number>(
+    vectorRows.map((r) => [r.id, Number(r.similarity)]),
+  );
 
   // ---- Keyword (full-text) candidates ----
   const tsquery = sql`websearch_to_tsquery('simple', ${trimmed})`;
@@ -230,7 +224,7 @@ export async function retrieve(query: string, opts: RetrieveOptions = {}): Promi
 
   // ---- Reciprocal Rank Fusion ----
   const fused = new Map<number, { candidate: Candidate; score: number }>();
-  const addRanked = (rows: typeof vectorRows) => {
+  const addRanked = (rows: Array<{ id: number; sourceType: string; sourceId: number; sourceSlug: string | null; title: string; content: string }>) => {
     rows.forEach((row, i) => {
       const contribution = 1 / (RRF_K + i + 1);
       const existing = fused.get(row.id);
@@ -249,37 +243,18 @@ export async function retrieve(query: string, opts: RetrieveOptions = {}): Promi
 
   if (fused.size === 0) return [];
 
-  const ranked = [...fused.values()].sort((a, b) => b.score - a.score);
+  // Sort by RRF score, then apply cosine similarity floor to drop low-signal chunks.
+  const ranked = [...fused.values()]
+    .sort((a, b) => b.score - a.score)
+    .filter((r) => (vectorSimilarity.get(r.candidate.id) ?? 0) >= MIN_SIMILARITY_FLOOR);
 
-  // ---- Cross-encoder rerank (graceful fallback to fused order) ----
-  // When reranking is disabled we return the fused order directly, capped only
-  // by `limit` (not `rerankTopK`) so callers like the wiki pre-filter can ask
-  // for a larger candidate set.
-  let scored: Array<{ candidate: Candidate; score: number }>;
-  if (doRerank) {
-    const toRerank = ranked.slice(0, rerankTopK);
-    try {
-      const passages = toRerank.map((r) => `${r.candidate.title}\n${r.candidate.content}`);
-      const rerankScores = await rerank(trimmed, passages);
-      scored = toRerank
-        .map((r, i) => ({ candidate: r.candidate, score: rerankScores[i] }))
-        .filter((r) => r.score >= minScore)
-        .sort((a, b) => b.score - a.score);
-    } catch (err) {
-      logger.warn({ err }, "Reranker failed — falling back to RRF fusion order");
-      scored = toRerank;
-    }
-  } else {
-    scored = ranked;
-  }
-
-  return scored.slice(0, limit).map((r) => ({
+  return ranked.slice(0, limit).map((r) => ({
     sourceType: r.candidate.sourceType,
     sourceId: r.candidate.sourceId,
     sourceSlug: r.candidate.sourceSlug,
     title: r.candidate.title,
     content: r.candidate.content,
-    similarity: Number(r.score),
+    similarity: vectorSimilarity.get(r.candidate.id) ?? 0,
   }));
 }
 

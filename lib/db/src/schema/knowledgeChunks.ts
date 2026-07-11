@@ -2,7 +2,7 @@ import { pgTable, serial, integer, text, timestamp, vector, index } from "drizzl
 
 export type KnowledgeSourceType = "wiki" | "upload";
 
-export const EMBEDDING_DIMENSIONS = 384;
+export const EMBEDDING_DIMENSIONS = 1536;
 
 export const knowledgeChunksTable = pgTable(
   "knowledge_chunks",
