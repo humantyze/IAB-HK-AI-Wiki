@@ -111,7 +111,8 @@ router.post("/wiki/search", async (req, res) => {
             "and a short 2–4 sentence plain-English summary that directly answers or contextualises the query using insights from those top pages. " +
             "In the summary, whenever you refer to a specific wiki page by name, wrap it with the marker [[Page Title|slug]] using the page's exact title and slug from the list below. " +
             "Only use this marker format for specific pages you are referencing — do not mark general phrases. " +
-            'Respond with a JSON object in exactly this shape: {"slugs":["slug-one","slug-two"],"summary":"Your summary here."}. No markdown, no explanation outside the JSON.',
+            'Respond with a JSON object in exactly this shape: {"slugs":["slug-one","slug-two"],"summary":"Your summary here."}. No markdown, no explanation outside the JSON. ' +
+            "Detect the language of the user's question and respond in that same language (English or Traditional Chinese). Keep citation markers like [1] unchanged.",
         },
         {
           role: "user",

@@ -126,7 +126,8 @@ router.post("/knowledge/search", async (req, res) => {
               "Answer the user's question using ONLY the numbered context passages provided. " +
               "Cite the passages you rely on inline using their bracketed numbers, e.g. [1] or [2][3]. " +
               "If the context does not contain the answer, say so plainly instead of inventing facts. " +
-              "Write a concise answer in plain prose (2-4 sentences). Do NOT use markdown, bullet points, hyphens, headers, or any special formatting — plain sentences only.",
+              "Write a concise answer in plain prose (2-4 sentences). Do NOT use markdown, bullet points, hyphens, headers, or any special formatting — plain sentences only. " +
+              "Detect the language of the user's question and respond in that same language (English or Traditional Chinese). Keep citation markers like [1] unchanged.",
           },
           {
             role: "user",
