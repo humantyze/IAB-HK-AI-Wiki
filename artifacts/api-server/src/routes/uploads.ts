@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, ne, and } from "drizzle-orm";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { createHash } from "crypto";
 import { z } from "zod";
 import { db, uploadsTable, wikiPagesTable } from "@workspace/db";
 import type { ProcessingError } from "@workspace/db";
@@ -163,12 +164,48 @@ router.post("/uploads", requireAuth, (req, res, next) => {
   const uploadedFiles = (req.files as Express.Multer.File[] | undefined) ?? [];
   const filePath = uploadedFiles.length > 0 ? uploadedFiles.map((f) => f.filename).join(", ") : null;
 
+  // --- Duplicate detection via content hash ---
+  const pastedText = data.rawText.trim();
+  let contentHash: string | null = null;
+  if (uploadedFiles.length > 0) {
+    const fileHashes = uploadedFiles.map((f) => {
+      const buf = fs.readFileSync(f.path);
+      return createHash("sha256").update(buf).digest("hex");
+    });
+    fileHashes.sort();
+    contentHash = fileHashes.join("|");
+  } else if (pastedText) {
+    contentHash = createHash("sha256").update(pastedText).digest("hex");
+  }
+
+  if (contentHash) {
+    const [existing] = await db
+      .select({ id: uploadsTable.id, filePath: uploadsTable.filePath, createdAt: uploadsTable.createdAt })
+      .from(uploadsTable)
+      .where(and(eq(uploadsTable.contentHash, contentHash), ne(uploadsTable.status, "failed")))
+      .limit(1);
+
+    if (existing) {
+      // Clean up temp files before rejecting
+      for (const f of uploadedFiles) {
+        fs.unlink(f.path, () => {});
+      }
+      logger.info({ existingUploadId: existing.id, contentHash }, "Duplicate upload rejected");
+      res.status(409).json({
+        errorCode: "DUPLICATE_UPLOAD",
+        message: "This document has already been submitted.",
+        existingUploadId: existing.id,
+        existingFilePath: existing.filePath,
+        existingCreatedAt: existing.createdAt.toISOString(),
+      });
+      return;
+    }
+  }
+
   const syncErrors: ProcessingError[] = [];
 
   interface FileExtraction { label: string; text: string; imageUrls: string[] }
   const fileExtractions: FileExtraction[] = [];
-
-  const pastedText = data.rawText.trim();
   if (pastedText) {
     fileExtractions.push({ label: data.contributorName ?? data.contentType.replace(/_/g, " "), text: pastedText, imageUrls: [] });
   }
@@ -265,6 +302,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
         targetSections: [],
         rawText: "",
         filePath,
+        contentHash,
         status: "failed",
         processingErrors: syncErrors,
       })
@@ -303,6 +341,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
       targetSections: [],
       rawText: effectiveText,
       filePath,
+      contentHash,
       status: "pending",
       processingErrors: syncErrors.length > 0 ? syncErrors : null,
     })

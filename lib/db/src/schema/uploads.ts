@@ -17,6 +17,7 @@ export const uploadsTable = pgTable("uploads", {
   targetSections: jsonb("target_sections").notNull().$type<string[]>().default([]),
   rawText: text("raw_text").notNull(),
   filePath: text("file_path"),
+  contentHash: text("content_hash"),
   status: text("status").notNull().default("pending"),
   processingErrors: jsonb("processing_errors").$type<ProcessingError[]>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),

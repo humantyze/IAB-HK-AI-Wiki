@@ -97,6 +97,12 @@ function getErrorCopy(code: string): ErrorCopy {
         body: "Only PDF, DOCX, and Markdown files can be processed.",
         action: "Convert your document and try again.",
       };
+    case "DUPLICATE_UPLOAD":
+      return {
+        headline: "Already submitted",
+        body: "This document has already been uploaded and processed.",
+        action: "Delete the original submission first if you need to reprocess it.",
+      };
     default:
       return {
         headline: "Something went wrong",
@@ -118,7 +124,7 @@ export default function AdminDashboard() {
   const [submitStep, setSubmitStep] = useState(0);
   const [activeSteps, setActiveSteps] = useState<StepDef[]>([]);
 
-  const [uploadError, setUploadError] = useState<{ code: string } | null>(null);
+  const [uploadError, setUploadError] = useState<{ code: string; meta?: Record<string, unknown> } | null>(null);
 
   const [submitResult, setSubmitResult] = useState<{
     fileNames: string[];
@@ -269,7 +275,7 @@ export default function AdminDashboard() {
       setIsPolling(true);
     } catch (err) {
       if (err instanceof UploadError) {
-        setUploadError({ code: err.errorCode });
+        setUploadError({ code: err.errorCode, meta: err.meta });
       } else {
         setUploadError({ code: "SERVER_ERROR" });
       }
@@ -469,15 +475,30 @@ export default function AdminDashboard() {
                 <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-10">
 
                   {uploadError && (
-                    <div className="flex items-start gap-4 px-5 py-4 rounded-xl border border-destructive/40 bg-destructive/5">
-                      <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+                    <div className={`flex items-start gap-4 px-5 py-4 rounded-xl border ${
+                      uploadError.code === "DUPLICATE_UPLOAD"
+                        ? "border-amber-500/40 bg-amber-500/5"
+                        : "border-destructive/40 bg-destructive/5"
+                    }`}>
+                      {uploadError.code === "DUPLICATE_UPLOAD"
+                        ? <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                        : <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+                      }
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-destructive/90">
+                        <p className={`text-sm font-semibold ${uploadError.code === "DUPLICATE_UPLOAD" ? "text-amber-400/90" : "text-destructive/90"}`}>
                           {getErrorCopy(uploadError.code).headline}
                         </p>
                         <p className="text-xs text-foreground/70 mt-1 leading-relaxed">
                           {getErrorCopy(uploadError.code).body}
+                          {uploadError.code === "DUPLICATE_UPLOAD" && uploadError.meta?.existingCreatedAt && (
+                            <> Originally submitted on {new Date(uploadError.meta.existingCreatedAt as string).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}.</>
+                          )}
                         </p>
+                        {uploadError.code === "DUPLICATE_UPLOAD" && uploadError.meta?.existingFilePath && (
+                          <p className="text-xs text-foreground/50 mt-1 font-mono truncate">
+                            {(uploadError.meta.existingFilePath as string).split(", ").map((f) => f.replace(/^\d+-\d+-/, "")).join(", ")}
+                          </p>
+                        )}
                         <p className="text-xs text-foreground/50 mt-1.5 italic">
                           {getErrorCopy(uploadError.code).action}
                         </p>

@@ -19,6 +19,7 @@ export class UploadError extends Error {
     public readonly errorCode: string,
     message: string,
     public readonly uploadId: number | null = null,
+    public readonly meta?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "UploadError";
@@ -51,11 +52,12 @@ export function useSubmitUpload() {
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as Record<string, unknown>;
         const hasErrorCode = typeof body.errorCode === "string";
-        if ((res.status === 422 || res.status === 400) && hasErrorCode) {
+        if ((res.status === 409 || res.status === 422 || res.status === 400) && hasErrorCode) {
           throw new UploadError(
             body.errorCode as string,
             typeof body.message === "string" ? body.message : "Upload processing failed",
             typeof body.uploadId === "number" ? body.uploadId : null,
+            body,
           );
         }
         throw new Error(typeof body.error === "string" ? body.error : "Upload failed");
