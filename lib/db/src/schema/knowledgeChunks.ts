@@ -2,7 +2,7 @@ import { pgTable, serial, integer, text, timestamp, vector, index } from "drizzl
 
 export type KnowledgeSourceType = "wiki" | "upload";
 
-export const EMBEDDING_DIMENSIONS = 1536;
+export const EMBEDDING_DIMENSIONS = 2048;
 
 export const knowledgeChunksTable = pgTable(
   "knowledge_chunks",
@@ -18,10 +18,6 @@ export const knowledgeChunksTable = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (table) => [
-    index("knowledge_chunks_embedding_idx").using(
-      "hnsw",
-      table.embedding.op("vector_cosine_ops"),
-    ),
     index("knowledge_chunks_source_idx").on(table.sourceType, table.sourceId),
   ],
 );
