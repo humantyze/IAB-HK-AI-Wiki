@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { desc, eq, ne, and } from "drizzle-orm";
+import { desc, eq, ne, and, not, or } from "drizzle-orm";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -179,10 +179,19 @@ router.post("/uploads", requireAuth, (req, res, next) => {
   }
 
   if (contentHash) {
+    // Block re-upload unless the previous attempt failed at extraction
+    // (status='failed' AND rawText='' means extraction never produced content).
+    // Any upload that made it through extraction — even if later async processing
+    // failed — keeps its rawText, so it remains duplicate-blocking.
     const [existing] = await db
       .select({ id: uploadsTable.id, filePath: uploadsTable.filePath, createdAt: uploadsTable.createdAt })
       .from(uploadsTable)
-      .where(and(eq(uploadsTable.contentHash, contentHash), ne(uploadsTable.status, "failed")))
+      .where(
+        and(
+          eq(uploadsTable.contentHash, contentHash),
+          not(and(eq(uploadsTable.status, "failed"), eq(uploadsTable.rawText, ""))),
+        )
+      )
       .limit(1);
 
     if (existing) {
