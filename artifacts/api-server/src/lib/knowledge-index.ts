@@ -19,7 +19,7 @@ export const ELIGIBLE_UPLOAD_STATUSES = ["processed", "partial"];
 // Stored vectors are only comparable to query vectors from the SAME model, and
 // chunk boundaries are baked into the stored rows — so a change here must force
 // a one-time full rebuild of knowledge_chunks (see ensureIndexUpToDate).
-const INDEX_VERSION = "openai-text-embedding-3-small-1536d-v1";
+const INDEX_VERSION = "jina-embeddings-v3-1024d-v1";
 
 interface IndexSourceInput {
   sourceType: KnowledgeSourceType;

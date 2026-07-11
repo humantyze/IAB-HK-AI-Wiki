@@ -1,17 +1,17 @@
 import OpenAI from "openai";
 
-export const EMBEDDING_DIM = 2048;
+export const EMBEDDING_DIM = 1024;
 
 let client: OpenAI | null = null;
 
 function getClient(): OpenAI {
   if (!client) {
-    const apiKey = process.env["ZHIPU_API_KEY"];
+    const apiKey = process.env["JINA_API_KEY"];
     if (!apiKey) {
-      throw new Error("ZHIPU_API_KEY must be set for embeddings");
+      throw new Error("JINA_API_KEY must be set for embeddings");
     }
     client = new OpenAI({
-      baseURL: "https://open.bigmodel.cn/api/paas/v4/",
+      baseURL: "https://api.jina.ai/v1/",
       apiKey,
     });
   }
@@ -22,13 +22,13 @@ async function embedRaw(texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
   const cleaned = texts.map((t) => t.replace(/\s+/g, " ").trim() || " ");
   const res = await getClient().embeddings.create({
-    model: "embedding-3",
+    model: "jina-embeddings-v3",
     input: cleaned,
   });
   return res.data.map((d) => d.embedding);
 }
 
-/** Embed a search query into a normalized 2048-dim vector. */
+/** Embed a search query into a normalized 1024-dim vector. */
 export async function embedQuery(text: string): Promise<number[]> {
   const [vec] = await embedRaw([text]);
   return vec;
