@@ -188,7 +188,7 @@ export default function WikiGraph({ pages, allPages }: WikiGraphProps) {
 
       const baseFontSize = 10;
       const fontSize = Math.max(baseFontSize / globalScale, 2.5);
-      const maxChars = globalScale < 1.2 ? 15 : globalScale < 2 ? 22 : 50;
+      const maxChars = globalScale < 1.2 ? 12 : globalScale < 2 ? 18 : 25;
       const label =
         node.title.length > maxChars
           ? node.title.slice(0, maxChars - 1) + "…"
