@@ -43,7 +43,7 @@ async function _generateQuiz(): Promise<void> {
 
   for (const question of questions) {
     try {
-      const chunks = await retrieve(question, { limit: 8 });
+      const chunks = await retrieve(question, { limit: 8, sourceTypes: ["wiki"] });
       if (chunks.length === 0) continue;
 
       const context = chunks
@@ -155,11 +155,50 @@ async function _generateQuiz(): Promise<void> {
   logger.info({ count: entries.length }, "Quiz entries stored");
 }
 
+/**
+ * Clear the quiz cache if any stored entry contains upload-derived citations.
+ * Called once on startup so that pre-fix rows (generated when retrieve() still
+ * included upload chunks) are purged immediately. The existing "empty →
+ * regenerate" startup path then schedules a fresh wiki-only generation.
+ */
+export async function invalidateStaleQuizCache(): Promise<void> {
+  const [row] = await db
+    .select()
+    .from(quizQuestionsTable)
+    .orderBy(desc(quizQuestionsTable.generatedAt))
+    .limit(1);
+
+  if (!row) return;
+
+  const entries: QuizEntry[] = row.entries ?? [];
+  const hasUploadContent = entries.some((entry) =>
+    entry.citations.some((c) => c.sourceType !== "wiki"),
+  );
+
+  if (hasUploadContent) {
+    await db.delete(quizQuestionsTable);
+    logger.warn(
+      "Quiz cache contained upload-derived entries — purged. A fresh wiki-only generation will be scheduled.",
+    );
+  }
+}
+
 export async function getStoredQuiz(): Promise<QuizEntry[]> {
   const [row] = await db
     .select()
     .from(quizQuestionsTable)
     .orderBy(desc(quizQuestionsTable.generatedAt))
     .limit(1);
-  return row?.entries ?? [];
+
+  const entries: QuizEntry[] = row?.entries ?? [];
+
+  // Defence-in-depth: strip upload-derived citations and drop any entry that
+  // has no wiki citations left (guards against cache rows that slipped through
+  // the startup purge or were inserted by a concurrent write).
+  return entries
+    .map((entry) => ({
+      ...entry,
+      citations: entry.citations.filter((c) => c.sourceType === "wiki"),
+    }))
+    .filter((entry) => entry.citations.length > 0);
 }

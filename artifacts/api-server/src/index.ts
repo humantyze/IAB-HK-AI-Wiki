@@ -4,7 +4,7 @@ import { logger } from "./lib/logger";
 import { ensureIndexUpToDate, cleanupLegacyChunks, ensureWikiSchema } from "./lib/knowledge-index";
 import { runBackup } from "./lib/backup";
 import { recoverPendingUploads } from "./lib/upload-processing";
-import { generateAndStoreQuiz, getStoredQuiz } from "./lib/quiz-generator";
+import { generateAndStoreQuiz, getStoredQuiz, invalidateStaleQuizCache } from "./lib/quiz-generator";
 
 const rawPort = process.env["PORT"];
 
@@ -57,9 +57,19 @@ async function main() {
     });
   }, 30_000);
 
+  // Purge any quiz cache rows that contain upload-derived citations (pre-fix
+  // stale data). Must run before the empty-check below so the purge causes
+  // the empty-check to schedule a fresh wiki-only generation automatically.
+  setTimeout(() => {
+    invalidateStaleQuizCache().catch((e) => {
+      logger.error({ err: e }, "Unexpected error during stale quiz cache invalidation");
+    });
+  }, 40_000);
+
   // Populate the MCQ quiz cache on startup if it is empty (e.g. first deploy
-  // after the feature shipped, or after a DB wipe). Runs 45s after boot so the
-  // knowledge index check above has had time to settle first.
+  // after the feature shipped, after a DB wipe, or after stale-cache purge).
+  // Runs 45s after boot so the knowledge index check and purge above have had
+  // time to settle first.
   setTimeout(() => {
     getStoredQuiz()
       .then((entries) => {

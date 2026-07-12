@@ -45,7 +45,7 @@ router.post("/knowledge/search", async (req, res) => {
 
   let chunks: RetrievedChunk[];
   try {
-    chunks = await retrieve(trimmed, { limit: 8 });
+    chunks = await retrieve(trimmed, { limit: 8, sourceTypes: ["wiki"] });
   } catch (err) {
     logger.error({ err }, "Knowledge retrieval failed");
     res.status(500).json({ error: "Retrieval failed. Please try again." });

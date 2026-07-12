@@ -273,7 +273,7 @@ router.get("/wiki/:slug", async (req, res) => {
     bodyMarkdown: page.bodyMarkdown,
     tags: (page.tags as string[]) ?? [],
     relatedSlugs: (page.relatedSlugs as string[]) ?? [],
-    sources: (page.sources as Array<{ label: string; ref: string }>) ?? [],
+    sources: [],
     imageUrl: page.imageUrl ?? null,
     createdAt: page.createdAt.toISOString(),
     updatedAt: page.updatedAt.toISOString(),
