@@ -138,16 +138,16 @@ function renderAnswerWithCitations(answer: string, citations: KnowledgeCitation[
 
 // 10 questions verified to have rich RAG answers (ranked by token depth).
 const FALLBACK_QUESTIONS = [
-  "What is the Ad Context Protocol and how does it work?",
+  "How does the Ad Context Protocol work?",
   "What is the Agentic Real-Time Framework?",
-  "What is the Prebid Sales Agent and what problem does it solve?",
-  "How do AI agents negotiate media deals autonomously?",
+  "What problem does the Prebid Sales Agent solve?",
+  "How do AI agents negotiate media deals?",
   "What is the Agentic Advertising Organization?",
-  "How are walled gardens affecting US programmatic display advertising in 2026?",
-  "What is NBCUniversal doing with agentic automation in advertising?",
-  "What did the PubMatic–Butler/Till–Geloso proof of concept demonstrate?",
-  "What is PubMatic forecasting for agentic execution by 2030?",
-  "What share of marketers are interested in agentic media buying?",
+  "How are walled gardens affecting programmatic advertising?",
+  "What is NBCUniversal doing with agentic automation?",
+  "What did the PubMatic–Butler/Till–Geloso PoC show?",
+  "What is PubMatic forecasting for agentic execution?",
+  "How many marketers want agentic media buying?",
 ];
 
 function pickThree(pool: string[], exclude: string[] = []): string[] {

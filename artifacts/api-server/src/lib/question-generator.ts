@@ -66,6 +66,7 @@ async function _generate(): Promise<{ questions: string[] }> {
           "statistics, forecasts, or technology named in the content. " +
           "Do NOT ask vague general questions. Do NOT ask 'How are HK marketers using AI in general?' — " +
           "ask about specific named entities or data points instead. " +
+          "Each question must be 10 words or fewer. " +
           "Return ONLY a valid JSON array of 15 question strings, no preamble or explanation.",
       },
       {
