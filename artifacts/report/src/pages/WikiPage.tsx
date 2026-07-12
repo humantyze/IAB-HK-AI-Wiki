@@ -166,17 +166,20 @@ function useWikiPage(slug: string) {
   const [related, setRelated] = useState<RelatedPage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [isError, setIsError] = useState(false);
 
   useEffect(() => {
     const baseUrl = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
     setIsLoading(true);
     setNotFound(false);
+    setIsError(false);
 
     const pagePromise = fetch(`${baseUrl}/api/wiki/${slug}`, { credentials: "include" })
       .then((r) => {
         if (r.status === 404) { setNotFound(true); setIsLoading(false); return null; }
         return r.json() as Promise<WikiPageData>;
-      });
+      })
+      .catch(() => { setIsError(true); setIsLoading(false); return null; });
 
     const embeddingRelatedPromise = fetch(`${baseUrl}/api/wiki/${slug}/related`, { credentials: "include" })
       .then((r) => r.ok ? r.json() as Promise<RelatedPage[]> : [])
@@ -205,7 +208,7 @@ function useWikiPage(slug: string) {
       .finally(() => setIsLoading(false));
   }, [slug]);
 
-  return { page, related, isLoading, notFound };
+  return { page, related, isLoading, notFound, isError };
 }
 
 interface WikiPageProps {
@@ -214,7 +217,7 @@ interface WikiPageProps {
 
 export default function WikiPage({ params }: WikiPageProps) {
   const { slug } = params;
-  const { page, related, isLoading, notFound } = useWikiPage(slug);
+  const { page, related, isLoading, notFound, isError } = useWikiPage(slug);
   const [activeHeading, setActiveHeading] = useState<string>("");
   const [shareOpen, setShareOpen] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -318,6 +321,17 @@ export default function WikiPage({ params }: WikiPageProps) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center" style={{ fontFamily: "'Montserrat', sans-serif" }}>
         <div className="w-8 h-8 border-2 border-[#D63425]/20 border-t-[#D63425] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center" style={{ fontFamily: "'Montserrat', sans-serif" }}>
+        <div className="text-center">
+          <p className="text-gray-400 text-sm mb-4">Something went wrong — try refreshing the page.</p>
+          <Link href="/" className="text-xs font-semibold" style={{ color: "#D63425" }}>← Back to Knowledge Base</Link>
+        </div>
       </div>
     );
   }

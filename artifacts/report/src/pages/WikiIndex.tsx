@@ -173,6 +173,8 @@ function useQuestionPool(): string[] {
   return pool;
 }
 
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 interface SearchCacheEntry {
   ragAnswer: string | null;
   ragCitations: KnowledgeCitation[] | null;
@@ -180,6 +182,7 @@ interface SearchCacheEntry {
   aiResults: WikiPageSummary[] | null;
   aiSummary: string | null;
   searchFallbackPages: WikiPageSummary[] | null;
+  cachedAt: number;
 }
 const searchCache = new Map<string, SearchCacheEntry>();
 
@@ -253,7 +256,7 @@ export default function WikiIndex() {
 
     const cacheKey = activeQuery.trim().toLowerCase();
     const cached = searchCache.get(cacheKey);
-    if (cached) {
+    if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
       setRagAnswer(cached.ragAnswer);
       setRagCitations(cached.ragCitations);
       setRagGrounded(cached.ragGrounded);
@@ -472,6 +475,7 @@ export default function WikiIndex() {
             aiResults: finalAiResults,
             aiSummary: finalAiSummary,
             searchFallbackPages: finalSearchFallbackPages,
+            cachedAt: Date.now(),
           });
         }
       }

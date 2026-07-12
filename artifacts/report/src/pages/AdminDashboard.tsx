@@ -171,11 +171,13 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!isPolling || !submitResult) return;
     let attempts = 0;
-    const MAX_ATTEMPTS = 36;
+    const MAX_ATTEMPTS = 72;
+    const SLOW_THRESHOLD = 36;
     const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
 
     const poll = async () => {
       if (attempts >= MAX_ATTEMPTS) { setIsPolling(false); return; }
+      if (attempts === SLOW_THRESHOLD) { setUploadWarning("Still processing — this is taking longer than usual. Your content will appear in a few more minutes. You can safely leave this page."); }
       attempts++;
       try {
         // Primary: poll upload status so partial outcomes are never masked by early wiki-count growth

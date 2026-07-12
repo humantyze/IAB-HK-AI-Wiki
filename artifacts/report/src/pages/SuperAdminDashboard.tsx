@@ -284,7 +284,7 @@ export default function SuperAdminDashboard() {
   };
 
   function toEndOfDay(dateStr: string): string {
-    return new Date(`${dateStr}T23:59:59.999`).toISOString();
+    return new Date(`${dateStr}T23:59:59.999+08:00`).toISOString();
   }
 
   const handleRegressPreview = async () => {
