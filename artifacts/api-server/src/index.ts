@@ -4,6 +4,7 @@ import { logger } from "./lib/logger";
 import { ensureIndexUpToDate, cleanupLegacyChunks, ensureWikiSchema } from "./lib/knowledge-index";
 import { runBackup } from "./lib/backup";
 import { recoverPendingUploads } from "./lib/upload-processing";
+import { generateAndStoreQuiz, getStoredQuiz } from "./lib/quiz-generator";
 
 const rawPort = process.env["PORT"];
 
@@ -55,6 +56,23 @@ async function main() {
       logger.error({ err: e }, "Unexpected error during knowledge reindex check");
     });
   }, 30_000);
+
+  // Populate the MCQ quiz cache on startup if it is empty (e.g. first deploy
+  // after the feature shipped, or after a DB wipe). Runs 45s after boot so the
+  // knowledge index check above has had time to settle first.
+  setTimeout(() => {
+    getStoredQuiz()
+      .then((entries) => {
+        if (entries.length === 0) {
+          logger.info("Quiz cache empty — generating MCQ entries in background");
+          return generateAndStoreQuiz();
+        }
+        logger.info({ count: entries.length }, "Quiz cache already populated — skipping startup generation");
+      })
+      .catch((e) => {
+        logger.error({ err: e }, "Unexpected error during startup quiz cache check");
+      });
+  }, 45_000);
 
   // Recover uploads stranded in "pending" by a crash/restart during the
   // fire-and-forget finalize window. Run shortly after boot, then periodically.
