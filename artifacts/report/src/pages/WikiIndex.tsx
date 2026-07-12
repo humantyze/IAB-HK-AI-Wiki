@@ -206,6 +206,7 @@ export default function WikiIndex() {
   const [shownQuestions, setShownQuestions] = useState<string[]>(() => pickThree(FALLBACK_QUESTIONS));
   const [suggestedFollowUps, setSuggestedFollowUps] = useState<string[]>([]);
   const [isRagStreaming, setIsRagStreaming] = useState(false);
+  const [searchError, setSearchError] = useState(false);
   // citationAnimGen[n]: 0 = not yet seen, 1 = first reveal (pop-in), 2+ = re-referenced (pulse)
   const [citationAnimGen, setCitationAnimGen] = useState<Record<number, number>>({});
   const [viewMode, setViewMode] = useState<"grid" | "graph">("grid");
@@ -241,6 +242,7 @@ export default function WikiIndex() {
     setRagGrounded(false);
     setSearchDone(false);
     setIsRagStreaming(false);
+    setSearchError(false);
     setCitationAnimGen({});
     streamedTextRef.current = "";
     knownCitCountRef.current = {};
@@ -278,6 +280,7 @@ export default function WikiIndex() {
     let finalAiResults: WikiPageSummary[] | null = null;
     let finalAiSummary: string | null = null;
     let finalSearchFallbackPages: WikiPageSummary[] | null = null;
+    let hadError = false;
 
     const fetchOpts = (body: object) => ({
       method: "POST" as const,
@@ -345,10 +348,12 @@ export default function WikiIndex() {
         if ((err as Error).name !== "AbortError") {
           setRagAnswer(null);
           setRagCitations(null);
+          hadError = true;
+          setSearchError(true);
         }
         return;
       }
-      if (!r.ok) return;
+      if (!r.ok) { hadError = true; setSearchError(true); return; }
 
       const ct = r.headers.get("content-type") ?? "";
 
@@ -437,10 +442,12 @@ export default function WikiIndex() {
           setAiResults(null);
           setAiSummary(null);
           setSearchFallbackPages(null);
+          hadError = true;
+          setSearchError(true);
         }
         return;
       }
-      if (!r.ok) return;
+      if (!r.ok) { hadError = true; setSearchError(true); return; }
       try {
         const result = await r.json() as { ranked: boolean; pages: WikiPageSummary[]; summary?: string };
         if (result.ranked && Array.isArray(result.pages)) {
@@ -468,15 +475,17 @@ export default function WikiIndex() {
         if (abortRef.current === controller) {
           setIsSearching(false);
           setSearchDone(true);
-          searchCache.set(cacheKey, {
-            ragAnswer: finalRagAnswer,
-            ragCitations: finalRagCitations,
-            ragGrounded: finalRagGrounded,
-            aiResults: finalAiResults,
-            aiSummary: finalAiSummary,
-            searchFallbackPages: finalSearchFallbackPages,
-            cachedAt: Date.now(),
-          });
+          if (!hadError) {
+            searchCache.set(cacheKey, {
+              ragAnswer: finalRagAnswer,
+              ragCitations: finalRagCitations,
+              ragGrounded: finalRagGrounded,
+              aiResults: finalAiResults,
+              aiSummary: finalAiSummary,
+              searchFallbackPages: finalSearchFallbackPages,
+              cachedAt: Date.now(),
+            });
+          }
         }
       }
     })();
@@ -513,6 +522,7 @@ export default function WikiIndex() {
     setSearchDone(false);
     setIsSearching(false);
     setIsRagStreaming(false);
+    setSearchError(false);
     setCitationAnimGen({});
     streamedTextRef.current = "";
     knownCitCountRef.current = {};
@@ -632,8 +642,8 @@ export default function WikiIndex() {
     return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
   };
 
-  // Show the AI panel as soon as citations arrive (don't wait for full stream / searchDone).
-  const showRagPanel = activeQuery.trim().length >= 3 && (searchDone || ragCitations !== null);
+  // Show the AI panel as soon as citations arrive, when the search is done, or when there was an error.
+  const showRagPanel = activeQuery.trim().length >= 3 && (searchDone || ragCitations !== null || (searchError && !isSearching));
 
   const hasRagContent = ragAnswer !== null || ragCitations !== null;
   const panelHasColor = hasRagContent || !!aiSummary;
@@ -909,6 +919,28 @@ export default function WikiIndex() {
                     ])
                   )}
                 </p>
+              ) : searchError ? (
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 w-6 h-6 rounded-full bg-red-50 flex items-center justify-center shrink-0">
+                    <Search size={12} className="text-[#D63425]" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-700 leading-relaxed font-medium">
+                      Search is temporarily unavailable.
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      The AI search service didn't respond. Please try again in a moment, or browse the pages below.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => { const q = activeQuery; setActiveQuery(""); setTimeout(() => setActiveQuery(q), 0); }}
+                      className="mt-2 text-xs font-semibold underline underline-offset-2 hover:no-underline transition-all"
+                      style={{ color: "#D63425" }}
+                    >
+                      Try again
+                    </button>
+                  </div>
+                </div>
               ) : (
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
