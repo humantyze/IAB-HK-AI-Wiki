@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback, useMemo, useState } from "react";
 import ForceGraph2D, { ForceGraphMethods, NodeObject } from "react-force-graph-2d";
 import { useLocation } from "wouter";
-import { forceX, forceY } from "d3-force";
+import { forceX, forceY, forceManyBody } from "d3-force";
 
 interface WikiPageSummary {
   id: number;
@@ -46,7 +46,7 @@ const GRAPH_HEIGHT = 620;
 const MIN_RADIUS = 3.5;
 const MAX_RADIUS = 11;
 
-const CLUSTER_R = 160;
+const CLUSTER_R = 260;
 const CLUSTER_CENTERS: Record<string, { x: number; y: number }> = {};
 TAGS_ORDERED.forEach((tag, i) => {
   const angle = (2 * Math.PI * i) / TAGS_ORDERED.length - Math.PI / 2;
@@ -123,12 +123,13 @@ export default function WikiGraph({ pages, allPages }: WikiGraphProps) {
       if (!graphRef.current) return;
       graphRef.current.d3Force(
         "x",
-        forceX<NodeObject<NodeDatum>>((node) => CLUSTER_CENTERS[node.tags[0]]?.x ?? 0).strength(0.25),
+        forceX<NodeObject<NodeDatum>>((node) => CLUSTER_CENTERS[node.tags[0]]?.x ?? 0).strength(0.12),
       );
       graphRef.current.d3Force(
         "y",
-        forceY<NodeObject<NodeDatum>>((node) => CLUSTER_CENTERS[node.tags[0]]?.y ?? 0).strength(0.25),
+        forceY<NodeObject<NodeDatum>>((node) => CLUSTER_CENTERS[node.tags[0]]?.y ?? 0).strength(0.12),
       );
+      graphRef.current.d3Force("charge", forceManyBody<NodeObject<NodeDatum>>().strength(-120));
       graphRef.current.d3ReheatSimulation();
       zoomTimer = setTimeout(() => {
         graphRef.current?.zoom(2.5, 800);
