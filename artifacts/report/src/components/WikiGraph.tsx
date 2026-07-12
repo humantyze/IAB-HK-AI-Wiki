@@ -129,7 +129,7 @@ export default function WikiGraph({ pages, allPages }: WikiGraphProps) {
         "y",
         forceY<NodeObject<NodeDatum>>((node) => CLUSTER_CENTERS[node.tags[0]]?.y ?? 0).strength(0.12),
       );
-      graphRef.current.d3Force("charge", forceManyBody<NodeObject<NodeDatum>>().strength(-120));
+      graphRef.current.d3Force("charge", forceManyBody<NodeObject<NodeDatum>>().strength(-144));
       graphRef.current.d3ReheatSimulation();
       zoomTimer = setTimeout(() => {
         graphRef.current?.zoom(2.5, 800);
