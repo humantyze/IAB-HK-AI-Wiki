@@ -1,10 +1,20 @@
 import { Router, type IRouter } from "express";
+import rateLimit from "express-rate-limit";
 import { LoginBody } from "@workspace/api-zod";
 import { setSuperAuthCookie, clearSuperAuthCookie, isSuperAuthenticated } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
-router.post("/super-auth/login", (req, res) => {
+const loginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many login attempts. Please try again later." },
+  skipSuccessfulRequests: true,
+});
+
+router.post("/super-auth/login", loginRateLimit, (req, res) => {
   const { password } = LoginBody.parse(req.body);
   const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD;
 
