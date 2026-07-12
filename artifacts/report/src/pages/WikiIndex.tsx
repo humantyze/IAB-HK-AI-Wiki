@@ -592,7 +592,7 @@ export default function WikiIndex() {
         <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: "#D63425" }}>
           IAB Hong Kong · State of AI in Marketing
         </p>
-        <h1 className="text-3xl font-bold text-gray-800 mb-3" style={{ letterSpacing: "-0.5px" }}>HONG KONG BIBLE OF AI ADOPTION</h1>
+        <h1 className="text-3xl font-bold text-gray-800 mb-3" style={{ letterSpacing: "-0.5px" }}>HONG KONG AI MARKETING PLAYBOOK</h1>
         <p className="text-sm text-gray-500 max-w-2xl leading-relaxed">Welcome to the iAB Hong Kong State of AI Knowledge Base! An initiative of the 2026 AI and Technology Committee, this platform is designed as a living knowledge resource inspired by the "Second Brain" concept popularized by Andrej Karpathy. As new material is submitted, our language model reviews it in full, identifies key entities and ideas, and creates or updates relevant wiki pages. It also refines topic summaries, builds cross-links across related subjects, and flags inconsistencies, helping each new source strengthen an evolving, interconnected knowledge graph.</p>
 
         {/* Search */}
@@ -705,7 +705,6 @@ export default function WikiIndex() {
           </div>
         </div>
       </div>
-
       {/* AI answer panel — visible as soon as citations arrive (before full stream) */}
       {showRagPanel && (
         <div className="max-w-6xl mx-auto px-6 lg:px-8 mb-6">
@@ -779,10 +778,10 @@ export default function WikiIndex() {
                 </>
               ) : isRagStreaming || (ragCitations !== null && ragCitations.length > 0 && !searchDone) ? (
                 /* Citations received but first token hasn't arrived yet */
-                <div className="flex items-center gap-2 py-1">
+                (<div className="flex items-center gap-2 py-1">
                   <div className="w-3.5 h-3.5 border-2 border-[#D63425]/30 border-t-[#D63425] rounded-full animate-spin shrink-0" />
                   <span className="text-xs text-gray-400">Generating answer…</span>
-                </div>
+                </div>)
               ) : aiSummary ? (
                 <p className="text-sm text-gray-700 leading-relaxed">
                   {parseSummaryWithLinks(
