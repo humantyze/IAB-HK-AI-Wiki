@@ -135,6 +135,8 @@ export default function AdminDashboard() {
   const [uploadWarning, setUploadWarning] = useState<string | null>(null);
   const [isSlowProcessing, setIsSlowProcessing] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
+  const [pollTimedOut, setPollTimedOut] = useState(false);
+  const [isRechecking, setIsRechecking] = useState(false);
 
   const { data: uploads } = useUploads();
   const [expandedHistoryId, setExpandedHistoryId] = useState<number | null>(null);
@@ -177,7 +179,7 @@ export default function AdminDashboard() {
     const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
 
     const poll = async () => {
-      if (attempts >= MAX_ATTEMPTS) { setIsPolling(false); return; }
+      if (attempts >= MAX_ATTEMPTS) { setIsPolling(false); setPollTimedOut(true); return; }
       if (attempts === SLOW_THRESHOLD) { setIsSlowProcessing(true); }
       attempts++;
       try {
@@ -285,6 +287,47 @@ export default function AdminDashboard() {
       }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleRecheck = async () => {
+    if (!submitResult) return;
+    setIsRechecking(true);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const statusRes = await fetch(`${baseUrl}/api/uploads/${submitResult.uploadId}/status`, { credentials: "include" });
+      if (!statusRes.ok) return;
+      const statusData = await statusRes.json() as { status: string };
+
+      if (statusData.status === "processed" || statusData.status === "partial" || statusData.status === "failed") {
+        let finalCount = submitResult.wikiCountBefore;
+        try {
+          const wikiRes = await fetch(`${baseUrl}/api/wiki`, { credentials: "include" });
+          if (wikiRes.ok) {
+            const data = await wikiRes.json();
+            finalCount = Array.isArray(data) ? data.length : finalCount;
+          }
+        } catch { /* ignore */ }
+
+        setWikiCountAfter(finalCount);
+        setIsSlowProcessing(false);
+        setPollTimedOut(false);
+
+        if (statusData.status === "failed") {
+          setUploadWarning(
+            "Your file was uploaded but we couldn't generate any wiki content from it. " +
+            "The IAB HK team has been notified and will review it.",
+          );
+        } else if (statusData.status === "partial") {
+          setUploadWarning(
+            "Wiki pages were generated, but some optional steps (such as image or visual analysis) " +
+            "could not be completed. Your content has been added to the knowledge base.",
+          );
+        }
+      }
+      // still pending — leave the button visible so they can try again later
+    } catch { /* ignore */ } finally {
+      setIsRechecking(false);
     }
   };
 
@@ -453,7 +496,9 @@ export default function AdminDashboard() {
                           <>
                             <p className="text-sm font-medium text-foreground/80">AI is generating wiki pages…</p>
                             <p className="text-xs text-foreground/50 mt-0.5">
-                              {isSlowProcessing
+                              {pollTimedOut
+                                ? "Processing is taking longer than expected. Click \"Re-check status\" to see if it's done."
+                                : isSlowProcessing
                                 ? "Still processing — this is taking longer than usual. You can safely leave this page."
                                 : "This typically takes 60–90 seconds. You can leave this page."}
                             </p>
@@ -468,8 +513,23 @@ export default function AdminDashboard() {
                     </div>
                   )}
 
+                  {pollTimedOut && wikiCountAfter === null && (
+                    <Button
+                      onClick={() => void handleRecheck()}
+                      disabled={isRechecking}
+                      className="w-full h-12 font-display uppercase tracking-[0.2em] text-xs bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 rounded-xl transition-all"
+                    >
+                      {isRechecking ? (
+                        <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />
+                      ) : (
+                        <History className="w-4 h-4 mr-2" />
+                      )}
+                      {isRechecking ? "Checking…" : "Re-check Status"}
+                    </Button>
+                  )}
+
                   <Button
-                    onClick={() => { setSubmitResult(null); setWikiCountAfter(null); setUploadWarning(null); setIsSlowProcessing(false); setIsPolling(false); }}
+                    onClick={() => { setSubmitResult(null); setWikiCountAfter(null); setUploadWarning(null); setIsSlowProcessing(false); setIsPolling(false); setPollTimedOut(false); setIsRechecking(false); }}
                     className="w-full h-12 font-display uppercase tracking-[0.2em] text-xs bg-background/50 hover:bg-background/80 text-foreground/70 border border-border/50 rounded-xl transition-all"
                   >
                     <PlusCircle className="w-4 h-4 mr-2" />Submit Another
