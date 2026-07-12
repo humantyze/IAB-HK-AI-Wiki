@@ -188,6 +188,7 @@ export default function WikiIndex() {
   const [searchDone, setSearchDone] = useState(false);
   const questionPool = useQuestionPool();
   const [shownQuestions, setShownQuestions] = useState<string[]>(() => pickThree(FALLBACK_QUESTIONS));
+  const [suggestedFollowUps, setSuggestedFollowUps] = useState<string[]>([]);
   const [isRagStreaming, setIsRagStreaming] = useState(false);
   // citationAnimGen[n]: 0 = not yet seen, 1 = first reveal (pop-in), 2+ = re-referenced (pulse)
   const [citationAnimGen, setCitationAnimGen] = useState<Record<number, number>>({});
@@ -482,6 +483,16 @@ export default function WikiIndex() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredSlugsKey]);
 
+  // Populate follow-up chips once streaming finishes; clear on new search.
+  useEffect(() => {
+    if (searchDone && !isRagStreaming && ragAnswer !== null) {
+      setSuggestedFollowUps(pickThree(questionPool, [activeQuery]));
+    } else {
+      setSuggestedFollowUps([]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchDone, isRagStreaming, ragAnswer, activeQuery, questionPool]);
+
   // When the API pool loads (replaces the fallback), refresh shown questions.
   const prevPoolRef = useRef(FALLBACK_QUESTIONS);
   useEffect(() => {
@@ -725,6 +736,20 @@ export default function WikiIndex() {
                     {renderAnswerWithCitations(ragAnswer, ragCitations ?? [])}
                     {isRagStreaming && <span className="cite-cursor" />}
                   </p>
+                  {!isRagStreaming && suggestedFollowUps.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-2">
+                      {suggestedFollowUps.map((q) => (
+                        <button
+                          key={q}
+                          type="button"
+                          onClick={() => { setQuery(q); setActiveQuery(q); }}
+                          className="text-xs px-3 py-1.5 rounded-full border border-gray-200 bg-white text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors"
+                        >
+                          {q}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {ragCitations && ragCitations.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-[#D63425]/10 flex flex-wrap gap-2">
                       {ragCitations.map((c) => {
