@@ -5,6 +5,14 @@ import { logger } from "./logger";
 
 let regenRunning = false;
 
+// A candidate only counts as "rich" if it retrieves several strongly-relevant
+// chunks — not a single marginal hit. The per-chunk floor sits well above the
+// reranker's fail-open RRF scores (~0.016), so questions that only "passed"
+// because the reranker errored during generation are excluded here. Both must
+// hold for a question to be offered as a homepage suggestion.
+const STRONG_CHUNK_SCORE = 0.35;
+const MIN_STRONG_CHUNKS = 2;
+
 /**
  * Generate 10 sample questions from current wiki content, verify each has rich
  * RAG retrieval (non-zero reranker score sum), and persist to DB.
@@ -95,14 +103,18 @@ async function _generate(): Promise<{ questions: string[] }> {
     return { questions: [] };
   }
 
-  // Score each candidate by RAG richness: sum of reranker scores across top chunks.
+  // Score each candidate by RAG richness. Keep only questions that retrieve at
+  // least MIN_STRONG_CHUNKS chunks above STRONG_CHUNK_SCORE — this approximates
+  // "will produce a grounded, non-thin answer" rather than merely "retrieves
+  // something", and filters out reranker fail-open noise (see constants above).
   const scored: Array<{ question: string; score: number }> = [];
   for (const question of candidates.slice(0, 15)) {
     if (typeof question !== "string" || question.trim().length < 5) continue;
     try {
       const chunks = await retrieve(question.trim(), { limit: 8 });
-      const score = chunks.reduce((sum, c) => sum + c.similarity, 0);
-      if (score > 0) {
+      const strong = chunks.filter((c) => c.similarity >= STRONG_CHUNK_SCORE);
+      if (strong.length >= MIN_STRONG_CHUNKS) {
+        const score = strong.reduce((sum, c) => sum + c.similarity, 0);
         scored.push({ question: question.trim(), score });
       }
     } catch (err) {
@@ -132,4 +144,23 @@ export async function getStoredQuestions(): Promise<string[]> {
     .orderBy(desc(knowledgeQuestionsTable.generatedAt))
     .limit(1);
   return row?.questions ?? [];
+}
+
+/**
+ * Ensure the stored sample questions exist and reflect the current index.
+ * Call at startup so the homepage never silently falls back to the stale
+ * hardcoded list, and after a reindex so questions are re-verified against the
+ * rebuilt embeddings. Pass `force` to regenerate even when questions already
+ * exist (e.g. the index was just rebuilt).
+ */
+export async function ensureQuestionsFresh(force = false): Promise<void> {
+  try {
+    if (!force) {
+      const existing = await getStoredQuestions();
+      if (existing.length >= 3) return;
+    }
+    await generateAndStoreQuestions();
+  } catch (err) {
+    logger.error({ err }, "ensureQuestionsFresh failed");
+  }
 }
