@@ -538,9 +538,7 @@ export default function SuperAdminDashboard() {
                         const eligible = u.rawText && u.rawText.trim().length >= 50;
                         const isRunning = reprocessingIds.has(u.id);
                         const result = singleReprocessResults.get(u.id);
-                        const label = u.uploaderName
-                          ? `${u.uploaderName} — ${u.contentType}`
-                          : u.contentType;
+                        const label = u.filePath ?? u.uploaderName ?? u.contentType;
                         return (
                           <div key={u.id} className="flex items-center gap-3 px-4 py-2.5 rounded-lg border border-orange-500/10 bg-background/40">
                             <div className="flex-1 min-w-0">
