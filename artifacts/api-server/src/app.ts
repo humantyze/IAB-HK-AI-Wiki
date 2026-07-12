@@ -31,6 +31,13 @@ const corsOrigin = process.env.NODE_ENV === "production"
   ? process.env.CORS_ORIGIN || false
   : true;
 app.use(cors({ credentials: true, origin: corsOrigin }));
+app.use((_req: Request, res: Response, next: NextFunction) => {
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self';"
+  );
+  next();
+});
 app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));

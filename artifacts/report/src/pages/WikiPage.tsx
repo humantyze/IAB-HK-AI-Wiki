@@ -70,7 +70,9 @@ function renderMarkdown(markdown: string): React.ReactNode[] {
       }
       const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
       if (linkMatch) {
-        return <a key={j} href={linkMatch[2]} className="underline underline-offset-2" style={{ color: "#D63425" }}>{linkMatch[1]}</a>;
+        const href = /^https?:\/\//i.test(linkMatch[2]) ? linkMatch[2] : null;
+        if (!href) return <span key={j} className="underline underline-offset-2" style={{ color: "#D63425" }}>{linkMatch[1]}</span>;
+        return <a key={j} href={href} className="underline underline-offset-2" style={{ color: "#D63425" }} rel="noopener noreferrer">{linkMatch[1]}</a>;
       }
       return part;
     });
