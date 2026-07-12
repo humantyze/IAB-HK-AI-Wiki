@@ -6,7 +6,7 @@ import {
   LogOut, Settings,
   CheckCircle2, BookOpen, AlertCircle,
   Trash2, RotateCcw, Calendar, X, DatabaseBackup, CloudUpload, ImagePlay, Layers,
-  ChevronDown, ChevronUp, Sparkles,
+  ChevronDown, ChevronUp, Sparkles, ImageOff,
 } from "lucide-react";
 
 import { useSuperAuth } from "@/hooks/use-super-auth";
@@ -43,6 +43,10 @@ export default function SuperAdminDashboard() {
 
   const [regenQuestionsRunning, setRegenQuestionsRunning] = useState(false);
   const [regenQuestionsResult, setRegenQuestionsResult] = useState<{ count: number } | null>(null);
+
+  const [clearImageSlug, setClearImageSlug] = useState("");
+  const [clearImageRunning, setClearImageRunning] = useState(false);
+  const [clearImageResult, setClearImageResult] = useState<{ ok: boolean; title?: string; error?: string } | null>(null);
 
   interface BackupEntry {
     id: number;
@@ -164,6 +168,35 @@ export default function SuperAdminDashboard() {
       toast({ title: "Regeneration Failed", description: message, variant: "destructive" });
     } finally {
       setRegenQuestionsRunning(false);
+    }
+  };
+
+  const handleClearImage = async () => {
+    const slug = clearImageSlug.trim();
+    if (!slug) return;
+    setClearImageRunning(true);
+    setClearImageResult(null);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/wiki/${encodeURIComponent(slug)}/image`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const data = await res.json() as { ok?: boolean; title?: string; error?: string };
+      if (!res.ok) {
+        setClearImageResult({ ok: false, error: data.error ?? "Unknown error" });
+        toast({ title: "Clear Failed", description: data.error ?? "Unknown error", variant: "destructive" });
+      } else {
+        setClearImageResult({ ok: true, title: data.title });
+        setClearImageSlug("");
+        toast({ title: "Image Cleared", description: `Image removed from "${data.title ?? slug}".` });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Request failed";
+      setClearImageResult({ ok: false, error: message });
+      toast({ title: "Clear Failed", description: message, variant: "destructive" });
+    } finally {
+      setClearImageRunning(false);
     }
   };
 
@@ -525,6 +558,38 @@ export default function SuperAdminDashboard() {
                       ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Processing…</>
                       : <><ImagePlay className="w-3.5 h-3.5 mr-2" />Backfill Images</>}
                   </Button>
+                </div>
+
+                <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-6">
+                  <h3 className="font-display text-sm tracking-widest uppercase text-rose-400 mb-2">Clear Page Image</h3>
+                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                    Remove the header image from a specific wiki page. Paste the page slug from its URL (the part after <span className="font-mono text-xs">/wiki/</span>).
+                  </p>
+                  {clearImageResult && (
+                    <div className="mb-4 flex items-center gap-2">
+                      {clearImageResult.ok
+                        ? <><CheckCircle2 className="w-4 h-4 text-rose-400" /><span className="text-sm text-foreground/80">Image cleared from <strong>{clearImageResult.title}</strong></span></>
+                        : <><AlertCircle className="w-4 h-4 text-destructive" /><span className="text-sm text-foreground/80">{clearImageResult.error}</span></>
+                      }
+                    </div>
+                  )}
+                  <div className="flex gap-3 flex-wrap">
+                    <Input
+                      value={clearImageSlug}
+                      onChange={(e) => { setClearImageSlug(e.target.value); setClearImageResult(null); }}
+                      placeholder="iab-ai-intellectual-property-and-transactions-playbook-2025"
+                      className="flex-1 min-w-[260px] bg-background/50 border-border/50 h-11 rounded-xl focus-visible:ring-rose-500/30 font-mono text-xs"
+                    />
+                    <Button
+                      onClick={handleClearImage}
+                      disabled={clearImageRunning || !clearImageSlug.trim()}
+                      className="font-display uppercase tracking-[0.15em] text-[11px] bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl h-11 px-6 transition-all shrink-0"
+                    >
+                      {clearImageRunning
+                        ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Clearing…</>
+                        : <><ImageOff className="w-3.5 h-3.5 mr-2" />Clear Image</>}
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-6">
