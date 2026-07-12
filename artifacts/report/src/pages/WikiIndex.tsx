@@ -175,9 +175,12 @@ function useQuestionPool(): string[] {
 
 export default function WikiIndex() {
   const { data: pages, isLoading } = useWikiPages();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "");
   const [activeTag, setActiveTag] = useState("All");
-  const [activeQuery, setActiveQuery] = useState("");
+  const [activeQuery, setActiveQuery] = useState(() => {
+    const q = new URLSearchParams(window.location.search).get("q") ?? "";
+    return q.length >= 3 ? q : "";
+  });
   const [aiResults, setAiResults] = useState<WikiPageSummary[] | null>(null);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [searchFallbackPages, setSearchFallbackPages] = useState<WikiPageSummary[] | null>(null);
@@ -427,6 +430,17 @@ export default function WikiIndex() {
 
     return () => { abortRef.current?.abort(); };
   }, [activeQuery, baseUrl]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (activeQuery.trim().length >= 3) {
+      params.set("q", activeQuery.trim());
+    } else {
+      params.delete("q");
+    }
+    const newSearch = params.toString();
+    window.history.replaceState(null, "", newSearch ? `${window.location.pathname}?${newSearch}` : window.location.pathname);
+  }, [activeQuery]);
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
