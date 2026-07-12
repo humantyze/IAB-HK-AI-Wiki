@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
-import { Search, BookOpen, Clock, ChevronRight, Lock, Sparkles, LayoutGrid, Network, X } from "lucide-react";
+import { Search, BookOpen, Clock, ChevronRight, Lock, Sparkles, LayoutGrid, Network, X, Lightbulb } from "lucide-react";
 import WikiGraph from "../components/WikiGraph";
 import { useJsonLd } from "@/lib/useJsonLd";
 import { usePageMeta } from "@/hooks/usePageMeta";
@@ -591,6 +591,14 @@ export default function WikiIndex() {
             <span className="text-sm font-semibold text-gray-700">Welcome to the Interactive Advertising Bureau Hong Kong</span>
           </div>
           <nav className="flex gap-5 ml-auto text-xs font-medium text-gray-500">
+            <Link
+              href="/quiz"
+              className="flex items-center gap-1.5 hover:opacity-80 transition-opacity"
+              style={{ color: "#D63425" }}
+            >
+              <Lightbulb size={11} />
+              <span>Test your knowledge</span>
+            </Link>
             <Link href="/admin/login" className="flex items-center gap-1.5 hover:text-gray-800 transition-colors">
               <Lock size={11} />
               <span>Contributor Access</span>

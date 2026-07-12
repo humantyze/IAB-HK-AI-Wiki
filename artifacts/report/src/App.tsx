@@ -9,6 +9,7 @@ import AdminLogin from "@/pages/AdminLogin";
 import AdminDashboard from "@/pages/AdminDashboard";
 import SuperAdminLogin from "@/pages/SuperAdminLogin";
 import SuperAdminDashboard from "@/pages/SuperAdminDashboard";
+import QuizPage from "@/pages/QuizPage";
 
 const queryClient = new QueryClient();
 
@@ -16,6 +17,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={WikiIndex} />
+      <Route path="/quiz" component={QuizPage} />
       <Route path="/wiki/:slug" component={WikiPage} />
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin" component={AdminDashboard} />
