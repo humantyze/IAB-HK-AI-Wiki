@@ -40,6 +40,8 @@ export default function SuperAdminDashboard() {
 
   const [reprocessing, setReprocessing] = useState(false);
   const [reprocessResult, setReprocessResult] = useState<{ count: number } | null>(null);
+  const [reprocessingIds, setReprocessingIds] = useState<Set<number>>(new Set());
+  const [singleReprocessResults, setSingleReprocessResults] = useState<Map<number, string>>(new Map());
 
   const [regenQuestionsRunning, setRegenQuestionsRunning] = useState(false);
   const [regenQuestionsResult, setRegenQuestionsResult] = useState<{ count: number } | null>(null);
@@ -134,12 +136,40 @@ export default function SuperAdminDashboard() {
           title: "Reprocess Started",
           description: `${count} upload(s) queued. Wiki pages will appear over the next few minutes.`,
         });
+        void refetchUploads();
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Request failed";
       toast({ title: "Reprocess Failed", description: message, variant: "destructive" });
     } finally {
       setReprocessing(false);
+    }
+  };
+
+  const handleReprocessSingle = async (uploadId: number) => {
+    setReprocessingIds((prev) => new Set(prev).add(uploadId));
+    setSingleReprocessResults((prev) => { const next = new Map(prev); next.delete(uploadId); return next; });
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/admin/reprocess-uploads/${uploadId}`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json() as { status?: string; error?: string };
+      if (!res.ok) {
+        toast({ title: "Reprocess Failed", description: String(data.error ?? "Unknown error"), variant: "destructive" });
+        setSingleReprocessResults((prev) => { const next = new Map(prev); next.set(uploadId, "error"); return next; });
+      } else {
+        const status = data.status ?? "processed";
+        setSingleReprocessResults((prev) => { const next = new Map(prev); next.set(uploadId, status); return next; });
+        void refetchUploads();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Request failed";
+      toast({ title: "Reprocess Failed", description: message, variant: "destructive" });
+      setSingleReprocessResults((prev) => { const next = new Map(prev); next.set(uploadId, "error"); return next; });
+    } finally {
+      setReprocessingIds((prev) => { const next = new Set(prev); next.delete(uploadId); return next; });
     }
   };
 
@@ -498,8 +528,54 @@ export default function SuperAdminDashboard() {
                 <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-6">
                   <h3 className="font-display text-sm tracking-widest uppercase text-orange-400 mb-2">Reprocess Uploads → Wiki</h3>
                   <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
-                    Re-run wiki extraction for all uploads using their stored text. Use this to regenerate wiki pages after a wipe, or if pages were missing after a previous upload. Runs one file at a time in the background (~2 min per upload).
+                    Re-run wiki extraction for individual uploads, or all at once. Use this to regenerate wiki pages after a wipe or if pages were missing. Runs one file at a time (~2 min per upload).
                   </p>
+
+                  {/* Per-upload list */}
+                  {uploads && uploads.length > 0 && (
+                    <div className="mb-5 space-y-2">
+                      {uploads.map((u) => {
+                        const eligible = u.rawText && u.rawText.trim().length >= 50;
+                        const isRunning = reprocessingIds.has(u.id);
+                        const result = singleReprocessResults.get(u.id);
+                        const label = u.uploaderName
+                          ? `${u.uploaderName} — ${u.contentType}`
+                          : u.contentType;
+                        return (
+                          <div key={u.id} className="flex items-center gap-3 px-4 py-2.5 rounded-lg border border-orange-500/10 bg-background/40">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-foreground/80 truncate">{label}</p>
+                              <p className="text-[10px] text-foreground/40 mt-0.5">
+                                {format(new Date(u.createdAt), "d MMM yyyy")} · {u.status}
+                                {!eligible && " · no stored text"}
+                              </p>
+                            </div>
+                            {result === "processed" && (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-green-400 shrink-0" />
+                            )}
+                            {result === "partial" && (
+                              <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                            )}
+                            {result === "error" && (
+                              <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                            )}
+                            <Button
+                              size="sm"
+                              onClick={() => handleReprocessSingle(u.id)}
+                              disabled={!eligible || isRunning || reprocessing}
+                              className="shrink-0 font-display uppercase tracking-[0.12em] text-[10px] bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-lg h-7 px-3 transition-all disabled:opacity-40"
+                            >
+                              {isRunning
+                                ? <div className="w-2.5 h-2.5 border border-current border-t-transparent rounded-full animate-spin" />
+                                : <RotateCcw className="w-3 h-3" />}
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Reprocess all */}
                   {reprocessResult && (
                     <div className="mb-4 flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-orange-400" />
@@ -510,12 +586,12 @@ export default function SuperAdminDashboard() {
                   )}
                   <Button
                     onClick={handleReprocess}
-                    disabled={reprocessing}
+                    disabled={reprocessing || reprocessingIds.size > 0}
                     className="font-display uppercase tracking-[0.15em] text-[11px] bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-xl h-11 px-6 transition-all"
                   >
                     {reprocessing
                       ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Queueing…</>
-                      : <><Layers className="w-3.5 h-3.5 mr-2" />Reprocess Uploads</>}
+                      : <><Layers className="w-3.5 h-3.5 mr-2" />Reprocess All</>}
                   </Button>
                 </div>
 

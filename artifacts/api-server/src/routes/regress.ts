@@ -148,6 +148,34 @@ router.post("/admin/reprocess-uploads", requireSuperAuth, async (_req, res) => {
   res.json({ count: eligible.length, succeeded, failed, results });
 });
 
+router.post("/admin/reprocess-uploads/:id", requireSuperAuth, async (req, res) => {
+  const uploadId = parseInt(String(req.params.id), 10);
+  if (isNaN(uploadId)) {
+    res.status(400).json({ error: "Invalid upload ID" });
+    return;
+  }
+
+  const [upload] = await db
+    .select()
+    .from(uploadsTable)
+    .where(eq(uploadsTable.id, uploadId))
+    .limit(1);
+
+  if (!upload) {
+    res.status(404).json({ error: "Upload not found" });
+    return;
+  }
+
+  if (!upload.rawText || upload.rawText.trim().length < 50) {
+    res.status(422).json({ error: "Upload has insufficient stored text to reprocess." });
+    return;
+  }
+
+  const result = await reprocessUpload(upload);
+  logger.info({ uploadId, status: result.status }, "Single upload reprocess complete");
+  res.json({ uploadId, ...result });
+});
+
 router.post("/admin/wipe", requireSuperAuth, async (_req, res) => {
   try {
     const deletedChunks = await db.delete(knowledgeChunksTable).returning({ id: knowledgeChunksTable.id });
