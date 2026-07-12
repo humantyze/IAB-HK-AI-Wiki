@@ -187,19 +187,31 @@ export default function WikiGraph({ pages, allPages }: WikiGraphProps) {
       ctx.fillStyle = color;
       ctx.fill();
 
-      const baseFontSize = 10;
-      const fontSize = Math.max(baseFontSize / globalScale, 2.5);
+      const baseFontSize = 8;
+      const fontSize = Math.max(baseFontSize / globalScale, 2);
       const maxChars = globalScale < 1.2 ? 12 : globalScale < 2 ? 18 : 25;
-      const label =
+      const fullLabel =
         node.title.length > maxChars
           ? node.title.slice(0, maxChars - 1) + "…"
           : node.title;
 
+      const words = fullLabel.split(" ");
+      let line1 = fullLabel;
+      let line2 = "";
+      if (words.length > 1) {
+        const mid = Math.ceil(words.length / 2);
+        line1 = words.slice(0, mid).join(" ");
+        line2 = words.slice(mid).join(" ");
+      }
+
+      const lineHeight = fontSize * 1.25;
       ctx.font = `${fontSize}px Montserrat, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.fillStyle = isActive ? "#374151" : "#d1d5db";
-      ctx.fillText(label, node.x ?? 0, (node.y ?? 0) + radius + 1.5 / globalScale);
+      const yBase = (node.y ?? 0) + radius + 1.5 / globalScale;
+      ctx.fillText(line1, node.x ?? 0, yBase);
+      if (line2) ctx.fillText(line2, node.x ?? 0, yBase + lineHeight);
     },
     [getRadius],
   );
