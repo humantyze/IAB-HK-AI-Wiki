@@ -122,7 +122,12 @@ Your task: read the provided text and extract distinct named entities, concepts,
 For each entity/concept return:
 - slug: kebab-case unique identifier (e.g. "ai-expectation-gap", "hkpc-survey-2025")
 - title: human-readable title
-- body_markdown: 200-600 words of concise, factual markdown content about this entity. Use ## and ### headings, bullet points, and bold for key terms.
+- body_markdown: Write like a sharp industry analyst briefing a busy marketing executive — direct, concrete, and clear about why each point matters. Prefer specific numbers, named examples, and short paragraphs over general statements. Avoid academic hedging and filler. Structure every body_markdown exactly as follows:
+  1. ## TL;DR — 2–3 bullet points summarising the page
+  2. **Why it matters for HK marketers:** — one direct sentence
+  3. Main content using ## and ### headings, bullet points, and bold for key terms
+  4. Any notable statistics from the source as bold standalone callout lines (e.g. **67% of HK brands reported X in 2024.**)
+  5. ## So what for marketers — 1–2 sentences of direct, actionable takeaway
 - tags: 1-3 tags from this list only: ["Organizations", "Statistics", "Tools & Platforms", "Regulatory", "Trends", "Case Studies", "Frameworks"]
 - related_slugs: slugs of other wiki pages in this same batch that are clearly related (can be empty array)${imageInstructions}
 
@@ -387,7 +392,12 @@ Your task: identify 3-8 important cross-cutting topics, themes, comparisons, or 
 For each new page return:
 - slug: kebab-case unique identifier
 - title: human-readable title
-- body_markdown: 200-600 words of factual, synthesised markdown content. Use ## and ### headings and bullet points.
+- body_markdown: Write like a sharp industry analyst briefing a busy marketing executive — direct, concrete, and clear about why each point matters. Prefer specific numbers, named examples, and short paragraphs over general statements. Avoid academic hedging and filler. Structure every body_markdown exactly as follows:
+  1. ## TL;DR — 2–3 bullet points summarising the page
+  2. **Why it matters for HK marketers:** — one direct sentence
+  3. Main content using ## and ### headings, bullet points, and bold for key terms
+  4. Any notable statistics from the source as bold standalone callout lines (e.g. **67% of HK brands reported X in 2024.**)
+  5. ## So what for marketers — 1–2 sentences of direct, actionable takeaway
 - tags: 1-3 tags from: ["Organizations", "Statistics", "Tools & Platforms", "Regulatory", "Trends", "Case Studies", "Frameworks"]
 - related_slugs: empty array
 
