@@ -62,12 +62,16 @@ async function _generate(): Promise<{ questions: string[] }> {
         role: "system",
         content:
           "You are generating questions for a knowledge base about AI in Hong Kong's marketing industry. " +
-          "Generate exactly 15 specific, interesting questions a marketing professional would want answered. " +
-          "Each question MUST be answerable from the topics listed — ask about specific protocols, organizations, " +
-          "statistics, forecasts, or technology named in the content. " +
-          "Do NOT ask vague general questions. Do NOT ask 'How are HK marketers using AI in general?' — " +
-          "ask about specific named entities or data points instead. " +
-          "Each question must be 10 words or fewer. " +
+          "Generate exactly 15 broad, conceptual questions a marketing professional would want answered. " +
+          "Questions should ask HOW or WHY things work, not quote specific documents or data points. " +
+          "Good examples: 'How do agentic AI systems change media buying?', " +
+          "'Why are walled gardens affecting programmatic advertising?', " +
+          "'What benefits do AI agents bring to media deal negotiation?' " +
+          "Bad examples: 'According to the IAB Playbook, what does section 3 say?' or " +
+          "'What exact percentage did the January 2026 survey report?' " +
+          "Each question must be answerable from any 2-3 relevant knowledge base chunks — " +
+          "not dependent on one specific document or statistic. " +
+          "Keep questions concise (under 15 words). Do not ask purely generic marketing questions unrelated to AI. " +
           "Return ONLY a valid JSON array of 15 question strings, no preamble or explanation.",
       },
       {
