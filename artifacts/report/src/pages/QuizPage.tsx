@@ -43,6 +43,12 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
+function shuffleChoices(entry: QuizEntry): QuizEntry {
+  const correct = entry.choices[entry.correctIndex];
+  const shuffled = shuffle(entry.choices);
+  return { ...entry, choices: shuffled, correctIndex: shuffled.indexOf(correct) };
+}
+
 function renderInlineWithCitations(
   text: string,
   citations: KnowledgeCitation[],
@@ -138,7 +144,7 @@ export default function QuizPage() {
       .then((data: unknown) => {
         const entries = (data as { entries?: QuizEntry[] }).entries;
         if (Array.isArray(entries) && entries.length > 0) {
-          setMcqEntries(shuffle(entries));
+          setMcqEntries(shuffle(entries).map(shuffleChoices));
         } else {
           // fallback: load plain questions for streaming mode
           return fetch(`${baseUrl}/api/knowledge/questions`, { credentials: "include" })
