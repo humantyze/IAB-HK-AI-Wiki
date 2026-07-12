@@ -300,6 +300,30 @@ router.get("/wiki-image", async (req, res) => {
 });
 
 /**
+ * DELETE /api/wiki/:slug/image
+ * Super-admin: clear the image on a specific wiki page.
+ */
+router.delete("/wiki/:slug/image", requireSuperAuth, async (req, res) => {
+  const { slug } = req.params;
+  try {
+    const [updated] = await db
+      .update(wikiPagesTable)
+      .set({ imageUrl: null, updatedAt: new Date() })
+      .where(eq(wikiPagesTable.slug, slug))
+      .returning({ slug: wikiPagesTable.slug, title: wikiPagesTable.title });
+    if (!updated) {
+      res.status(404).json({ error: "Page not found" });
+      return;
+    }
+    logger.info({ slug }, "Wiki page image cleared by super-admin");
+    res.json({ ok: true, slug: updated.slug, title: updated.title });
+  } catch (err) {
+    logger.error({ err, slug }, "Failed to clear wiki page image");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
  * POST /api/wiki/backfill-images
  * Super-admin: re-process archived PDFs to assign images to wiki pages that
  * currently have no image. Already-imaged pages are skipped.
