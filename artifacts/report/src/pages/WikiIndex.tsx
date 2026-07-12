@@ -848,14 +848,21 @@ export default function WikiIndex() {
             allPages={pages ?? []}
           />
         ) : filtered.length === 0 ? (
-          <div className="text-center py-20 text-gray-400">
-            <BookOpen size={32} className="mx-auto mb-3 opacity-30" />
-            <p className="text-sm">
-              {pages?.length === 0
-                ? "No wiki pages yet. Use the admin panel to build the wiki from existing sections."
-                : "No pages match your search."}
-            </p>
-          </div>
+          isSearching ? (
+            <div className="text-center py-20 text-gray-400">
+              <div className="w-6 h-6 border-2 border-[#D63425]/20 border-t-[#D63425] rounded-full animate-spin mx-auto mb-3" />
+              <p className="text-sm">Searching…</p>
+            </div>
+          ) : ragAnswer !== null ? null : (
+            <div className="text-center py-20 text-gray-400">
+              <BookOpen size={32} className="mx-auto mb-3 opacity-30" />
+              <p className="text-sm">
+                {pages?.length === 0
+                  ? "No wiki pages yet. Use the admin panel to build the wiki from existing sections."
+                  : "No pages match your search."}
+              </p>
+            </div>
+          )
         ) : (
           <div>
             {ragAnswer && !isSearching && (
