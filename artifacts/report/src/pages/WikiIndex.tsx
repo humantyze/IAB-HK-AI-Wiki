@@ -173,6 +173,16 @@ function useQuestionPool(): string[] {
   return pool;
 }
 
+interface SearchCacheEntry {
+  ragAnswer: string | null;
+  ragCitations: KnowledgeCitation[] | null;
+  ragGrounded: boolean;
+  aiResults: WikiPageSummary[] | null;
+  aiSummary: string | null;
+  searchFallbackPages: WikiPageSummary[] | null;
+}
+const searchCache = new Map<string, SearchCacheEntry>();
+
 export default function WikiIndex() {
   const { data: pages, isLoading } = useWikiPages();
   const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "");
@@ -241,9 +251,30 @@ export default function WikiIndex() {
       return;
     }
 
+    const cacheKey = activeQuery.trim().toLowerCase();
+    const cached = searchCache.get(cacheKey);
+    if (cached) {
+      setRagAnswer(cached.ragAnswer);
+      setRagCitations(cached.ragCitations);
+      setRagGrounded(cached.ragGrounded);
+      setAiResults(cached.aiResults);
+      setAiSummary(cached.aiSummary);
+      setSearchFallbackPages(cached.searchFallbackPages);
+      setIsSearching(false);
+      setSearchDone(true);
+      return;
+    }
+
     setIsSearching(true);
     const controller = new AbortController();
     abortRef.current = controller;
+
+    let finalRagAnswer: string | null = null;
+    let finalRagCitations: KnowledgeCitation[] | null = null;
+    let finalRagGrounded = false;
+    let finalAiResults: WikiPageSummary[] | null = null;
+    let finalAiSummary: string | null = null;
+    let finalSearchFallbackPages: WikiPageSummary[] | null = null;
 
     const fetchOpts = (body: object) => ({
       method: "POST" as const,
@@ -320,6 +351,7 @@ export default function WikiIndex() {
 
       if (ct.includes("text/event-stream") && r.body) {
         // Streaming SSE path
+        finalRagGrounded = true;
         setRagGrounded(true);
         setIsRagStreaming(true);
         const reader = r.body.getReader();
@@ -348,7 +380,7 @@ export default function WikiIndex() {
               const data = dataLines.join("\n");
 
               if (eventType === "citations") {
-                try { setRagCitations(JSON.parse(data) as KnowledgeCitation[]); } catch { /* ignore parse errors */ }
+                try { const c = JSON.parse(data) as KnowledgeCitation[]; finalRagCitations = c; setRagCitations(c); } catch { /* ignore parse errors */ }
               } else if (eventType === "token") {
                 try { handleToken(JSON.parse(data) as string); } catch { /* ignore parse errors */ }
               } else if (eventType === "error") {
@@ -364,10 +396,8 @@ export default function WikiIndex() {
             // Partial answer is fine — keep whatever streamed
           }
         } finally {
-          // Tell the RAF drain loop the stream is closed.
-          // If the buffer still has tokens, the loop drains them first
-          // then calls setIsRagStreaming(false).  If the buffer is already
-          // empty (or no tokens ever arrived), stop the cursor immediately.
+          // Capture full streamed text for cache before releasing the cursor.
+          finalRagAnswer = streamedTextRef.current.trim() || null;
           streamEndedRef.current = true;
           if (rafRef.current === null) {
             setIsRagStreaming(false);
@@ -378,11 +408,16 @@ export default function WikiIndex() {
         // JSON fallback (no model configured, passages-only response)
         try {
           const rag = await r.json() as { answer: string | null; grounded: boolean; citations: KnowledgeCitation[] };
+          finalRagGrounded = rag.grounded;
           setRagGrounded(rag.grounded);
           if (rag.grounded && rag.answer && rag.answer.trim().length > 0) {
+            finalRagAnswer = rag.answer.trim();
+            finalRagCitations = rag.citations ?? [];
             setRagAnswer(rag.answer.trim());
             setRagCitations(rag.citations ?? []);
           } else {
+            finalRagAnswer = null;
+            finalRagCitations = rag.citations ?? [];
             setRagAnswer(null);
             setRagCitations(rag.citations ?? []);
           }
@@ -406,13 +441,19 @@ export default function WikiIndex() {
       try {
         const result = await r.json() as { ranked: boolean; pages: WikiPageSummary[]; summary?: string };
         if (result.ranked && Array.isArray(result.pages)) {
-          setAiResults(result.pages);
-          setAiSummary(result.summary && result.summary.trim().length > 0 ? result.summary.trim() : null);
+          finalAiResults = result.pages;
+          finalAiSummary = result.summary && result.summary.trim().length > 0 ? result.summary.trim() : null;
+          finalSearchFallbackPages = null;
+          setAiResults(finalAiResults);
+          setAiSummary(finalAiSummary);
           setSearchFallbackPages(null);
         } else {
+          finalAiResults = null;
+          finalAiSummary = null;
+          finalSearchFallbackPages = Array.isArray(result.pages) ? result.pages : null;
           setAiResults(null);
           setAiSummary(null);
-          setSearchFallbackPages(Array.isArray(result.pages) ? result.pages : null);
+          setSearchFallbackPages(finalSearchFallbackPages);
         }
       } catch { /* ignore */ }
     };
@@ -424,6 +465,14 @@ export default function WikiIndex() {
         if (abortRef.current === controller) {
           setIsSearching(false);
           setSearchDone(true);
+          searchCache.set(cacheKey, {
+            ragAnswer: finalRagAnswer,
+            ragCitations: finalRagCitations,
+            ragGrounded: finalRagGrounded,
+            aiResults: finalAiResults,
+            aiSummary: finalAiSummary,
+            searchFallbackPages: finalSearchFallbackPages,
+          });
         }
       }
     })();
