@@ -133,6 +133,7 @@ export default function AdminDashboard() {
   } | null>(null);
   const [wikiCountAfter, setWikiCountAfter] = useState<number | null>(null);
   const [uploadWarning, setUploadWarning] = useState<string | null>(null);
+  const [isSlowProcessing, setIsSlowProcessing] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
 
   const { data: uploads } = useUploads();
@@ -177,7 +178,7 @@ export default function AdminDashboard() {
 
     const poll = async () => {
       if (attempts >= MAX_ATTEMPTS) { setIsPolling(false); return; }
-      if (attempts === SLOW_THRESHOLD) { setUploadWarning("Still processing — this is taking longer than usual. Your content will appear in a few more minutes. You can safely leave this page."); }
+      if (attempts === SLOW_THRESHOLD) { setIsSlowProcessing(true); }
       attempts++;
       try {
         // Primary: poll upload status so partial outcomes are never masked by early wiki-count growth
@@ -197,6 +198,7 @@ export default function AdminDashboard() {
           } catch { /* ignore */ }
 
           setWikiCountAfter(finalCount);
+          setIsSlowProcessing(false);
 
           if (statusData.status === "failed") {
             setUploadWarning(
@@ -450,7 +452,11 @@ export default function AdminDashboard() {
                         ) : (
                           <>
                             <p className="text-sm font-medium text-foreground/80">AI is generating wiki pages…</p>
-                            <p className="text-xs text-foreground/50 mt-0.5">This typically takes 60–90 seconds. You can leave this page.</p>
+                            <p className="text-xs text-foreground/50 mt-0.5">
+                              {isSlowProcessing
+                                ? "Still processing — this is taking longer than usual. You can safely leave this page."
+                                : "This typically takes 60–90 seconds. You can leave this page."}
+                            </p>
                           </>
                         )}
                       </div>
@@ -463,7 +469,7 @@ export default function AdminDashboard() {
                   )}
 
                   <Button
-                    onClick={() => { setSubmitResult(null); setWikiCountAfter(null); setUploadWarning(null); setIsPolling(false); }}
+                    onClick={() => { setSubmitResult(null); setWikiCountAfter(null); setUploadWarning(null); setIsSlowProcessing(false); setIsPolling(false); }}
                     className="w-full h-12 font-display uppercase tracking-[0.2em] text-xs bg-background/50 hover:bg-background/80 text-foreground/70 border border-border/50 rounded-xl transition-all"
                   >
                     <PlusCircle className="w-4 h-4 mr-2" />Submit Another
