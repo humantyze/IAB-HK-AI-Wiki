@@ -3,3 +3,4 @@ export * from "./wikiPages";
 export * from "./backupLog";
 export * from "./knowledgeChunks";
 export * from "./knowledgeQuestions";
+export * from "./quizQuestions";

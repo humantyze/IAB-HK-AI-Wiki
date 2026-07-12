@@ -2,6 +2,7 @@ import { db, wikiPagesTable, knowledgeQuestionsTable } from "@workspace/db";
 import { desc } from "drizzle-orm";
 import { retrieve } from "./knowledge-index";
 import { logger } from "./logger";
+import { generateAndStoreQuiz } from "./quiz-generator";
 
 let regenRunning = false;
 
@@ -123,6 +124,10 @@ async function _generate(): Promise<{ questions: string[] }> {
   await db.insert(knowledgeQuestionsTable).values({ questions, generatedAt: new Date() });
 
   logger.info({ count: questions.length, topScore: scored[0]?.score }, "Sample questions regenerated and stored");
+
+  // Fire-and-forget quiz generation so the MCQ cache stays in sync
+  generateAndStoreQuiz().catch((err) => logger.warn({ err }, "Quiz generation failed after question regen"));
+
   return { questions };
 }
 

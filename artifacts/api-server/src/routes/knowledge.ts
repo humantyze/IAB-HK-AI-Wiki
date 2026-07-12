@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { requireSuperAuth } from "../middlewares/auth";
 import { retrieve, reindexAll, type RetrievedChunk } from "../lib/knowledge-index";
 import { generateAndStoreQuestions, getStoredQuestions } from "../lib/question-generator";
+import { getStoredQuiz } from "../lib/quiz-generator";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -216,6 +217,17 @@ router.post("/knowledge/regen-questions", requireSuperAuth, async (_req, res) =>
   } catch (err) {
     logger.error({ err }, "Question regeneration failed");
     res.status(500).json({ error: "Question regeneration failed" });
+  }
+});
+
+/** Return cached multiple-choice quiz entries. */
+router.get("/knowledge/quiz", async (_req, res) => {
+  try {
+    const entries = await getStoredQuiz();
+    res.json({ entries });
+  } catch (err) {
+    logger.error({ err }, "Failed to fetch quiz entries");
+    res.status(500).json({ error: "Failed to fetch quiz" });
   }
 });
 

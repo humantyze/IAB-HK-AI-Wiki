@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, ChevronRight, Lightbulb } from "lucide-react";
+import { ArrowLeft, ChevronRight, Lightbulb, CheckCircle2, XCircle } from "lucide-react";
 import { usePageMeta } from "@/hooks/usePageMeta";
 
 interface KnowledgeCitation {
@@ -9,6 +9,14 @@ interface KnowledgeCitation {
   sourceSlug: string | null;
   title: string;
   similarity: number;
+}
+
+interface QuizEntry {
+  question: string;
+  choices: string[];
+  correctIndex: number;
+  answer: string;
+  citations: KnowledgeCitation[];
 }
 
 const FALLBACK_QUESTIONS = [
@@ -23,6 +31,8 @@ const FALLBACK_QUESTIONS = [
   "What is PubMatic forecasting for agentic execution?",
   "How many marketers want agentic media buying?",
 ];
+
+const OPTION_LABELS = ["A", "B", "C", "D"];
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -89,41 +99,70 @@ type Phase = "question" | "revealed" | "done";
 export default function QuizPage() {
   const baseUrl = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
 
-  const [questions, setQuestions] = useState<string[]>([]);
-  const [index, setIndex] = useState(0);
-  const [userAnswer, setUserAnswer] = useState("");
-  const [phase, setPhase] = useState<Phase>("question");
+  const [loading, setLoading] = useState(true);
 
+  // MCQ mode
+  const [mcqEntries, setMcqEntries] = useState<QuizEntry[]>([]);
+
+  // Streaming fallback (no MCQ cache)
+  const [streamQuestions, setStreamQuestions] = useState<string[]>([]);
   const [ragAnswer, setRagAnswer] = useState<string | null>(null);
   const [ragCitations, setRagCitations] = useState<KnowledgeCitation[] | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
-
   const abortRef = useRef<AbortController | null>(null);
   const pendingTokensRef = useRef<string[]>([]);
   const rafRef = useRef<number | null>(null);
   const streamEndedRef = useRef(false);
 
+  // Shared state
+  const [index, setIndex] = useState(0);
+  const [phase, setPhase] = useState<Phase>("question");
+
+  // MCQ-specific state
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+  // Streaming fallback specific
+  const [userAnswer, setUserAnswer] = useState("");
+
   usePageMeta({
     title: "Test your knowledge — Knowledge Base",
-    description: "Test your understanding of AI trends in Hong Kong marketing with questions drawn from the knowledge base.",
+    description:
+      "Test your understanding of AI trends in Hong Kong marketing with questions drawn from the knowledge base.",
     canonical: "/quiz",
     ogType: "website",
   });
 
   useEffect(() => {
-    fetch(`${baseUrl}/api/knowledge/questions`, { credentials: "include" })
+    fetch(`${baseUrl}/api/knowledge/quiz`, { credentials: "include" })
       .then((r) => r.json())
       .then((data: unknown) => {
-        const qs = (data as { questions?: string[] }).questions;
-        if (Array.isArray(qs) && qs.length > 0) {
-          setQuestions(shuffle(qs));
+        const entries = (data as { entries?: QuizEntry[] }).entries;
+        if (Array.isArray(entries) && entries.length > 0) {
+          setMcqEntries(shuffle(entries));
         } else {
-          setQuestions(shuffle(FALLBACK_QUESTIONS));
+          // fallback: load plain questions for streaming mode
+          return fetch(`${baseUrl}/api/knowledge/questions`, { credentials: "include" })
+            .then((r) => r.json())
+            .then((qdata: unknown) => {
+              const qs = (qdata as { questions?: string[] }).questions;
+              setStreamQuestions(
+                Array.isArray(qs) && qs.length > 0
+                  ? shuffle(qs)
+                  : shuffle(FALLBACK_QUESTIONS),
+              );
+            });
         }
       })
-      .catch(() => setQuestions(shuffle(FALLBACK_QUESTIONS)));
+      .catch(() => setStreamQuestions(shuffle(FALLBACK_QUESTIONS)))
+      .finally(() => setLoading(false));
   }, [baseUrl]);
 
+  const hasMcq = mcqEntries.length > 0;
+  const total = hasMcq ? mcqEntries.length : streamQuestions.length;
+  const currentEntry = hasMcq ? mcqEntries[index] : null;
+  const currentStreamQuestion = !hasMcq ? streamQuestions[index] ?? "" : "";
+
+  // ── Streaming helpers (fallback only) ──────────────────────────────────────
   const handleToken = useCallback((token: string) => {
     pendingTokensRef.current.push(token);
     if (rafRef.current === null) {
@@ -149,7 +188,6 @@ export default function QuizPage() {
       if (abortRef.current) abortRef.current.abort();
       const controller = new AbortController();
       abortRef.current = controller;
-
       setRagAnswer(null);
       setRagCitations(null);
       setIsStreaming(true);
@@ -159,7 +197,6 @@ export default function QuizPage() {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
       }
-
       let r: Response;
       try {
         r = await fetch(`${baseUrl}/api/knowledge/search`, {
@@ -173,13 +210,8 @@ export default function QuizPage() {
         if ((err as Error).name !== "AbortError") setIsStreaming(false);
         return;
       }
-      if (!r.ok) {
-        setIsStreaming(false);
-        return;
-      }
-
+      if (!r.ok) { setIsStreaming(false); return; }
       const ct = r.headers.get("content-type") ?? "";
-
       if (ct.includes("text/event-stream") && r.body) {
         const reader = r.body.getReader();
         const decoder = new TextDecoder();
@@ -202,13 +234,9 @@ export default function QuizPage() {
               }
               const data = dataLines.join("\n");
               if (eventType === "citations") {
-                try {
-                  setRagCitations(JSON.parse(data) as KnowledgeCitation[]);
-                } catch { /* ignore */ }
+                try { setRagCitations(JSON.parse(data) as KnowledgeCitation[]); } catch { /* ignore */ }
               } else if (eventType === "token") {
-                try {
-                  handleToken(JSON.parse(data) as string);
-                } catch { /* ignore */ }
+                try { handleToken(JSON.parse(data) as string); } catch { /* ignore */ }
               }
             }
           }
@@ -216,17 +244,11 @@ export default function QuizPage() {
           if ((err as Error).name === "AbortError") return;
         } finally {
           streamEndedRef.current = true;
-          if (rafRef.current === null) {
-            setIsStreaming(false);
-            streamEndedRef.current = false;
-          }
+          if (rafRef.current === null) { setIsStreaming(false); streamEndedRef.current = false; }
         }
       } else {
         try {
-          const rag = (await r.json()) as {
-            answer?: string;
-            citations?: KnowledgeCitation[];
-          };
+          const rag = (await r.json()) as { answer?: string; citations?: KnowledgeCitation[] };
           if (rag.answer) setRagAnswer(rag.answer.trim());
           setRagCitations(rag.citations ?? []);
         } catch { /* ignore */ }
@@ -238,10 +260,7 @@ export default function QuizPage() {
 
   const resetStream = useCallback(() => {
     if (abortRef.current) abortRef.current.abort();
-    if (rafRef.current !== null) {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    }
+    if (rafRef.current !== null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
     pendingTokensRef.current = [];
     streamEndedRef.current = false;
     setRagAnswer(null);
@@ -249,39 +268,61 @@ export default function QuizPage() {
     setIsStreaming(false);
   }, []);
 
+  // ── Navigation ──────────────────────────────────────────────────────────────
+  const handleNext = useCallback(() => {
+    if (!hasMcq) resetStream();
+    setUserAnswer("");
+    setSelectedIndex(null);
+    const nextIndex = index + 1;
+    setIndex(nextIndex);
+    setPhase(nextIndex >= total ? "done" : "question");
+  }, [hasMcq, index, total, resetStream]);
+
+  // ── MCQ selection ───────────────────────────────────────────────────────────
+  const handleSelect = useCallback(
+    (i: number) => {
+      if (selectedIndex !== null) return;
+      setSelectedIndex(i);
+      setPhase("revealed");
+    },
+    [selectedIndex],
+  );
+
+  // ── Streaming fallback actions ──────────────────────────────────────────────
   const handleSubmit = useCallback(() => {
     setPhase("revealed");
-    streamAnswer(questions[index]);
-  }, [questions, index, streamAnswer]);
+    streamAnswer(currentStreamQuestion);
+  }, [currentStreamQuestion, streamAnswer]);
 
   const handleReveal = useCallback(() => {
     setPhase("revealed");
-    setUserAnswer("");
-    streamAnswer(questions[index]);
-  }, [questions, index, streamAnswer]);
+    streamAnswer(currentStreamQuestion);
+  }, [currentStreamQuestion, streamAnswer]);
 
-  const handleNext = useCallback(() => {
-    resetStream();
-    setUserAnswer("");
-    const nextIndex = index + 1;
-    setIndex(nextIndex);
-    setPhase(nextIndex >= questions.length ? "done" : "question");
-  }, [index, questions.length, resetStream]);
-
-  const total = questions.length;
-  const currentQuestion = questions[index] ?? "";
-
-  if (questions.length === 0) {
+  // ── Loading ─────────────────────────────────────────────────────────────────
+  if (loading) {
     return (
       <div
         className="min-h-screen bg-white flex items-center justify-center"
         style={{ fontFamily: "'Montserrat', sans-serif" }}
       >
-        <span className="text-sm text-gray-400">Loading questions…</span>
+        <span className="text-sm text-gray-400">Loading quiz…</span>
       </div>
     );
   }
 
+  if (total === 0) {
+    return (
+      <div
+        className="min-h-screen bg-white flex items-center justify-center"
+        style={{ fontFamily: "'Montserrat', sans-serif" }}
+      >
+        <span className="text-sm text-gray-400">No questions available yet.</span>
+      </div>
+    );
+  }
+
+  // ── Shell (header + layout) ──────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-white" style={{ fontFamily: "'Montserrat', sans-serif" }}>
       <div style={{ backgroundColor: "#D63425" }} className="h-1 w-full" />
@@ -304,28 +345,7 @@ export default function QuizPage() {
 
       <div className="max-w-3xl mx-auto px-6 lg:px-8 py-10">
         {phase === "done" ? (
-          <div className="border border-gray-100 rounded-xl bg-white shadow-sm p-10 text-center">
-            <div
-              className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4"
-              style={{ backgroundColor: "#D63425" }}
-            >
-              <Lightbulb size={22} className="text-white" />
-            </div>
-            <h2 className="text-xl font-bold text-gray-800 mb-2">
-              You explored {total} questions
-            </h2>
-            <p className="text-sm text-gray-500 mb-6">
-              Dive deeper into the topics that caught your attention.
-            </p>
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2 text-sm font-medium text-white rounded-full px-5 py-2.5 transition-colors"
-              style={{ backgroundColor: "#D63425" }}
-            >
-              <ArrowLeft size={13} />
-              Back to wiki
-            </Link>
-          </div>
+          <CompletionCard total={total} />
         ) : (
           <>
             {/* Progress */}
@@ -344,7 +364,7 @@ export default function QuizPage() {
               </div>
             </div>
 
-            {/* Card */}
+            {/* Question card */}
             <div className="border border-gray-100 rounded-xl bg-white shadow-sm p-6">
               <p
                 className="text-xs font-semibold uppercase tracking-widest mb-3"
@@ -353,112 +373,318 @@ export default function QuizPage() {
                 Question
               </p>
               <h2 className="text-base font-bold text-gray-800 leading-snug mb-5">
-                {currentQuestion}
+                {hasMcq ? currentEntry!.question : currentStreamQuestion}
               </h2>
 
-              {phase === "question" && (
-                <>
-                  <textarea
-                    value={userAnswer}
-                    onChange={(e) => setUserAnswer(e.target.value)}
-                    placeholder="Write your answer here… (optional)"
-                    rows={4}
-                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 text-gray-700 placeholder-gray-400 focus:outline-none focus:border-gray-400 resize-none mb-4"
-                  />
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={handleSubmit}
-                      className="text-sm font-medium text-white rounded-full px-4 py-2 transition-opacity hover:opacity-90"
-                      style={{ backgroundColor: "#D63425" }}
-                    >
-                      Submit answer
-                    </button>
-                    <button
-                      onClick={handleReveal}
-                      className="text-sm text-gray-500 border border-gray-200 rounded-full px-4 py-2 hover:border-gray-400 hover:text-gray-700 transition-colors"
-                    >
-                      Reveal answer
-                    </button>
-                  </div>
-                </>
-              )}
-
-              {phase === "revealed" && (
-                <>
-                  {userAnswer.trim() && (
-                    <div className="mb-5">
-                      <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">
-                        Your answer
-                      </p>
-                      <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
-                        {userAnswer.trim()}
-                      </p>
-                    </div>
-                  )}
-
-                  <div className={userAnswer.trim() ? "border-t border-gray-100 pt-5" : undefined}>
-                    <p
-                      className="text-xs font-semibold uppercase tracking-widest mb-3"
-                      style={{ color: "#D63425" }}
-                    >
-                      Knowledge base answer
-                    </p>
-                    <div className="text-sm text-gray-700 leading-relaxed">
-                      {ragAnswer !== null ? (
-                        <>
-                          {renderAnswerWithCitations(ragAnswer, ragCitations ?? [])}
-                          {isStreaming && <span className="cite-cursor ml-0.5" />}
-                        </>
-                      ) : isStreaming ? (
-                        <span className="text-gray-400 text-xs">
-                          Searching knowledge base
-                          <span className="cite-cursor ml-0.5" />
-                        </span>
-                      ) : (
-                        <span className="text-gray-400 text-xs">
-                          No answer found in knowledge base.
-                        </span>
-                      )}
-                    </div>
-
-                    {ragCitations && ragCitations.length > 0 && (
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {ragCitations
-                          .filter((c) => c.sourceSlug)
-                          .map((c) => (
-                            <Link
-                              key={c.index}
-                              id={`citation-${c.index}`}
-                              href={`/wiki/${c.sourceSlug}`}
-                              className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[#D63425]/20 bg-white hover:bg-[#D63425]/5 transition-colors"
-                              style={{ color: "#D63425" }}
-                            >
-                              <span className="font-bold text-[10px] opacity-60">[{c.index}]</span>
-                              <span className="truncate max-w-[180px]">{c.title}</span>
-                            </Link>
-                          ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {!isStreaming && (
-                    <div className="mt-5 flex justify-end">
-                      <button
-                        onClick={handleNext}
-                        className="flex items-center gap-1.5 text-sm font-medium text-white rounded-full px-4 py-2 transition-opacity hover:opacity-90"
-                        style={{ backgroundColor: "#D63425" }}
-                      >
-                        {index + 1 >= total ? "Finish" : "Next question"}
-                        <ChevronRight size={14} />
-                      </button>
-                    </div>
-                  )}
-                </>
+              {hasMcq ? (
+                <McqBody
+                  entry={currentEntry!}
+                  selectedIndex={selectedIndex}
+                  onSelect={handleSelect}
+                  onNext={handleNext}
+                  isLast={index + 1 >= total}
+                />
+              ) : (
+                <StreamingBody
+                  phase={phase}
+                  userAnswer={userAnswer}
+                  setUserAnswer={setUserAnswer}
+                  onSubmit={handleSubmit}
+                  onReveal={handleReveal}
+                  onNext={handleNext}
+                  ragAnswer={ragAnswer}
+                  ragCitations={ragCitations}
+                  isStreaming={isStreaming}
+                  isLast={index + 1 >= total}
+                />
               )}
             </div>
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── MCQ body ──────────────────────────────────────────────────────────────────
+function McqBody({
+  entry,
+  selectedIndex,
+  onSelect,
+  onNext,
+  isLast,
+}: {
+  entry: QuizEntry;
+  selectedIndex: number | null;
+  onSelect: (i: number) => void;
+  onNext: () => void;
+  isLast: boolean;
+}) {
+  const revealed = selectedIndex !== null;
+
+  return (
+    <>
+      <div className="flex flex-col gap-2 mb-5">
+        {entry.choices.map((choice, i) => {
+          const isSelected = selectedIndex === i;
+          const isCorrect = i === entry.correctIndex;
+          let borderColor = "border-gray-200";
+          let bgColor = "bg-white";
+          let textColor = "text-gray-700";
+          let labelBg = "bg-gray-100";
+          let labelText = "text-gray-500";
+
+          if (revealed) {
+            if (isCorrect) {
+              borderColor = "border-green-400";
+              bgColor = "bg-green-50";
+              textColor = "text-green-800";
+              labelBg = "bg-green-400";
+              labelText = "text-white";
+            } else if (isSelected) {
+              borderColor = "border-red-400";
+              bgColor = "bg-red-50";
+              textColor = "text-red-800";
+              labelBg = "bg-red-400";
+              labelText = "text-white";
+            } else {
+              textColor = "text-gray-400";
+              labelText = "text-gray-400";
+              labelBg = "bg-gray-50";
+            }
+          }
+
+          return (
+            <button
+              key={i}
+              onClick={() => onSelect(i)}
+              disabled={revealed}
+              className={`w-full flex items-start gap-3 px-4 py-3 rounded-lg border text-left transition-all ${borderColor} ${bgColor} ${revealed ? "cursor-default" : "hover:border-gray-400 hover:bg-gray-50 cursor-pointer"}`}
+            >
+              <span
+                className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold mt-0.5 ${labelBg} ${labelText}`}
+              >
+                {OPTION_LABELS[i]}
+              </span>
+              <span className={`text-sm leading-snug ${textColor}`}>{choice}</span>
+              {revealed && isCorrect && (
+                <CheckCircle2 size={16} className="ml-auto shrink-0 mt-0.5 text-green-500" />
+              )}
+              {revealed && isSelected && !isCorrect && (
+                <XCircle size={16} className="ml-auto shrink-0 mt-0.5 text-red-500" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Result feedback */}
+      {revealed && selectedIndex !== null && (
+        <div className="mb-4">
+          {selectedIndex === entry.correctIndex ? (
+            <p className="text-sm font-semibold text-green-700">Correct!</p>
+          ) : (
+            <p className="text-sm font-semibold text-red-700">
+              Incorrect — the correct answer is{" "}
+              <span className="font-bold">{OPTION_LABELS[entry.correctIndex]}</span>.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Cached KB answer */}
+      {revealed && (
+        <div className="border-t border-gray-100 pt-5">
+          <p
+            className="text-xs font-semibold uppercase tracking-widest mb-3"
+            style={{ color: "#D63425" }}
+          >
+            Knowledge base answer
+          </p>
+          <div className="text-sm text-gray-700 leading-relaxed">
+            {renderAnswerWithCitations(entry.answer, entry.citations)}
+          </div>
+
+          {entry.citations.filter((c) => c.sourceSlug).length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {entry.citations
+                .filter((c) => c.sourceSlug)
+                .map((c) => (
+                  <Link
+                    key={c.index}
+                    href={`/wiki/${c.sourceSlug}`}
+                    className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[#D63425]/20 bg-white hover:bg-[#D63425]/5 transition-colors"
+                    style={{ color: "#D63425" }}
+                  >
+                    <span className="font-bold text-[10px] opacity-60">[{c.index}]</span>
+                    <span className="truncate max-w-[180px]">{c.title}</span>
+                  </Link>
+                ))}
+            </div>
+          )}
+
+          <div className="mt-5 flex justify-end">
+            <button
+              onClick={onNext}
+              className="flex items-center gap-1.5 text-sm font-medium text-white rounded-full px-4 py-2 transition-opacity hover:opacity-90"
+              style={{ backgroundColor: "#D63425" }}
+            >
+              {isLast ? "Finish" : "Next question"}
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ── Streaming fallback body ───────────────────────────────────────────────────
+function StreamingBody({
+  phase,
+  userAnswer,
+  setUserAnswer,
+  onSubmit,
+  onReveal,
+  onNext,
+  ragAnswer,
+  ragCitations,
+  isStreaming,
+  isLast,
+}: {
+  phase: Phase;
+  userAnswer: string;
+  setUserAnswer: (v: string) => void;
+  onSubmit: () => void;
+  onReveal: () => void;
+  onNext: () => void;
+  ragAnswer: string | null;
+  ragCitations: KnowledgeCitation[] | null;
+  isStreaming: boolean;
+  isLast: boolean;
+}) {
+  return (
+    <>
+      {phase === "question" && (
+        <>
+          <textarea
+            value={userAnswer}
+            onChange={(e) => setUserAnswer(e.target.value)}
+            placeholder="Write your answer here… (optional)"
+            rows={4}
+            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 text-gray-700 placeholder-gray-400 focus:outline-none focus:border-gray-400 resize-none mb-4"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onSubmit}
+              className="text-sm font-medium text-white rounded-full px-4 py-2 transition-opacity hover:opacity-90"
+              style={{ backgroundColor: "#D63425" }}
+            >
+              Submit answer
+            </button>
+            <button
+              onClick={onReveal}
+              className="text-sm text-gray-500 border border-gray-200 rounded-full px-4 py-2 hover:border-gray-400 hover:text-gray-700 transition-colors"
+            >
+              Reveal answer
+            </button>
+          </div>
+        </>
+      )}
+
+      {phase === "revealed" && (
+        <>
+          {userAnswer.trim() && (
+            <div className="mb-5">
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">
+                Your answer
+              </p>
+              <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
+                {userAnswer.trim()}
+              </p>
+            </div>
+          )}
+
+          <div className={userAnswer.trim() ? "border-t border-gray-100 pt-5" : undefined}>
+            <p
+              className="text-xs font-semibold uppercase tracking-widest mb-3"
+              style={{ color: "#D63425" }}
+            >
+              Knowledge base answer
+            </p>
+            <div className="text-sm text-gray-700 leading-relaxed">
+              {ragAnswer !== null ? (
+                <>
+                  {renderAnswerWithCitations(ragAnswer, ragCitations ?? [])}
+                  {isStreaming && <span className="cite-cursor ml-0.5" />}
+                </>
+              ) : isStreaming ? (
+                <span className="text-gray-400 text-xs">
+                  Searching knowledge base<span className="cite-cursor ml-0.5" />
+                </span>
+              ) : (
+                <span className="text-gray-400 text-xs">No answer found in knowledge base.</span>
+              )}
+            </div>
+
+            {ragCitations && ragCitations.filter((c) => c.sourceSlug).length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {ragCitations
+                  .filter((c) => c.sourceSlug)
+                  .map((c) => (
+                    <Link
+                      key={c.index}
+                      id={`citation-${c.index}`}
+                      href={`/wiki/${c.sourceSlug}`}
+                      className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-[#D63425]/20 bg-white hover:bg-[#D63425]/5 transition-colors"
+                      style={{ color: "#D63425" }}
+                    >
+                      <span className="font-bold text-[10px] opacity-60">[{c.index}]</span>
+                      <span className="truncate max-w-[180px]">{c.title}</span>
+                    </Link>
+                  ))}
+              </div>
+            )}
+          </div>
+
+          {!isStreaming && (
+            <div className="mt-5 flex justify-end">
+              <button
+                onClick={onNext}
+                className="flex items-center gap-1.5 text-sm font-medium text-white rounded-full px-4 py-2 transition-opacity hover:opacity-90"
+                style={{ backgroundColor: "#D63425" }}
+              >
+                {isLast ? "Finish" : "Next question"}
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+// ── Completion card ───────────────────────────────────────────────────────────
+function CompletionCard({ total }: { total: number }) {
+  return (
+    <div className="border border-gray-100 rounded-xl bg-white shadow-sm p-10 text-center">
+      <div
+        className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4"
+        style={{ backgroundColor: "#D63425" }}
+      >
+        <Lightbulb size={22} className="text-white" />
+      </div>
+      <h2 className="text-xl font-bold text-gray-800 mb-2">You explored {total} questions</h2>
+      <p className="text-sm text-gray-500 mb-6">Dive deeper into the topics that caught your attention.</p>
+      <Link
+        href="/"
+        className="inline-flex items-center gap-2 text-sm font-medium text-white rounded-full px-5 py-2.5 transition-colors"
+        style={{ backgroundColor: "#D63425" }}
+      >
+        <ArrowLeft size={13} />
+        Back to wiki
+      </Link>
     </div>
   );
 }
