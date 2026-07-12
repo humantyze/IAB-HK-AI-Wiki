@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { eq, asc, isNull } from "drizzle-orm";
+import { eq, asc, isNull, and, ne, sql, cosineDistance, desc, inArray } from "drizzle-orm";
 import path from "path";
-import { db, wikiPagesTable, uploadsTable } from "@workspace/db";
+import { db, wikiPagesTable, uploadsTable, knowledgeChunksTable, EMBEDDING_DIMENSIONS } from "@workspace/db";
 import { requireSuperAuth } from "../middlewares/auth";
 import { retrieve } from "../lib/knowledge-index";
 import { generateDownloadUrl } from "../lib/gcsClient";
@@ -163,6 +163,92 @@ router.post("/wiki/search", async (req, res) => {
   } catch (err) {
     logger.error({ err }, "Wiki AI search failed — client will use local fallback");
     res.json({ ranked: false, pages: allPages });
+  }
+});
+
+router.get("/wiki/:slug/related", async (req, res) => {
+  const { slug } = req.params;
+  try {
+    // 1. Fetch all chunk embeddings for this page
+    const ownChunks = await db
+      .select({ embedding: knowledgeChunksTable.embedding })
+      .from(knowledgeChunksTable)
+      .where(
+        and(
+          eq(knowledgeChunksTable.sourceType, "wiki"),
+          eq(knowledgeChunksTable.sourceSlug, slug),
+        ),
+      );
+
+    if (ownChunks.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    // 2. Average embeddings component-wise to produce centroid vector
+    const dim = EMBEDDING_DIMENSIONS;
+    const centroid = new Array<number>(dim).fill(0);
+    for (const { embedding } of ownChunks) {
+      const vec = embedding as number[];
+      for (let i = 0; i < dim; i++) centroid[i] += vec[i];
+    }
+    for (let i = 0; i < dim; i++) centroid[i] /= ownChunks.length;
+
+    // 3. Cosine similarity query against other wiki pages' chunks
+    const similarityExpr = sql<number>`1 - (${cosineDistance(knowledgeChunksTable.embedding, centroid)})`;
+    const hits = await db
+      .select({
+        sourceSlug: knowledgeChunksTable.sourceSlug,
+        similarity: similarityExpr,
+      })
+      .from(knowledgeChunksTable)
+      .where(
+        and(
+          eq(knowledgeChunksTable.sourceType, "wiki"),
+          ne(knowledgeChunksTable.sourceSlug, slug),
+        ),
+      )
+      .orderBy(desc(similarityExpr))
+      .limit(25);
+
+    // 4. Deduplicate by sourceSlug (first = highest scoring due to ORDER BY)
+    const seen = new Set<string>();
+    const topSlugs: string[] = [];
+    for (const h of hits) {
+      if (h.sourceSlug && !seen.has(h.sourceSlug)) {
+        seen.add(h.sourceSlug);
+        topSlugs.push(h.sourceSlug);
+        if (topSlugs.length >= 5) break;
+      }
+    }
+
+    if (topSlugs.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    // 5. Fetch full page rows and return in similarity order
+    const pages = await db
+      .select({
+        id: wikiPagesTable.id,
+        slug: wikiPagesTable.slug,
+        title: wikiPagesTable.title,
+        tags: wikiPagesTable.tags,
+        relatedSlugs: wikiPagesTable.relatedSlugs,
+        updatedAt: wikiPagesTable.updatedAt,
+        bodyMarkdown: wikiPagesTable.bodyMarkdown,
+        imageUrl: wikiPagesTable.imageUrl,
+      })
+      .from(wikiPagesTable)
+      .where(inArray(wikiPagesTable.slug, topSlugs));
+
+    const bySlug = new Map(pages.map((p) => [p.slug, p]));
+    const ordered = topSlugs.flatMap((s) => { const p = bySlug.get(s); return p ? [formatPageSummary(p)] : []; });
+
+    res.json(ordered);
+  } catch (err) {
+    logger.error({ err, slug }, "Failed to compute embedding-based related pages");
+    res.json([]);
   }
 });
 

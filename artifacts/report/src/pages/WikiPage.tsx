@@ -170,15 +170,27 @@ function useWikiPage(slug: string) {
     setIsLoading(true);
     setNotFound(false);
 
-    fetch(`${baseUrl}/api/wiki/${slug}`, { credentials: "include" })
+    const pagePromise = fetch(`${baseUrl}/api/wiki/${slug}`, { credentials: "include" })
       .then((r) => {
         if (r.status === 404) { setNotFound(true); setIsLoading(false); return null; }
         return r.json() as Promise<WikiPageData>;
-      })
-      .then((data) => {
-        if (!data) return undefined;
+      });
+
+    const embeddingRelatedPromise = fetch(`${baseUrl}/api/wiki/${slug}/related`, { credentials: "include" })
+      .then((r) => r.ok ? r.json() as Promise<RelatedPage[]> : [])
+      .catch(() => [] as RelatedPage[]);
+
+    Promise.all([pagePromise, embeddingRelatedPromise])
+      .then(([data, embeddingRelated]) => {
+        if (!data) return;
         setPage(data);
 
+        if (embeddingRelated.length > 0) {
+          setRelated(embeddingRelated);
+          return;
+        }
+
+        // Fallback: filter by relatedSlugs from the same upload batch
         if (data.relatedSlugs?.length > 0) {
           return fetch(`${baseUrl}/api/wiki`, { credentials: "include" })
             .then((r) => r.json() as Promise<RelatedPage[]>)
@@ -187,7 +199,6 @@ function useWikiPage(slug: string) {
               setRelated(related);
             });
         }
-        return undefined;
       })
       .finally(() => setIsLoading(false));
   }, [slug]);
