@@ -65,7 +65,7 @@ export default function SuperAdminLogin() {
             </div>
             <CardTitle className="font-serif text-3xl font-bold tracking-tight text-foreground/90">ADMIN PANEL</CardTitle>
             <CardDescription className="font-display tracking-[0.2em] uppercase text-[10px] mt-4 text-muted-foreground">
-              State of AI Report • Restricted Access
+              HK AI Marketing Playbook • Restricted Access
             </CardDescription>
           </CardHeader>
           <CardContent className="px-8 pb-10">

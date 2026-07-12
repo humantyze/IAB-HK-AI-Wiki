@@ -8,7 +8,7 @@ interface PageMeta {
   ogType?: string;
 }
 
-const SITE_NAME = "State of AI in HK Marketing";
+const SITE_NAME = "HK AI Marketing Playbook";
 const DEFAULT_OG_IMAGE = "/opengraph.jpg";
 
 function setMetaTag(selector: string, content: string, attr: "name" | "property" = "name") {

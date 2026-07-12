@@ -209,7 +209,7 @@ export default function WikiIndex() {
 
   usePageMeta({
     title: "Knowledge Base",
-    description: "Explore the State of AI in HK Marketing knowledge base — the definitive resource on AI adoption, tools, regulations, and trends in Hong Kong's marketing industry.",
+    description: "Explore the HK AI Marketing Playbook — the definitive resource on AI adoption, tools, regulations, and trends in Hong Kong's marketing industry.",
     canonical: "/",
     ogType: "website",
   });
@@ -528,7 +528,7 @@ export default function WikiIndex() {
         "@type": "CollectionPage",
         "@id": `${canonicalOrigin}${baseUrl}/`,
         "url": `${canonicalOrigin}${baseUrl}/`,
-        "name": "Hong Kong Bible of AI Adoption — State of AI in HK Marketing",
+        "name": "Hong Kong Bible of AI Adoption — HK AI Marketing Playbook",
         "description": "A living knowledge base on AI adoption in Hong Kong marketing, curated by the IAB Hong Kong AI and Technology Committee.",
         "publisher": {
           "@type": "Organization",
@@ -610,7 +610,7 @@ export default function WikiIndex() {
       <div className="max-w-6xl mx-auto px-6 lg:px-8 pt-12 pb-8">
         <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: "#D63425" }}>IAB Hong Kong · AI & TECH COMMITTEE</p>
         <h1 className="text-3xl font-bold text-gray-800 mb-3" style={{ letterSpacing: "-0.5px" }}>HONG KONG AI MARKETING PLAYBOOK</h1>
-        <p className="text-sm text-gray-500 max-w-2xl leading-relaxed">Welcome to the iAB Hong Kong State of AI Knowledge Base! An initiative of the 2026 AI and Technology Committee, this platform is designed as a living knowledge resource inspired by the "Second Brain" concept popularized by Andrej Karpathy. As new material is submitted, our language model reviews it in full, identifies key entities and ideas, and creates or updates relevant wiki pages. It also refines topic summaries, builds cross-links across related subjects, and flags inconsistencies, helping each new source strengthen an evolving, interconnected knowledge graph.</p>
+        <p className="text-sm text-gray-500 max-w-2xl leading-relaxed">Welcome to the HK AI Marketing Playbook! An initiative of the 2026 AI and Technology Committee, this platform is designed as a living knowledge resource inspired by the "Second Brain" concept popularized by Andrej Karpathy. As new material is submitted, our language model reviews it in full, identifies key entities and ideas, and creates or updates relevant wiki pages. It also refines topic summaries, builds cross-links across related subjects, and flags inconsistencies, helping each new source strengthen an evolving, interconnected knowledge graph.</p>
 
         {/* Search */}
         <form onSubmit={handleSubmit} className="mt-6 flex items-center gap-2 max-w-xl">
@@ -940,7 +940,7 @@ export default function WikiIndex() {
       {/* Footer */}
       <footer className="border-t border-gray-100 py-8 px-6 bg-[#fafafa]">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <span className="text-xs text-gray-400 font-medium uppercase tracking-widest">IAB HK · State of AI in Marketing</span>
+          <span className="text-xs text-gray-400 font-medium uppercase tracking-widest">IAB HK · HK AI Marketing Playbook</span>
           <div className="flex items-center gap-5">
             <span className="text-xs text-gray-400">
               Created by{" "}

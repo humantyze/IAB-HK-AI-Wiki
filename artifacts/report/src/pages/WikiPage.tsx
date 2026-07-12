@@ -250,7 +250,7 @@ export default function WikiPage({ params }: WikiPageProps) {
           "@type": "CollectionPage",
           "@id": `${canonicalOrigin}${baseNoSlash}/`,
           "url": `${canonicalOrigin}${baseNoSlash}/`,
-          "name": "Hong Kong Bible of AI Adoption — State of AI in HK Marketing",
+          "name": "Hong Kong Bible of AI Adoption — HK AI Marketing Playbook",
         },
         ...(page.sources.some((s) => /^https?:\/\//i.test(s.ref)) ? {
           "citation": page.sources

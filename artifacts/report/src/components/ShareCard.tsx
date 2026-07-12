@@ -159,7 +159,7 @@ export const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ width: 12, height: 12, borderRadius: 999, backgroundColor: RED }} />
               <span style={{ fontSize: 16, fontWeight: 600, color: "#6b7280" }}>
-                State of AI in HK Marketing
+                HK AI Marketing Playbook
               </span>
             </div>
           </div>

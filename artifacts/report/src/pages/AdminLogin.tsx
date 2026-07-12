@@ -66,7 +66,7 @@ export default function AdminLogin() {
             </div>
             <CardTitle className="font-serif text-3xl font-bold tracking-tight text-foreground/90">CONTENT PORTAL</CardTitle>
             <CardDescription className="font-display tracking-[0.2em] uppercase text-[10px] mt-4 text-muted-foreground">
-              State of AI Report • Contributor Portal
+              HK AI Marketing Playbook • Contributor Portal
             </CardDescription>
           </CardHeader>
           <CardContent className="px-8 pb-10">
