@@ -653,6 +653,32 @@ export default function WikiIndex() {
           ))}
         </div>
       </div>
+      {/* Quiz CTA */}
+      <div className="max-w-6xl mx-auto px-6 lg:px-8 pb-6">
+        <Link href="/quiz">
+          <div
+            className="inline-flex items-center gap-4 rounded-xl border px-5 py-3.5 cursor-pointer transition-all hover:shadow-md group"
+            style={{ borderColor: "#D63425", backgroundColor: "#fff5f5" }}
+          >
+            <div
+              className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+              style={{ backgroundColor: "#D63425" }}
+            >
+              <Lightbulb size={16} color="#fff" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-800 group-hover:text-[#D63425] transition-colors">
+                Test your AI marketing knowledge
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Take the interactive quiz — questions drawn from the full knowledge base
+              </p>
+            </div>
+            <ChevronRight size={16} className="text-gray-400 group-hover:text-[#D63425] ml-auto shrink-0 transition-colors" />
+          </div>
+        </Link>
+      </div>
+
       {/* Tag filters + count row */}
       <div className="max-w-6xl mx-auto px-6 lg:px-8">
         <div className="flex flex-wrap gap-2 mb-4">
