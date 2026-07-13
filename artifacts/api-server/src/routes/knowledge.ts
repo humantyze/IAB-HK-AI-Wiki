@@ -92,10 +92,15 @@ router.post("/knowledge/search", async (req, res) => {
   const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
 
   // Render passages with their citation numbers for grounding the prompt.
+  // Truncate each passage to keep the total input well within the model's
+  // context window — untruncated wiki pages can be thousands of tokens each,
+  // leaving no room for the answer (observed as chars=0, finishReason="length").
   const context = chunks
+    .slice(0, 6)
     .map((c) => {
       const idx = indexByKey.get(citationKey(c.sourceType, c.sourceId)) ?? 0;
-      return `[${idx}] (${c.sourceType}) ${c.title}\n${c.content}`;
+      const snippet = c.content.length > 800 ? c.content.slice(0, 800) + "…" : c.content;
+      return `[${idx}] (${c.sourceType}) ${c.title}\n${snippet}`;
     })
     .join("\n\n---\n\n");
 
