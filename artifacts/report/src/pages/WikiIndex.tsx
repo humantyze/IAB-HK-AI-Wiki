@@ -14,6 +14,7 @@ interface WikiPageSummary {
   updatedAt: string;
   excerpt: string;
   imageUrl?: string | null;
+  synthesized?: boolean;
 }
 
 interface KnowledgeCitation {
@@ -1014,6 +1015,12 @@ export default function WikiIndex() {
                     )}
                     <div className="p-5 flex flex-col gap-3 flex-1">
                       <div className="flex flex-wrap gap-1.5">
+                        {page.synthesized && (
+                          <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-sky-50 text-sky-600 border-sky-200">
+                            <Sparkles size={9} />
+                            Synthesized
+                          </span>
+                        )}
                         {page.tags.map((tag) => (
                           <span
                             key={tag}
@@ -1022,7 +1029,7 @@ export default function WikiIndex() {
                             {tag}
                           </span>
                         ))}
-                        {page.tags.length === 0 && (
+                        {page.tags.length === 0 && !page.synthesized && (
                           <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-gray-100 text-gray-500 border-gray-200">
                             General
                           </span>

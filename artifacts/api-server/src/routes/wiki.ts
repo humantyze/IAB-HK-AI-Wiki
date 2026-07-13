@@ -20,7 +20,9 @@ function formatPageSummary(p: {
   updatedAt: Date;
   bodyMarkdown: unknown;
   imageUrl: string | null;
+  sources: unknown;
 }) {
+  const sources = (p.sources as Array<{ ref?: string }>) ?? [];
   return {
     id: p.id,
     slug: p.slug,
@@ -30,6 +32,7 @@ function formatPageSummary(p: {
     updatedAt: p.updatedAt.toISOString(),
     excerpt: (p.bodyMarkdown as string).replace(/^#+\s.*/gm, "").replace(/[*_`]/g, "").trim().slice(0, 200),
     imageUrl: p.imageUrl ?? null,
+    synthesized: sources.some((s) => s.ref === "wiki-seed-synthesis"),
   };
 }
 
@@ -46,6 +49,7 @@ async function fetchAllPageSummaries() {
       updatedAt: wikiPagesTable.updatedAt,
       bodyMarkdown: wikiPagesTable.bodyMarkdown,
       imageUrl: wikiPagesTable.imageUrl,
+      sources: wikiPagesTable.sources,
     })
     .from(wikiPagesTable)
     .orderBy(asc(wikiPagesTable.title));
