@@ -393,13 +393,14 @@ For each new page return:
 - slug: kebab-case unique identifier
 - title: human-readable title
 - body_markdown: Write like a sharp industry analyst briefing a busy marketing executive — direct, concrete, and clear about why each point matters. Prefer specific numbers, named examples, and short paragraphs over general statements. Avoid academic hedging and filler. Structure every body_markdown exactly as follows:
-  1. ## TL;DR — 2–3 bullet points summarising the page
+  1. ## TL;DR — then on the very next line the plain text "🔗 Synthesized insight", then 2–3 bullet points summarising the page
   2. **Why it matters for HK marketers:** — one direct sentence
   3. Main content using ## and ### headings, bullet points, and bold for key terms
   4. Any notable statistics from the source as bold standalone callout lines (e.g. **67% of HK brands reported X in 2024.**)
   5. ## So what for marketers — 1–2 sentences of direct, actionable takeaway
+  6. A horizontal rule (---) followed by this exact paragraph in italics: *This page was synthesized by AI from themes across multiple member contributions, rather than extracted from a single source document. It may contain interpretive connections or inaccuracies; verify key claims against the source pages before citing.*
 - tags: 1-3 tags from: ["Organizations", "Statistics", "Tools & Platforms", "Regulatory", "Trends", "Case Studies", "Frameworks"]
-- related_slugs: empty array
+- related_slugs: slugs of the pages from the "Already extracted" list that this synthesis directly draws from (derive the slug from the title by converting to kebab-case — lowercase, spaces to hyphens, remove punctuation; include only pages that genuinely informed this synthesis)
 
 Rules:
 - Do NOT duplicate any page from the "Already extracted" list
@@ -408,7 +409,7 @@ Rules:
 - Return ONLY valid JSON with no markdown fences
 
 JSON schema:
-{ "wikiPages": [ { "slug": "...", "title": "...", "body_markdown": "...", "tags": [...], "related_slugs": [] } ] }`;
+{ "wikiPages": [ { "slug": "...", "title": "...", "body_markdown": "...", "tags": [...], "related_slugs": ["..."] } ] }`;
 
     const userPrompt = `Already extracted wiki pages:\n${alreadyExtracted}\n\n---\n\nContent:\n${sectionOverview}`;
 

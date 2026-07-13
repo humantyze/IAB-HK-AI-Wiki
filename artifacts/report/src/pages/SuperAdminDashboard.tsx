@@ -38,6 +38,9 @@ export default function SuperAdminDashboard() {
   const [imageBackfilling, setImageBackfilling] = useState(false);
   const [imageBackfillResult, setImageBackfillResult] = useState<{ pagesUpdated: number; uploadsProcessed: number; message?: string } | null>(null);
 
+  const [synthesizing, setSynthesizing] = useState(false);
+  const [synthesizeResult, setSynthesizeResult] = useState<{ created: number } | null>(null);
+
   const [reprocessing, setReprocessing] = useState(false);
   const [reprocessResult, setReprocessResult] = useState<{ count: number } | null>(null);
   const [reprocessingIds, setReprocessingIds] = useState<Set<number>>(new Set());
@@ -227,6 +230,35 @@ export default function SuperAdminDashboard() {
       toast({ title: "Clear Failed", description: message, variant: "destructive" });
     } finally {
       setClearImageRunning(false);
+    }
+  };
+
+  const handleSynthesizeGaps = async () => {
+    setSynthesizing(true);
+    setSynthesizeResult(null);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/wiki/synthesize-gaps`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json() as { created?: number; error?: string };
+      if (!res.ok) {
+        toast({ title: "Synthesis Failed", description: String(data.error ?? "Unknown error"), variant: "destructive" });
+      } else {
+        const created = data.created ?? 0;
+        setSynthesizeResult({ created });
+        toast({
+          title: "Synthesis Complete",
+          description: `${created} new gap page${created !== 1 ? "s" : ""} added to the knowledge base.`,
+        });
+        void refetchUploads();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Request failed";
+      toast({ title: "Synthesis Failed", description: message, variant: "destructive" });
+    } finally {
+      setSynthesizing(false);
     }
   };
 
@@ -631,6 +663,30 @@ export default function SuperAdminDashboard() {
                     {imageBackfilling
                       ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Processing…</>
                       : <><ImagePlay className="w-3.5 h-3.5 mr-2" />Backfill Images</>}
+                  </Button>
+                </div>
+
+                <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-6">
+                  <h3 className="font-display text-sm tracking-widest uppercase text-sky-400 mb-2">Synthesize Gap Pages</h3>
+                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                    Use AI to identify cross-cutting themes and frameworks implied across all uploaded content but not yet represented as dedicated wiki pages. Creates 3–8 new synthesized pages per run. Pages are clearly marked as AI-synthesized.
+                  </p>
+                  {synthesizeResult && (
+                    <div className="mb-4 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-sky-400" />
+                      <span className="text-sm text-foreground/80">
+                        <strong>{synthesizeResult.created}</strong> new gap page{synthesizeResult.created !== 1 ? "s" : ""} added to the knowledge base
+                      </span>
+                    </div>
+                  )}
+                  <Button
+                    onClick={handleSynthesizeGaps}
+                    disabled={synthesizing}
+                    className="font-display uppercase tracking-[0.15em] text-[11px] bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 rounded-xl h-11 px-6 transition-all"
+                  >
+                    {synthesizing
+                      ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Synthesizing…</>
+                      : <><Sparkles className="w-3.5 h-3.5 mr-2" />Synthesize Gap Pages</>}
                   </Button>
                 </div>
 

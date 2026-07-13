@@ -6,8 +6,10 @@ import { requireSuperAuth } from "../middlewares/auth";
 import { retrieve } from "../lib/knowledge-index";
 import { generateDownloadUrl } from "../lib/gcsClient";
 import { extractImages } from "../lib/pdf-extractor";
-import { assignImageToWikiPage } from "../lib/ai-service";
+import { assignImageToWikiPage, synthesizeWikiGaps } from "../lib/ai-service";
 import { logger } from "../lib/logger";
+
+let synthesizeRunning = false;
 
 function formatPageSummary(p: {
   id: number;
@@ -420,6 +422,35 @@ router.post("/wiki/backfill-images", requireSuperAuth, async (_req, res) => {
   } catch (err) {
     logger.error({ err }, "Wiki image backfill failed");
     res.status(500).json({ error: "Wiki image backfill failed" });
+  }
+});
+
+router.post("/wiki/synthesize-gaps", requireSuperAuth, async (_req, res) => {
+  if (synthesizeRunning) {
+    res.status(409).json({ error: "Synthesis already in progress" });
+    return;
+  }
+  synthesizeRunning = true;
+  try {
+    const pages = await db
+      .select({ title: wikiPagesTable.title, bodyMarkdown: wikiPagesTable.bodyMarkdown })
+      .from(wikiPagesTable)
+      .orderBy(asc(wikiPagesTable.title));
+
+    const sectionSummaries = pages.map((p) => ({
+      title: p.title,
+      bodyMarkdown: p.bodyMarkdown as string,
+    }));
+    const existingPageTitles = pages.map((p) => p.title);
+
+    const { created } = await synthesizeWikiGaps(sectionSummaries, existingPageTitles);
+    logger.info({ created }, "Wiki gap synthesis complete");
+    res.json({ created });
+  } catch (err) {
+    logger.error({ err }, "Wiki gap synthesis failed");
+    res.status(500).json({ error: "Wiki gap synthesis failed" });
+  } finally {
+    synthesizeRunning = false;
   }
 });
 
