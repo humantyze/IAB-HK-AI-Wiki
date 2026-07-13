@@ -7,7 +7,7 @@ import { generateAndStoreQuiz } from "./quiz-generator";
 let regenRunning = false;
 
 /**
- * Generate 10 sample questions from current wiki content, verify each has rich
+ * Generate 20 sample questions from current wiki content, verify each has rich
  * RAG retrieval (non-zero reranker score sum), and persist to DB.
  * Fire-and-forget safe: guards against concurrent runs.
  */
@@ -62,7 +62,7 @@ async function _generate(): Promise<{ questions: string[] }> {
         role: "system",
         content:
           "You are generating questions for a knowledge base about AI in Hong Kong's marketing industry. " +
-          "Generate exactly 15 broad, conceptual questions a marketing professional would want answered. " +
+          "Generate exactly 25 broad, conceptual questions a marketing professional would want answered. " +
           "Questions should ask HOW or WHY things work, not quote specific documents or data points. " +
           "Good examples: 'How do agentic AI systems change media buying?', " +
           "'Why are walled gardens affecting programmatic advertising?', " +
@@ -72,7 +72,7 @@ async function _generate(): Promise<{ questions: string[] }> {
           "Each question must be answerable from any 2-3 relevant knowledge base chunks — " +
           "not dependent on one specific document or statistic. " +
           "Keep questions concise (under 15 words). Do not ask purely generic marketing questions unrelated to AI. " +
-          "Return ONLY a valid JSON array of 15 question strings, no preamble or explanation.",
+          "Return ONLY a valid JSON array of 25 question strings, no preamble or explanation.",
       },
       {
         role: "user",
@@ -103,7 +103,7 @@ async function _generate(): Promise<{ questions: string[] }> {
 
   // Score each candidate by RAG richness: sum of reranker scores across top chunks.
   const scored: Array<{ question: string; score: number }> = [];
-  for (const question of candidates.slice(0, 15)) {
+  for (const question of candidates.slice(0, 25)) {
     if (typeof question !== "string" || question.trim().length < 5) continue;
     try {
       const chunks = await retrieve(question.trim(), { limit: 8 });
@@ -117,7 +117,7 @@ async function _generate(): Promise<{ questions: string[] }> {
   }
 
   scored.sort((a, b) => b.score - a.score);
-  const questions = scored.slice(0, 10).map((s) => s.question);
+  const questions = scored.slice(0, 20).map((s) => s.question);
 
   if (questions.length === 0) {
     logger.warn("Question generation produced 0 RAG-verified questions");
