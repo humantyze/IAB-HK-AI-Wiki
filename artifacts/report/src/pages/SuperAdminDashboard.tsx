@@ -41,6 +41,13 @@ export default function SuperAdminDashboard() {
   const [synthesizing, setSynthesizing] = useState(false);
   const [synthesizeResult, setSynthesizeResult] = useState<{ created: number } | null>(null);
 
+  const [deletePagesPanelOpen, setDeletePagesPanelOpen] = useState(false);
+  const [wikiPageList, setWikiPageList] = useState<Array<{ slug: string; title: string; synthesized: boolean }>>([]);
+  const [wikiPageListLoading, setWikiPageListLoading] = useState(false);
+  const [selectedSlugs, setSelectedSlugs] = useState<Set<string>>(new Set());
+  const [deletingPages, setDeletingPages] = useState(false);
+  const [deletePageResult, setDeletePageResult] = useState<{ deleted: number } | null>(null);
+
   const [reprocessing, setReprocessing] = useState(false);
   const [reprocessResult, setReprocessResult] = useState<{ count: number } | null>(null);
   const [reprocessingIds, setReprocessingIds] = useState<Set<number>>(new Set());
@@ -230,6 +237,52 @@ export default function SuperAdminDashboard() {
       toast({ title: "Clear Failed", description: message, variant: "destructive" });
     } finally {
       setClearImageRunning(false);
+    }
+  };
+
+  const handleOpenDeletePanel = async () => {
+    setDeletePagesPanelOpen(true);
+    setDeletePageResult(null);
+    setSelectedSlugs(new Set());
+    if (wikiPageList.length > 0) return;
+    setWikiPageListLoading(true);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/wiki`, { credentials: "include" });
+      const data = await res.json() as Array<{ slug: string; title: string; synthesized?: boolean }>;
+      setWikiPageList(data.map((p) => ({ slug: p.slug, title: p.title, synthesized: p.synthesized ?? false })));
+    } catch (err) {
+      toast({ title: "Failed to load pages", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setWikiPageListLoading(false);
+    }
+  };
+
+  const handleDeletePages = async () => {
+    if (selectedSlugs.size === 0) return;
+    setDeletingPages(true);
+    setDeletePageResult(null);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/wiki/pages`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slugs: Array.from(selectedSlugs) }),
+      });
+      const data = await res.json() as { deleted?: number; error?: string };
+      if (!res.ok) {
+        toast({ title: "Deletion Failed", description: String(data.error ?? "Unknown error"), variant: "destructive" });
+      } else {
+        setDeletePageResult({ deleted: data.deleted ?? 0 });
+        setWikiPageList((prev) => prev.filter((p) => !selectedSlugs.has(p.slug)));
+        setSelectedSlugs(new Set());
+        toast({ title: "Pages Deleted", description: `${data.deleted ?? 0} page${(data.deleted ?? 0) !== 1 ? "s" : ""} removed from the knowledge base.` });
+      }
+    } catch (err) {
+      toast({ title: "Deletion Failed", description: err instanceof Error ? err.message : "Request failed", variant: "destructive" });
+    } finally {
+      setDeletingPages(false);
     }
   };
 
@@ -720,6 +773,83 @@ export default function SuperAdminDashboard() {
                         : <><ImageOff className="w-3.5 h-3.5 mr-2" />Clear Image</>}
                     </Button>
                   </div>
+                </div>
+
+                <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6">
+                  <h3 className="font-display text-sm tracking-widest uppercase text-red-400 mb-2">Delete Wiki Pages</h3>
+                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                    Permanently remove individual wiki pages and their knowledge index entries. This cannot be undone.
+                  </p>
+                  {deletePageResult && (
+                    <div className="mb-4 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-red-400" />
+                      <span className="text-sm text-foreground/80"><strong>{deletePageResult.deleted}</strong> page{deletePageResult.deleted !== 1 ? "s" : ""} permanently deleted</span>
+                    </div>
+                  )}
+                  {!deletePagesPanelOpen ? (
+                    <Button
+                      onClick={handleOpenDeletePanel}
+                      className="font-display uppercase tracking-[0.15em] text-[11px] bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl h-11 px-6 transition-all"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-2" />Select Pages to Delete
+                    </Button>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-foreground/50">
+                          {wikiPageListLoading ? "Loading pages…" : `${wikiPageList.length} pages · ${selectedSlugs.size} selected`}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setSelectedSlugs(selectedSlugs.size === wikiPageList.length ? new Set() : new Set(wikiPageList.map((p) => p.slug)))}
+                            className="text-[11px] text-red-400 hover:text-red-300 transition-colors"
+                          >
+                            {selectedSlugs.size === wikiPageList.length ? "Deselect all" : "Select all"}
+                          </button>
+                          <button
+                            onClick={() => { setDeletePagesPanelOpen(false); setSelectedSlugs(new Set()); }}
+                            className="text-foreground/40 hover:text-foreground/70 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      {wikiPageListLoading ? (
+                        <div className="flex items-center gap-2 text-foreground/40 text-sm py-4">
+                          <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />Loading…
+                        </div>
+                      ) : (
+                        <div className="max-h-64 overflow-y-auto rounded-lg border border-border/30 divide-y divide-border/20">
+                          {wikiPageList.map((page) => (
+                            <label key={page.slug} className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-red-500/5 transition-colors">
+                              <input
+                                type="checkbox"
+                                checked={selectedSlugs.has(page.slug)}
+                                onChange={(e) => {
+                                  const next = new Set(selectedSlugs);
+                                  if (e.target.checked) next.add(page.slug); else next.delete(page.slug);
+                                  setSelectedSlugs(next);
+                                }}
+                                className="accent-red-500 w-3.5 h-3.5 shrink-0"
+                              />
+                              <span className="text-xs text-foreground/80 leading-snug flex-1 min-w-0">
+                                {page.synthesized && <span className="text-sky-400 mr-1">✦</span>}{page.title}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                      <Button
+                        onClick={handleDeletePages}
+                        disabled={deletingPages || selectedSlugs.size === 0}
+                        className="font-display uppercase tracking-[0.15em] text-[11px] bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl h-11 px-6 transition-all"
+                      >
+                        {deletingPages
+                          ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Deleting…</>
+                          : <><Trash2 className="w-3.5 h-3.5 mr-2" />Delete {selectedSlugs.size > 0 ? `${selectedSlugs.size} ` : ""}Page{selectedSlugs.size !== 1 ? "s" : ""}</>}
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-6">

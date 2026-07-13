@@ -458,4 +458,26 @@ router.post("/wiki/synthesize-gaps", requireSuperAuth, async (_req, res) => {
   }
 });
 
+router.delete("/wiki/pages", requireSuperAuth, async (req, res) => {
+  const { slugs } = req.body as { slugs?: unknown };
+  if (!Array.isArray(slugs) || slugs.length === 0 || !slugs.every((s) => typeof s === "string")) {
+    res.status(400).json({ error: "slugs must be a non-empty array of strings" });
+    return;
+  }
+  try {
+    await db.delete(knowledgeChunksTable).where(
+      and(
+        eq(knowledgeChunksTable.sourceType, "wiki"),
+        inArray(knowledgeChunksTable.sourceSlug, slugs as string[]),
+      ),
+    );
+    const result = await db.delete(wikiPagesTable).where(inArray(wikiPagesTable.slug, slugs as string[])).returning({ slug: wikiPagesTable.slug });
+    logger.info({ deleted: result.length, slugs }, "Wiki pages deleted");
+    res.json({ deleted: result.length });
+  } catch (err) {
+    logger.error({ err }, "Wiki page deletion failed");
+    res.status(500).json({ error: "Wiki page deletion failed" });
+  }
+});
+
 export default router;
