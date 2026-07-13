@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { requireSuperAuth } from "../middlewares/auth";
 import { retrieve, reindexAll, type RetrievedChunk } from "../lib/knowledge-index";
 import { generateAndStoreQuestions, getStoredQuestions } from "../lib/question-generator";
-import { getStoredQuiz } from "../lib/quiz-generator";
+import { getStoredQuiz, generateAndStoreQuiz } from "../lib/quiz-generator";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -220,6 +220,17 @@ router.post("/knowledge/regen-questions", requireSuperAuth, async (_req, res) =>
   } catch (err) {
     logger.error({ err }, "Question regeneration failed");
     res.status(500).json({ error: "Question regeneration failed" });
+  }
+});
+
+router.post("/knowledge/regen-quiz", requireSuperAuth, async (_req, res) => {
+  try {
+    await generateAndStoreQuiz();
+    const entries = await getStoredQuiz();
+    res.json({ count: entries.length });
+  } catch (err) {
+    logger.error({ err }, "Quiz regeneration failed");
+    res.status(500).json({ error: "Quiz regeneration failed" });
   }
 });
 

@@ -48,6 +48,9 @@ export default function SuperAdminDashboard() {
   const [deletingPages, setDeletingPages] = useState(false);
   const [deletePageResult, setDeletePageResult] = useState<{ deleted: number } | null>(null);
 
+  const [regenQuizRunning, setRegenQuizRunning] = useState(false);
+  const [regenQuizResult, setRegenQuizResult] = useState<{ count: number } | null>(null);
+
   const [reprocessing, setReprocessing] = useState(false);
   const [reprocessResult, setReprocessResult] = useState<{ count: number } | null>(null);
   const [reprocessingIds, setReprocessingIds] = useState<Set<number>>(new Set());
@@ -283,6 +286,30 @@ export default function SuperAdminDashboard() {
       toast({ title: "Deletion Failed", description: err instanceof Error ? err.message : "Request failed", variant: "destructive" });
     } finally {
       setDeletingPages(false);
+    }
+  };
+
+  const handleRegenQuiz = async () => {
+    setRegenQuizRunning(true);
+    setRegenQuizResult(null);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/knowledge/regen-quiz`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json() as { count?: number; error?: string };
+      if (!res.ok) {
+        toast({ title: "Quiz Regeneration Failed", description: String(data.error ?? "Unknown error"), variant: "destructive" });
+      } else {
+        const count = data.count ?? 0;
+        setRegenQuizResult({ count });
+        toast({ title: "Quiz Regenerated", description: `${count} question${count !== 1 ? "s" : ""} ready.` });
+      }
+    } catch (err) {
+      toast({ title: "Quiz Regeneration Failed", description: err instanceof Error ? err.message : "Request failed", variant: "destructive" });
+    } finally {
+      setRegenQuizRunning(false);
     }
   };
 
@@ -873,6 +900,30 @@ export default function SuperAdminDashboard() {
                     {regenQuestionsRunning
                       ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Generating…</>
                       : <><Sparkles className="w-3.5 h-3.5 mr-2" />Regenerate Questions</>}
+                  </Button>
+                </div>
+
+                <div className="rounded-xl border border-teal-500/20 bg-teal-500/5 p-6">
+                  <h3 className="font-display text-sm tracking-widest uppercase text-teal-400 mb-2">Regenerate Quiz Cache</h3>
+                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                    Rebuild the multiple-choice quiz from current sample questions and wiki content. Runs automatically after questions are regenerated. Use this to force a refresh after prompt changes or manual edits.
+                  </p>
+                  {regenQuizResult && (
+                    <div className="mb-4 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-teal-400" />
+                      <span className="text-sm text-foreground/80">
+                        <strong>{regenQuizResult.count}</strong> question{regenQuizResult.count !== 1 ? "s" : ""} generated and live
+                      </span>
+                    </div>
+                  )}
+                  <Button
+                    onClick={handleRegenQuiz}
+                    disabled={regenQuizRunning}
+                    className="font-display uppercase tracking-[0.15em] text-[11px] bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/30 rounded-xl h-11 px-6 transition-all"
+                  >
+                    {regenQuizRunning
+                      ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Generating…</>
+                      : <><Sparkles className="w-3.5 h-3.5 mr-2" />Regenerate Quiz</>}
                   </Button>
                 </div>
               </CardContent>
