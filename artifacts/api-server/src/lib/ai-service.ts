@@ -453,7 +453,7 @@ JSON schema:
             bodyMarkdown: renderBodyFromSegments(segments),
             bodySegments: segments,
             tags: page.tags,
-            relatedSlugs: [],
+            relatedSlugs: page.related_slugs ?? [],
             sources: [{ label: "Synthesis — cross-content analysis", ref: "wiki-seed-synthesis" }],
           });
           didCreate = true;
