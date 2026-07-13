@@ -171,18 +171,21 @@ router.post("/knowledge/search", async (req, res) => {
 
   try {
     let charCount = 0;
+    let finishReason: string | null = null;
     for await (const chunk of openaiStream) {
-      const c = chunk as { choices?: Array<{ delta?: { content?: string | null } }> };
-      const delta = c.choices?.[0]?.delta?.content ?? "";
+      const c = chunk as { choices?: Array<{ delta?: { content?: string | null }; finish_reason?: string | null }> };
+      const choice = c.choices?.[0];
+      const delta = choice?.delta?.content ?? "";
       if (delta) {
         // JSON-encode each delta so newlines and special chars survive the wire.
         sendEvent("token", JSON.stringify(delta));
         charCount += delta.length;
       }
+      if (choice?.finish_reason) finishReason = choice.finish_reason;
     }
     sendEvent("done", "");
     logger.info(
-      { query: trimmed, chunks: chunks.length, citations: citations.length, chars: charCount },
+      { query: trimmed, chunks: chunks.length, citations: citations.length, chars: charCount, finishReason },
       "Knowledge search streamed",
     );
   } catch (err) {
