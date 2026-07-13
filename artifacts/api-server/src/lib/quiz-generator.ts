@@ -5,6 +5,22 @@ import { retrieve } from "./knowledge-index";
 import { getStoredQuestions } from "./question-generator";
 import { logger } from "./logger";
 
+/**
+ * Bump this date whenever the quiz prompt or distractor schema changes.
+ * Any cache row generated before this cutoff will be purged at startup so
+ * a fresh generation picks up the new prompt.
+ */
+const QUIZ_CACHE_CUTOFF = new Date("2026-07-13T00:00:00Z");
+
+function shuffleArray<T>(arr: T[]): T[] {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 let quizGenRunning = false;
 
 export async function generateAndStoreQuiz(): Promise<void> {
@@ -62,8 +78,12 @@ async function _generateQuiz(): Promise<void> {
               "You generate multiple-choice quiz entries for a knowledge base about AI in Hong Kong marketing. " +
               "Given a question and context excerpts, return ONLY valid JSON with no preamble, no markdown, no code fences. " +
               'Exact shape: {"choices":["option A","option B","option C","option D"],"correctIndex":0,"answer":"2-4 sentence explanation grounded in context"} ' +
-              "Rules: exactly 4 choices, correctIndex is 0-3, choices[correctIndex] is the factually correct answer, " +
-              "the other three are plausible but wrong distractors from the same domain. " +
+              "Rules: exactly 4 choices, correctIndex is 0-3, choices[correctIndex] is the factually correct answer. " +
+              "The three wrong answers MUST each represent a DIFFERENT type of error — use exactly these three types, one wrong answer per type:\n" +
+              "• Overreach — states the rule applies more broadly or strictly than it actually does. Must NOT simply add 'always', 'never', or 'any' to the correct answer; it must change the scope, entity, or threshold in a substantive way.\n" +
+              "• Reversal — directly contradicts the correct answer (e.g. 'the Act does NOT apply to…', 'this is NOT required…', 'there is no obligation to…').\n" +
+              "• Wrong mechanism — reaches a plausible-sounding conclusion but via an entirely incorrect entity, body, causal chain, or legal instrument.\n" +
+              "No two options — including the correct answer — may share the same logical structure or error type. " +
               "Answer must be 2-4 sentences, grounded in the provided context, written for a marketing professional.",
           },
           {
@@ -114,6 +134,11 @@ async function _generateQuiz(): Promise<void> {
         continue;
       }
 
+      // Shuffle choices so the correct answer isn't always in the same position
+      const correctText = (choices as string[])[correctIndex as number];
+      const shuffledChoices = shuffleArray(choices as string[]);
+      const shuffledCorrectIndex = shuffledChoices.indexOf(correctText);
+
       // Build deduplicated citations from retrieved chunks
       const seen = new Set<string>();
       const citations: QuizCitation[] = [];
@@ -133,8 +158,8 @@ async function _generateQuiz(): Promise<void> {
 
       entries.push({
         question,
-        choices: choices as string[],
-        correctIndex,
+        choices: shuffledChoices,
+        correctIndex: shuffledCorrectIndex,
         answer: answer.trim(),
         citations,
       });
@@ -179,6 +204,15 @@ export async function invalidateStaleQuizCache(): Promise<void> {
     await db.delete(quizQuestionsTable);
     logger.warn(
       "Quiz cache contained upload-derived entries — purged. A fresh wiki-only generation will be scheduled.",
+    );
+    return;
+  }
+
+  if (row.generatedAt < QUIZ_CACHE_CUTOFF) {
+    await db.delete(quizQuestionsTable);
+    logger.warn(
+      { generatedAt: row.generatedAt, cutoff: QUIZ_CACHE_CUTOFF },
+      "Quiz cache predates current prompt version — purged. A fresh generation will be scheduled.",
     );
   }
 }
