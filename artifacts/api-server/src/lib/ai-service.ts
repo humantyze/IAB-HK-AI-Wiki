@@ -364,12 +364,12 @@ export async function describeDocumentVisuals(
 
 export async function synthesizeWikiGaps(
   sectionSummaries: Array<{ title: string; bodyMarkdown: string }>,
-  existingPageTitles: string[],
-): Promise<{ created: number }> {
+  existingPages: Array<{ title: string; slug: string }>,
+): Promise<{ created: number; updated: number }> {
   const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
   const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
 
-  if (!baseUrl || !apiKey) return { created: 0 };
+  if (!baseUrl || !apiKey) return { created: 0, updated: 0 };
 
   try {
     const { default: OpenAI } = await import("openai");
@@ -379,7 +379,9 @@ export async function synthesizeWikiGaps(
       .map((s) => `### ${s.title}\n${s.bodyMarkdown.slice(0, 1500)}`)
       .join("\n\n---\n\n");
 
-    const alreadyExtracted = existingPageTitles.map((t) => `- ${t}`).join("\n");
+    const alreadyExtracted = existingPages
+      .map((p) => `- slug:"${p.slug}" title:"${p.title}"`)
+      .join("\n");
 
     const systemPrompt = `You are a knowledge synthesis assistant for a report called "State of AI in Hong Kong's Marketing Industry".
 
@@ -400,10 +402,10 @@ For each new page return:
   5. ## So what for marketers — 1–2 sentences of direct, actionable takeaway
   6. A horizontal rule (---) followed by this exact paragraph in italics: *This page was synthesized by AI from themes across multiple member contributions, rather than extracted from a single source document. It may contain interpretive connections or inaccuracies; verify key claims against the source pages before citing.*
 - tags: 1-3 tags from: ["Organizations", "Statistics", "Tools & Platforms", "Regulatory", "Trends", "Case Studies", "Frameworks"]
-- related_slugs: slugs of the pages from the "Already extracted" list that this synthesis directly draws from (derive the slug from the title by converting to kebab-case — lowercase, spaces to hyphens, remove punctuation; include only pages that genuinely informed this synthesis)
+- related_slugs: slugs of the pages from the "Already extracted" list that this synthesis directly draws from (use the exact slug shown in the list, not a derived one; include only pages that genuinely informed this synthesis)
 
 Rules:
-- Do NOT duplicate any page from the "Already extracted" list
+- Do NOT duplicate any page from the "Already extracted" list — neither the same title nor the same slug
 - Synthesise only topics that genuinely emerge from the provided content
 - Do not hallucinate statistics or claims not supported by the provided text
 - Return ONLY valid JSON with no markdown fences
@@ -426,7 +428,11 @@ JSON schema:
     const parsed = JSON.parse(raw) as { wikiPages?: WikiPageExtract[] };
     const pages = parsed.wikiPages ?? [];
 
+    const SYNTHESIS_REF = "wiki-seed-synthesis";
+    const SYNTHESIS_LABEL = "Synthesis — cross-content analysis";
+
     let created = 0;
+    let updated = 0;
     for (const page of pages) {
       if (!page.slug || !page.title) continue;
       const slug = page.slug;
@@ -434,18 +440,26 @@ JSON schema:
       // Lock per-slug so a concurrent upload extracting the same slug can't
       // collide with the synthesis insert on the UNIQUE(slug) constraint.
       let didCreate = false;
+      let didUpdate = false;
       await db.transaction(async (tx) => {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${slug}))`);
 
         const [existing] = await tx
-          .select({ id: wikiPagesTable.id })
+          .select({
+            id: wikiPagesTable.id,
+            sources: wikiPagesTable.sources,
+            bodySegments: wikiPagesTable.bodySegments,
+            bodyMarkdown: wikiPagesTable.bodyMarkdown,
+            tags: wikiPagesTable.tags,
+            relatedSlugs: wikiPagesTable.relatedSlugs,
+          })
           .from(wikiPagesTable)
           .where(eq(wikiPagesTable.slug, slug))
           .limit(1);
 
         if (!existing) {
           const segments: BodySegment[] = [
-            { ref: "wiki-seed-synthesis", label: "Synthesis — cross-content analysis", markdown: page.body_markdown },
+            { ref: SYNTHESIS_REF, label: SYNTHESIS_LABEL, markdown: page.body_markdown },
           ];
           await tx.insert(wikiPagesTable).values({
             slug,
@@ -454,9 +468,42 @@ JSON schema:
             bodySegments: segments,
             tags: page.tags,
             relatedSlugs: page.related_slugs ?? [],
-            sources: [{ label: "Synthesis — cross-content analysis", ref: "wiki-seed-synthesis" }],
+            sources: [{ label: SYNTHESIS_LABEL, ref: SYNTHESIS_REF }],
           });
           didCreate = true;
+        } else {
+          // Only upsert if the page was created by synthesis (not from an uploaded
+          // source). This avoids overwriting real extracted content.
+          const existingSources = (existing.sources as WikiSource[]) ?? [];
+          const isSynthesized = existingSources.some((s) => s.ref === SYNTHESIS_REF);
+          if (isSynthesized) {
+            const existingSegments = (existing.bodySegments as BodySegment[]) ?? [];
+            const baseSegments = existingSegments.length > 0
+              ? existingSegments
+              : deriveLegacySegments(existing.bodyMarkdown, existingSources);
+            const thisSegment: BodySegment = { ref: SYNTHESIS_REF, label: SYNTHESIS_LABEL, markdown: page.body_markdown };
+            const idx = baseSegments.findIndex((s) => s.ref === SYNTHESIS_REF);
+            const mergedSegments = idx >= 0
+              ? baseSegments.map((s, i) => (i === idx ? thisSegment : s))
+              : [...baseSegments, thisSegment];
+
+            const mergedTags = [...new Set([...((existing.tags as string[]) ?? []), ...page.tags])];
+            const mergedRelated = [...new Set([...((existing.relatedSlugs as string[]) ?? []), ...(page.related_slugs ?? [])])];
+
+            await tx
+              .update(wikiPagesTable)
+              .set({
+                title: page.title,
+                bodyMarkdown: renderBodyFromSegments(mergedSegments),
+                bodySegments: mergedSegments,
+                tags: mergedTags,
+                relatedSlugs: mergedRelated,
+                updatedAt: new Date(),
+              })
+              .where(eq(wikiPagesTable.slug, slug));
+            didUpdate = true;
+          }
+          // If not synthesized (extracted from an upload), skip to avoid overwriting.
         }
       });
 
@@ -467,13 +514,20 @@ JSON schema:
         } catch (err) {
           logger.warn({ err, slug }, "Failed to index synthesized wiki page into knowledge store");
         }
+      } else if (didUpdate) {
+        updated++;
+        try {
+          await indexWikiPage(slug);
+        } catch (err) {
+          logger.warn({ err, slug }, "Failed to re-index updated synthesized wiki page");
+        }
       }
     }
 
-    logger.info({ created }, "Wiki gap synthesis complete");
-    return { created };
+    logger.info({ created, updated }, "Wiki gap synthesis complete");
+    return { created, updated };
   } catch (err) {
     logger.error({ err }, "Wiki gap synthesis failed");
-    return { created: 0 };
+    return { created: 0, updated: 0 };
   }
 }

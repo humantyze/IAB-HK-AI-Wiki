@@ -433,7 +433,7 @@ router.post("/wiki/synthesize-gaps", requireSuperAuth, async (_req, res) => {
   synthesizeRunning = true;
   try {
     const pages = await db
-      .select({ title: wikiPagesTable.title, bodyMarkdown: wikiPagesTable.bodyMarkdown })
+      .select({ title: wikiPagesTable.title, slug: wikiPagesTable.slug, bodyMarkdown: wikiPagesTable.bodyMarkdown })
       .from(wikiPagesTable)
       .orderBy(asc(wikiPagesTable.title));
 
@@ -441,11 +441,11 @@ router.post("/wiki/synthesize-gaps", requireSuperAuth, async (_req, res) => {
       title: p.title,
       bodyMarkdown: p.bodyMarkdown as string,
     }));
-    const existingPageTitles = pages.map((p) => p.title);
+    const existingPages = pages.map((p) => ({ title: p.title, slug: p.slug }));
 
-    const { created } = await synthesizeWikiGaps(sectionSummaries, existingPageTitles);
-    logger.info({ created }, "Wiki gap synthesis complete");
-    res.json({ created });
+    const { created, updated } = await synthesizeWikiGaps(sectionSummaries, existingPages);
+    logger.info({ created, updated }, "Wiki gap synthesis complete");
+    res.json({ created, updated });
   } catch (err) {
     logger.error({ err }, "Wiki gap synthesis failed");
     res.status(500).json({ error: "Wiki gap synthesis failed" });
