@@ -121,7 +121,7 @@ Your task: read the provided text and extract distinct named entities, concepts,
 
 For each entity/concept return:
 - slug: kebab-case unique identifier (e.g. "ai-expectation-gap", "hkpc-survey-2025")
-- title: human-readable title
+- title: a short, specific noun-phrase that names the concept or entity itself — NOT the source document. The title must stand alone without knowing the source. Do NOT echo the source document name, author, or company in the title. Do NOT use "SourceName: Subtopic" or "SourceName — Subtopic" patterns. Good examples: "AI Expectation Gap", "PDPO Amendment 2025", "Programmatic Spend Reallocation", "First-Party Data Stack". Bad examples: "IAB HK Survey — AI Adoption", "Acme Report: Budget Trends".
 - body_markdown: Write like a sharp industry analyst briefing a busy marketing executive — direct, concrete, and clear about why each point matters. Prefer specific numbers, named examples, and short paragraphs over general statements. Avoid academic hedging and filler. Structure every body_markdown exactly as follows:
   1. ## TL;DR — 2–3 bullet points summarising the page
   2. **Why it matters for HK marketers:** — one direct sentence
@@ -393,7 +393,7 @@ Your task: identify 3-8 important cross-cutting topics, themes, comparisons, or 
 
 For each new page return:
 - slug: kebab-case unique identifier
-- title: human-readable title
+- title: a short, specific noun-phrase that names the cross-cutting concept or theme — NOT a source document title. The title must stand alone without knowing any particular source. Do NOT echo any source document name or company. Do NOT use "SourceName: Subtopic" patterns. Good examples: "AI Readiness Gap Across HK Sectors", "Budget-to-Belief Disconnect", "First-Party Data Imperative". Bad examples: "IAB HK Report — Cross-sector Themes".
 - body_markdown: Write like a sharp industry analyst briefing a busy marketing executive — direct, concrete, and clear about why each point matters. Prefer specific numbers, named examples, and short paragraphs over general statements. Avoid academic hedging and filler. Structure every body_markdown exactly as follows:
   1. ## TL;DR — then on the very next line the plain text "🔗 Synthesized insight", then 2–3 bullet points summarising the page
   2. **Why it matters for HK marketers:** — one direct sentence
