@@ -7,6 +7,7 @@ import wikiRouter from "./wiki";
 import knowledgeRouter from "./knowledge";
 import regressRouter from "./regress";
 import backupRouter from "./backup";
+import mcpRouter from "./mcp";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(wikiRouter);
 router.use(knowledgeRouter);
 router.use(regressRouter);
 router.use(backupRouter);
+router.use(mcpRouter);
 
 export default router;

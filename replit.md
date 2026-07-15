@@ -141,6 +141,42 @@ Utility scripts package. Each script is a `.ts` file in `src/` with a correspond
 - Image URL stored in `section_versions.imageUrl`; displayed on Visual Report cards
 - Image generation failures are caught gracefully — card renders without image
 
+### MCP Server
+
+The API server exposes a Model Context Protocol (MCP) endpoint so external AI agents can query the knowledge base as a tool.
+
+**Endpoint:** `POST /api/mcp` (Streamable HTTP transport, stateless, no auth required)
+
+**Tools registered:**
+
+| Tool | Description |
+|---|---|
+| `search_knowledge(query)` | Hybrid RAG search over wiki pages — returns top-6 passages with titles |
+| `list_wiki_pages()` | All wiki slugs and titles, alphabetically |
+| `get_wiki_page(slug)` | Full markdown content + tags for a specific page |
+| `get_sample_questions()` | AI-generated question list representing key topics covered |
+
+**Claude Desktop config:**
+```json
+{
+  "mcpServers": {
+    "hk-ai-playbook": {
+      "url": "https://<your-deployed-app>.replit.app/api/mcp"
+    }
+  }
+}
+```
+
+**Testing with curl:**
+```bash
+curl -X POST https://<your-app>.replit.app/api/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+**Implementation:** `artifacts/api-server/src/lib/mcp-server.ts` (tool definitions) + `artifacts/api-server/src/routes/mcp.ts` (Express route)
+
 ### OpenAI Integration
 - Uses Replit AI Integrations proxy (`AI_INTEGRATIONS_OPENAI_BASE_URL`, `AI_INTEGRATIONS_OPENAI_API_KEY`)
 - Image generation is initialized lazily inside the generation function — missing env vars produce a warning log and skip image generation (no crash)
