@@ -657,8 +657,8 @@ export default function SuperAdminDashboard() {
                 </div>
               </CardHeader>
 
-              <CardContent className="px-4 sm:px-10 pb-6 sm:pb-10 space-y-8">
-                <div className="rounded-xl border border-border/50 bg-background/50 p-6 inline-block">
+              <CardContent className="px-4 sm:px-10 pb-6 sm:pb-10 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="rounded-xl border border-border/50 bg-background/50 p-6 inline-block col-span-full">
                   <div className="text-[10px] font-display uppercase tracking-widest text-foreground/70 mb-2">Wiki Pages</div>
                   <div className="text-4xl font-bold font-serif text-green-400">
                     {wikiPageCount === null ? "—" : wikiPageCount}
@@ -678,7 +678,7 @@ export default function SuperAdminDashboard() {
                   }>).filter((u) => u.status === "partial" || u.status === "failed" || u.status === "error");
                   if (ingestionUploads.length === 0) return null;
                   return (
-                    <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-6">
+                    <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-6 col-span-full">
                       <h3 className="font-display text-sm tracking-widest uppercase text-destructive/80 mb-1">Ingestion Pipeline Status</h3>
                       <p className="text-xs text-foreground/60 mb-4">Uploads that encountered errors during processing. Expand each row to see technical details.</p>
                       <div className="space-y-2">
@@ -744,7 +744,7 @@ export default function SuperAdminDashboard() {
                   );
                 })()}
 
-                <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-6">
+                <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-6 col-span-full">
                   <h3 className="font-display text-sm tracking-widest uppercase text-orange-400 mb-2">Reprocess Uploads → Wiki</h3>
                   <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
                     Re-run wiki extraction for individual uploads, or all at once. Use this to regenerate wiki pages after a wipe or if pages were missing. Runs one file at a time (~2 min per upload).
@@ -877,7 +877,7 @@ export default function SuperAdminDashboard() {
                   </Button>
                 </div>
 
-                <div className="rounded-xl border border-teal-500/20 bg-teal-500/5 p-6">
+                <div className="rounded-xl border border-teal-500/20 bg-teal-500/5 p-6 col-span-full">
                   <h3 className="font-display text-sm tracking-widest uppercase text-teal-400 mb-2">Find &amp; Merge Duplicate Pages</h3>
                   <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
                     Scan for wiki pages that share a near-identical title (case-insensitive, punctuation-agnostic). For each duplicate group, choose which page to keep and optionally merge the other page's content before deleting it.
@@ -1017,7 +1017,7 @@ export default function SuperAdminDashboard() {
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6">
+                <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6 col-span-full">
                   <h3 className="font-display text-sm tracking-widest uppercase text-red-400 mb-2">Delete Wiki Pages</h3>
                   <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
                     Permanently remove individual wiki pages and their knowledge index entries. This cannot be undone.
