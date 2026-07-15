@@ -101,6 +101,16 @@ export async function extractWikiPages(
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 600_000 });
 
+  // Fetch existing pages so the model can reuse slugs for already-known concepts
+  // rather than inventing divergent slugs that bypass the merge path.
+  const existingPages = await db
+    .select({ slug: wikiPagesTable.slug, title: wikiPagesTable.title })
+    .from(wikiPagesTable);
+
+  const alreadyInWiki = existingPages.length > 0
+    ? `\n\nAlready in the wiki (reuse the exact slug if the concept you are extracting matches one of these — do NOT invent a new slug for the same concept):\n${existingPages.map((p) => `- slug:"${p.slug}" title:"${p.title}"`).join("\n")}`
+    : "";
+
   // Cap input to avoid extremely slow / timing-out completions
   const MAX_TEXT_CHARS = 80_000;
   const truncatedText = rawText.length > MAX_TEXT_CHARS
@@ -129,11 +139,12 @@ For each entity/concept return:
   4. Any notable statistics from the source as bold standalone callout lines (e.g. **67% of HK brands reported X in 2024.**)
   5. ## So what for marketers — 1–2 sentences of direct, actionable takeaway
 - tags: 1-3 tags from this list only: ["Organizations", "Statistics", "Tools & Platforms", "Regulatory", "Trends", "Case Studies", "Frameworks"]
-- related_slugs: slugs of other wiki pages in this same batch that are clearly related (can be empty array)${imageInstructions}
+- related_slugs: slugs of other wiki pages in this same batch that are clearly related (can be empty array)${imageInstructions}${alreadyInWiki}
 
 Rules:
 - Extract 3-12 wiki pages per source — focus on the most significant and distinct entities
 - Do NOT extract generic concepts (e.g. "artificial intelligence", "marketing") — only specific named entities, studies, tools, statistics, or frameworks referenced in the text
+- If a concept you are extracting is already represented in the "Already in the wiki" list, use that EXACT slug — do not invent a new one. The existing page will be updated with content from this source.
 - body_markdown must be factual and grounded in the provided text; do not hallucinate
 - Return ONLY valid JSON with no markdown fences
 
