@@ -531,3 +531,77 @@ JSON schema:
     return { created: 0, updated: 0 };
   }
 }
+
+/**
+ * Regenerate titles for all existing wiki pages using the improved title
+ * prompt. Pages are processed in batches of 15 to stay within token limits.
+ * Only the title field is updated — body, tags, slugs, etc. are untouched.
+ */
+export async function regenerateWikiTitles(): Promise<{ updated: number }> {
+  const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  if (!baseUrl || !apiKey) return { updated: 0 };
+
+  const { default: OpenAI } = await import("openai");
+  const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 120_000 });
+
+  const pages = await db
+    .select({ slug: wikiPagesTable.slug, title: wikiPagesTable.title, bodyMarkdown: wikiPagesTable.bodyMarkdown })
+    .from(wikiPagesTable);
+
+  if (pages.length === 0) return { updated: 0 };
+
+  const BATCH = 15;
+  let updated = 0;
+
+  for (let i = 0; i < pages.length; i += BATCH) {
+    const batch = pages.slice(i, i + BATCH);
+
+    const pageList = batch
+      .map((p, idx) => `${idx + 1}. slug: "${p.slug}"\ncurrent_title: "${p.title}"\nbody_excerpt: ${p.bodyMarkdown.slice(0, 600)}`)
+      .join("\n\n---\n\n");
+
+    const systemPrompt = `You are a wiki title editor for a knowledge base about "State of AI in Hong Kong's Marketing Industry".
+
+For each wiki page below, produce a better title following these rules:
+- Short specific noun-phrase naming the concept or entity itself
+- Must stand alone without knowing the source document
+- Do NOT echo source document names, company names, or authors in the title
+- Do NOT use "SourceName: Subtopic" or "SourceName — Subtopic" patterns
+- Good: "AI Expectation Gap", "PDPO Amendment 2025", "Programmatic Spend Reallocation"
+- Bad: "IAB HK Survey — AI Adoption", "Acme Report: Budget Trends"
+
+Return ONLY valid JSON: { "titles": [ { "slug": "...", "title": "..." }, ... ] }
+One entry per input page, in the same order.`;
+
+    const userPrompt = `Pages to retitle:\n\n${pageList}`;
+
+    try {
+      const response = await client.chat.completions.create({
+        model: "gpt-5",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        response_format: { type: "json_object" },
+      });
+
+      const raw = response.choices[0]?.message?.content ?? "{}";
+      const parsed = JSON.parse(raw) as { titles?: Array<{ slug: string; title: string }> };
+
+      for (const entry of parsed.titles ?? []) {
+        if (!entry.slug || !entry.title) continue;
+        await db
+          .update(wikiPagesTable)
+          .set({ title: entry.title, updatedAt: new Date() })
+          .where(eq(wikiPagesTable.slug, entry.slug));
+        updated++;
+      }
+    } catch (err) {
+      logger.warn({ err, batchStart: i }, "Title regeneration batch failed — skipping batch");
+    }
+  }
+
+  logger.info({ updated }, "Wiki title regeneration complete");
+  return { updated };
+}

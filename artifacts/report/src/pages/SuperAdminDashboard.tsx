@@ -59,6 +59,9 @@ export default function SuperAdminDashboard() {
   const [regenQuestionsRunning, setRegenQuestionsRunning] = useState(false);
   const [regenQuestionsResult, setRegenQuestionsResult] = useState<{ count: number } | null>(null);
 
+  const [regenTitlesRunning, setRegenTitlesRunning] = useState(false);
+  const [regenTitlesResult, setRegenTitlesResult] = useState<{ updated: number } | null>(null);
+
   const [clearImageSlug, setClearImageSlug] = useState("");
   const [clearImageRunning, setClearImageRunning] = useState(false);
   const [clearImageResult, setClearImageResult] = useState<{ ok: boolean; title?: string; error?: string } | null>(null);
@@ -183,6 +186,34 @@ export default function SuperAdminDashboard() {
       setSingleReprocessResults((prev) => { const next = new Map(prev); next.set(uploadId, "error"); return next; });
     } finally {
       setReprocessingIds((prev) => { const next = new Set(prev); next.delete(uploadId); return next; });
+    }
+  };
+
+  const handleRegenTitles = async () => {
+    setRegenTitlesRunning(true);
+    setRegenTitlesResult(null);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/knowledge/regen-titles`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json() as { updated?: number; error?: string };
+      if (!res.ok) {
+        toast({ title: "Regeneration Failed", description: String(data.error ?? "Unknown error"), variant: "destructive" });
+      } else {
+        const updated = data.updated ?? 0;
+        setRegenTitlesResult({ updated });
+        toast({
+          title: "Titles Regenerated",
+          description: `${updated} wiki page title${updated !== 1 ? "s" : ""} updated.`,
+        });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Request failed";
+      toast({ title: "Regeneration Failed", description: message, variant: "destructive" });
+    } finally {
+      setRegenTitlesRunning(false);
     }
   };
 
@@ -877,6 +908,30 @@ export default function SuperAdminDashboard() {
                       </Button>
                     </div>
                   )}
+                </div>
+
+                <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-6">
+                  <h3 className="font-display text-sm tracking-widest uppercase text-indigo-400 mb-2">Regenerate Wiki Titles</h3>
+                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                    Re-titles all existing wiki pages using the improved naming rules — concept-focused noun phrases that stand alone without the source document name. Runs AI on every page in batches; takes 1–2 minutes.
+                  </p>
+                  {regenTitlesResult && (
+                    <div className="mb-4 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-indigo-400" />
+                      <span className="text-sm text-foreground/80">
+                        <strong>{regenTitlesResult.updated}</strong> page title{regenTitlesResult.updated !== 1 ? "s" : ""} updated
+                      </span>
+                    </div>
+                  )}
+                  <Button
+                    onClick={handleRegenTitles}
+                    disabled={regenTitlesRunning}
+                    className="font-display uppercase tracking-[0.15em] text-[11px] bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-xl h-11 px-6 transition-all"
+                  >
+                    {regenTitlesRunning
+                      ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Regenerating…</>
+                      : <><Sparkles className="w-3.5 h-3.5 mr-2" />Regenerate Titles</>}
+                  </Button>
                 </div>
 
                 <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-6">

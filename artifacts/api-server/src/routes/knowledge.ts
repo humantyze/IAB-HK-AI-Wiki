@@ -3,6 +3,7 @@ import { requireSuperAuth } from "../middlewares/auth";
 import { retrieve, reindexAll, type RetrievedChunk } from "../lib/knowledge-index";
 import { generateAndStoreQuestions, getStoredQuestions } from "../lib/question-generator";
 import { getStoredQuiz, generateAndStoreQuiz } from "../lib/quiz-generator";
+import { regenerateWikiTitles } from "../lib/ai-service";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -225,6 +226,16 @@ router.post("/knowledge/regen-questions", requireSuperAuth, async (_req, res) =>
   } catch (err) {
     logger.error({ err }, "Question regeneration failed");
     res.status(500).json({ error: "Question regeneration failed" });
+  }
+});
+
+router.post("/knowledge/regen-titles", requireSuperAuth, async (_req, res) => {
+  try {
+    const result = await regenerateWikiTitles();
+    res.json(result);
+  } catch (err) {
+    logger.error({ err }, "Title regeneration failed");
+    res.status(500).json({ error: "Title regeneration failed" });
   }
 });
 
