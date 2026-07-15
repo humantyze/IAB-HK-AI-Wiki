@@ -6,7 +6,7 @@ import {
   LogOut, Settings,
   CheckCircle2, BookOpen, AlertCircle,
   Trash2, RotateCcw, Calendar, X, DatabaseBackup, CloudUpload, ImagePlay, Layers,
-  ChevronDown, ChevronUp, Sparkles, ImageOff,
+  ChevronDown, ChevronUp, Sparkles, ImageOff, GitMerge, Search,
 } from "lucide-react";
 
 import { useSuperAuth } from "@/hooks/use-super-auth";
@@ -61,6 +61,15 @@ export default function SuperAdminDashboard() {
 
   const [regenTitlesRunning, setRegenTitlesRunning] = useState(false);
   const [regenTitlesResult, setRegenTitlesResult] = useState<{ updated: number } | null>(null);
+
+  interface DuplicatePage { id: number; slug: string; title: string; updatedAt: string }
+  const [duplicateGroups, setDuplicateGroups] = useState<DuplicatePage[][]>([]);
+  const [duplicateScanLoading, setDuplicateScanLoading] = useState(false);
+  const [duplicateScanned, setDuplicateScanned] = useState(false);
+  const [mergeSelections, setMergeSelections] = useState<Map<number, { keepSlug: string; deleteSlug: string }>>(new Map());
+  const [mergeContentFlags, setMergeContentFlags] = useState<Map<number, boolean>>(new Map());
+  const [mergingGroups, setMergingGroups] = useState<Set<number>>(new Set());
+  const [mergedGroups, setMergedGroups] = useState<Set<number>>(new Set());
 
   const [clearImageSlug, setClearImageSlug] = useState("");
   const [clearImageRunning, setClearImageRunning] = useState(false);
@@ -242,6 +251,73 @@ export default function SuperAdminDashboard() {
       toast({ title: "Regeneration Failed", description: message, variant: "destructive" });
     } finally {
       setRegenQuestionsRunning(false);
+    }
+  };
+
+  const handleScanDuplicates = async () => {
+    setDuplicateScanLoading(true);
+    setDuplicateScanned(false);
+    setDuplicateGroups([]);
+    setMergeSelections(new Map());
+    setMergeContentFlags(new Map());
+    setMergedGroups(new Set());
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/wiki/duplicates`, { credentials: "include" });
+      const data = await res.json() as { groups?: DuplicatePage[][]; error?: string };
+      if (!res.ok) {
+        toast({ title: "Scan Failed", description: data.error ?? "Unknown error", variant: "destructive" });
+      } else {
+        const groups = data.groups ?? [];
+        setDuplicateGroups(groups);
+        setDuplicateScanned(true);
+        const initSelections = new Map<number, { keepSlug: string; deleteSlug: string }>();
+        const initFlags = new Map<number, boolean>();
+        groups.forEach((group, idx) => {
+          initSelections.set(idx, { keepSlug: group[0].slug, deleteSlug: group[1].slug });
+          initFlags.set(idx, false);
+        });
+        setMergeSelections(initSelections);
+        setMergeContentFlags(initFlags);
+        if (groups.length === 0) {
+          toast({ title: "No Duplicates Found", description: "All wiki page titles are unique." });
+        }
+      }
+    } catch (err) {
+      toast({ title: "Scan Failed", description: err instanceof Error ? err.message : "Request failed", variant: "destructive" });
+    } finally {
+      setDuplicateScanLoading(false);
+    }
+  };
+
+  const handleMergeGroup = async (groupIdx: number) => {
+    const sel = mergeSelections.get(groupIdx);
+    if (!sel) return;
+    setMergingGroups((prev) => new Set(prev).add(groupIdx));
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/wiki/merge`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keepSlug: sel.keepSlug,
+          deleteSlug: sel.deleteSlug,
+          mergeContent: mergeContentFlags.get(groupIdx) ?? false,
+        }),
+      });
+      const data = await res.json() as { ok?: boolean; error?: string };
+      if (!res.ok) {
+        toast({ title: "Merge Failed", description: data.error ?? "Unknown error", variant: "destructive" });
+      } else {
+        setMergedGroups((prev) => new Set(prev).add(groupIdx));
+        fetchWikiCount();
+        toast({ title: "Pages Merged", description: `Duplicate removed — kept "${sel.keepSlug}".` });
+      }
+    } catch (err) {
+      toast({ title: "Merge Failed", description: err instanceof Error ? err.message : "Request failed", variant: "destructive" });
+    } finally {
+      setMergingGroups((prev) => { const next = new Set(prev); next.delete(groupIdx); return next; });
     }
   };
 
@@ -799,6 +875,114 @@ export default function SuperAdminDashboard() {
                       ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Synthesizing…</>
                       : <><Sparkles className="w-3.5 h-3.5 mr-2" />Synthesize Gap Pages</>}
                   </Button>
+                </div>
+
+                <div className="rounded-xl border border-teal-500/20 bg-teal-500/5 p-6">
+                  <h3 className="font-display text-sm tracking-widest uppercase text-teal-400 mb-2">Find &amp; Merge Duplicate Pages</h3>
+                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                    Scan for wiki pages that share a near-identical title (case-insensitive, punctuation-agnostic). For each duplicate group, choose which page to keep and optionally merge the other page's content before deleting it.
+                  </p>
+                  <Button
+                    onClick={handleScanDuplicates}
+                    disabled={duplicateScanLoading}
+                    className="font-display uppercase tracking-[0.15em] text-[11px] bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/30 rounded-xl h-11 px-6 transition-all mb-5"
+                  >
+                    {duplicateScanLoading
+                      ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Scanning…</>
+                      : <><Search className="w-3.5 h-3.5 mr-2" />Scan for Duplicates</>}
+                  </Button>
+
+                  {duplicateScanned && duplicateGroups.length === 0 && (
+                    <div className="flex items-center gap-2 text-sm text-foreground/60 rounded-xl border border-border/30 bg-background/30 p-4">
+                      <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                      No duplicate titles found — all pages are unique.
+                    </div>
+                  )}
+
+                  {duplicateGroups.length > 0 && (
+                    <div className="space-y-4">
+                      <p className="text-xs text-teal-400/70 font-display uppercase tracking-widest">
+                        {duplicateGroups.filter((_, i) => !mergedGroups.has(i)).length} duplicate group{duplicateGroups.filter((_, i) => !mergedGroups.has(i)).length !== 1 ? "s" : ""} found
+                      </p>
+                      {duplicateGroups.map((group, groupIdx) => {
+                        const alreadyMerged = mergedGroups.has(groupIdx);
+                        const isMerging = mergingGroups.has(groupIdx);
+                        const sel = mergeSelections.get(groupIdx);
+                        const mergeContent = mergeContentFlags.get(groupIdx) ?? false;
+                        return (
+                          <div key={groupIdx} className={`rounded-xl border p-4 space-y-3 transition-colors ${alreadyMerged ? "border-green-500/20 bg-green-500/5 opacity-60" : "border-teal-500/15 bg-background/40"}`}>
+                            {alreadyMerged ? (
+                              <div className="flex items-center gap-2 text-sm text-green-400">
+                                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                                Merged — duplicate removed
+                              </div>
+                            ) : (
+                              <>
+                                <p className="text-[10px] font-display uppercase tracking-widest text-foreground/50">Duplicate group {groupIdx + 1} · {group.length} pages</p>
+                                <div className="space-y-1.5">
+                                  {group.map((page) => {
+                                    const isKeep = sel?.keepSlug === page.slug;
+                                    const isDelete = sel?.deleteSlug === page.slug;
+                                    return (
+                                      <div key={page.slug} className={`flex items-center gap-3 px-3 py-2 rounded-lg border transition-colors ${isKeep ? "border-teal-500/40 bg-teal-500/10" : isDelete ? "border-red-500/30 bg-red-500/5" : "border-border/20 bg-background/20"}`}>
+                                        <div className="flex gap-1.5 shrink-0">
+                                          <button
+                                            onClick={() => {
+                                              const others = group.filter((p) => p.slug !== page.slug);
+                                              setMergeSelections((prev) => new Map(prev).set(groupIdx, { keepSlug: page.slug, deleteSlug: others[0]?.slug ?? "" }));
+                                            }}
+                                            title="Keep this page"
+                                            className={`text-[10px] font-display uppercase tracking-wide px-2 py-0.5 rounded border transition-colors ${isKeep ? "bg-teal-500/20 border-teal-500/40 text-teal-400" : "border-border/30 text-foreground/30 hover:text-teal-400 hover:border-teal-500/30"}`}
+                                          >
+                                            Keep
+                                          </button>
+                                          <button
+                                            onClick={() => {
+                                              const others = group.filter((p) => p.slug !== page.slug);
+                                              setMergeSelections((prev) => new Map(prev).set(groupIdx, { keepSlug: others[0]?.slug ?? "", deleteSlug: page.slug }));
+                                            }}
+                                            title="Delete this page"
+                                            className={`text-[10px] font-display uppercase tracking-wide px-2 py-0.5 rounded border transition-colors ${isDelete ? "bg-red-500/10 border-red-500/30 text-red-400" : "border-border/30 text-foreground/30 hover:text-red-400 hover:border-red-500/30"}`}
+                                          >
+                                            Delete
+                                          </button>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-xs text-foreground/80 truncate">{page.title}</p>
+                                          <p className="text-[10px] text-foreground/40 font-mono">{page.slug}</p>
+                                        </div>
+                                        <span className="text-[10px] text-foreground/30 shrink-0">{new Date(page.updatedAt).toLocaleDateString("en-HK", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Hong_Kong" })}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
+                                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input
+                                      type="checkbox"
+                                      checked={mergeContent}
+                                      onChange={(e) => setMergeContentFlags((prev) => new Map(prev).set(groupIdx, e.target.checked))}
+                                      className="accent-teal-500 w-3.5 h-3.5"
+                                    />
+                                    <span className="text-xs text-foreground/60">Merge deleted page's content into kept page</span>
+                                  </label>
+                                  <Button
+                                    onClick={() => handleMergeGroup(groupIdx)}
+                                    disabled={isMerging || !sel?.keepSlug || !sel?.deleteSlug}
+                                    className="font-display uppercase tracking-[0.12em] text-[10px] bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/30 rounded-lg h-8 px-4 transition-all"
+                                  >
+                                    {isMerging
+                                      ? <><div className="w-2.5 h-2.5 border border-current border-t-transparent rounded-full animate-spin mr-1.5" />Merging…</>
+                                      : <><GitMerge className="w-3 h-3 mr-1.5" />{mergeContent ? "Merge & Delete" : "Delete Duplicate"}</>}
+                                  </Button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-6">

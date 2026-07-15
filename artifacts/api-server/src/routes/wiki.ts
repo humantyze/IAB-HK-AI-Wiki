@@ -3,7 +3,7 @@ import { eq, asc, isNull, and, ne, sql, cosineDistance, desc, inArray } from "dr
 import path from "path";
 import { db, wikiPagesTable, uploadsTable, knowledgeChunksTable, EMBEDDING_DIMENSIONS } from "@workspace/db";
 import { requireSuperAuth } from "../middlewares/auth";
-import { retrieve } from "../lib/knowledge-index";
+import { retrieve, indexWikiPage } from "../lib/knowledge-index";
 import { generateDownloadUrl } from "../lib/gcsClient";
 import { extractImages } from "../lib/pdf-extractor";
 import { assignImageToWikiPage, synthesizeWikiGaps } from "../lib/ai-service";
@@ -258,6 +258,52 @@ router.get("/wiki/:slug/related", async (req, res) => {
   }
 });
 
+/**
+ * GET /api/wiki/duplicates
+ * Super-admin: find groups of wiki pages that share a near-identical normalised title.
+ * NOTE: must be defined BEFORE GET /wiki/:slug to avoid the slug param capturing "duplicates".
+ */
+router.get("/wiki/duplicates", requireSuperAuth, async (_req, res) => {
+  try {
+    const pages = await db
+      .select({
+        id: wikiPagesTable.id,
+        slug: wikiPagesTable.slug,
+        title: wikiPagesTable.title,
+        updatedAt: wikiPagesTable.updatedAt,
+      })
+      .from(wikiPagesTable)
+      .orderBy(asc(wikiPagesTable.updatedAt));
+
+    function normalizeTitle(t: string): string {
+      return t.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff\s]/g, "").replace(/\s+/g, " ").trim();
+    }
+
+    const groups = new Map<string, typeof pages>();
+    for (const page of pages) {
+      const key = normalizeTitle(page.title);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(page);
+    }
+
+    const duplicateGroups = Array.from(groups.values())
+      .filter((g) => g.length > 1)
+      .map((g) =>
+        g.map((p) => ({
+          id: p.id,
+          slug: p.slug,
+          title: p.title,
+          updatedAt: p.updatedAt.toISOString(),
+        })),
+      );
+
+    res.json({ groups: duplicateGroups });
+  } catch (err) {
+    logger.error({ err }, "Failed to find duplicate wiki pages");
+    res.status(500).json({ error: "Failed to find duplicate wiki pages" });
+  }
+});
+
 router.get("/wiki/:slug", async (req, res) => {
   const { slug } = req.params;
 
@@ -455,6 +501,78 @@ router.post("/wiki/synthesize-gaps", requireSuperAuth, async (_req, res) => {
     res.status(500).json({ error: "Wiki gap synthesis failed" });
   } finally {
     synthesizeRunning = false;
+  }
+});
+
+/**
+ * POST /api/wiki/merge
+ * Super-admin: merge the content of deleteSlug into keepSlug, then delete deleteSlug.
+ * Body: { keepSlug: string; deleteSlug: string; mergeContent: boolean }
+ */
+router.post("/wiki/merge", requireSuperAuth, async (req, res) => {
+  const { keepSlug, deleteSlug, mergeContent } = req.body as {
+    keepSlug?: unknown;
+    deleteSlug?: unknown;
+    mergeContent?: unknown;
+  };
+
+  if (typeof keepSlug !== "string" || typeof deleteSlug !== "string") {
+    res.status(400).json({ error: "keepSlug and deleteSlug are required strings" });
+    return;
+  }
+  if (keepSlug === deleteSlug) {
+    res.status(400).json({ error: "keepSlug and deleteSlug must be different" });
+    return;
+  }
+
+  try {
+    const [keepPage] = await db
+      .select()
+      .from(wikiPagesTable)
+      .where(eq(wikiPagesTable.slug, keepSlug))
+      .limit(1);
+    const [deletePage] = await db
+      .select()
+      .from(wikiPagesTable)
+      .where(eq(wikiPagesTable.slug, deleteSlug))
+      .limit(1);
+
+    if (!keepPage) {
+      res.status(404).json({ error: `Page not found: ${keepSlug}` });
+      return;
+    }
+    if (!deletePage) {
+      res.status(404).json({ error: `Page not found: ${deleteSlug}` });
+      return;
+    }
+
+    if (mergeContent === true) {
+      const appendedBody = `${keepPage.bodyMarkdown as string}\n\n---\n\n*Merged from "${deletePage.title}":*\n\n${deletePage.bodyMarkdown as string}`;
+      await db
+        .update(wikiPagesTable)
+        .set({ bodyMarkdown: appendedBody, updatedAt: new Date() })
+        .where(eq(wikiPagesTable.slug, keepSlug));
+
+      try {
+        await indexWikiPage(keepSlug);
+      } catch (indexErr) {
+        logger.warn({ indexErr, slug: keepSlug }, "Merge: re-indexing kept page failed (non-fatal)");
+      }
+    }
+
+    await db.delete(knowledgeChunksTable).where(
+      and(
+        eq(knowledgeChunksTable.sourceType, "wiki"),
+        eq(knowledgeChunksTable.sourceSlug, deleteSlug),
+      ),
+    );
+    await db.delete(wikiPagesTable).where(eq(wikiPagesTable.slug, deleteSlug));
+
+    logger.info({ keepSlug, deleteSlug, mergeContent }, "Wiki pages merged");
+    res.json({ ok: true, keepSlug, deletedSlug: deleteSlug });
+  } catch (err) {
+    logger.error({ err }, "Wiki page merge failed");
+    res.status(500).json({ error: "Wiki page merge failed" });
   }
 });
 
