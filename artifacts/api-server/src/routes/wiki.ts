@@ -30,7 +30,7 @@ function formatPageSummary(p: {
     tags: (p.tags as string[]) ?? [],
     relatedSlugs: (p.relatedSlugs as string[]) ?? [],
     updatedAt: p.updatedAt.toISOString(),
-    excerpt: (p.bodyMarkdown as string).replace(/^#+\s.*/gm, "").replace(/[*_`]/g, "").trim().slice(0, 200),
+    excerpt: (p.bodyMarkdown as string).replace(/^#+\s.*/gm, "").replace(/^[-*]\s+/gm, "").replace(/[*_`]/g, "").trim().slice(0, 200),
     imageUrl: p.imageUrl ?? null,
     synthesized: sources.some((s) => s.ref === "wiki-seed-synthesis"),
   };
