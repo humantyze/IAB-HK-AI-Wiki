@@ -755,7 +755,7 @@ export default function WikiIndex() {
       {/* Tag filters + count row */}
       <div className="max-w-6xl mx-auto px-6 lg:px-8">
         <div className="flex flex-wrap gap-2 mb-4">
-          {ALL_TAGS.map((tag) => (
+          {ALL_TAGS.slice(0, 1).map((tag) => (
             <button
               key={tag}
               onClick={() => setActiveTag(tag)}
@@ -780,6 +780,20 @@ export default function WikiIndex() {
           >
             Responsible AI
           </button>
+          {ALL_TAGS.slice(1).map((tag) => (
+            <button
+              key={tag}
+              onClick={() => setActiveTag(tag)}
+              className="text-xs px-3 py-1 rounded-full border font-medium transition-all"
+              style={
+                activeTag === tag
+                  ? { backgroundColor: "#D63425", color: "#fff", borderColor: "#D63425" }
+                  : { backgroundColor: "#fff", color: "#6b7280", borderColor: "#e5e7eb" }
+              }
+            >
+              {tag}
+            </button>
+          ))}
         </div>
 
         <div className="border-t border-gray-100 pt-4 pb-2 flex items-center justify-between">
