@@ -5,6 +5,8 @@ import { ensureIndexUpToDate, cleanupLegacyChunks, ensureWikiSchema } from "./li
 import { runBackup } from "./lib/backup";
 import { recoverPendingUploads } from "./lib/upload-processing";
 import { generateAndStoreQuiz, getStoredQuiz, invalidateStaleQuizCache } from "./lib/quiz-generator";
+import { db } from "@workspace/db";
+import { sql } from "drizzle-orm";
 
 const rawPort = process.env["PORT"];
 
@@ -28,6 +30,21 @@ async function main() {
     await ensureWikiSchema();
   } catch (e) {
     logger.error({ err: e }, "ensureWikiSchema failed — wiki body-segment tracking may be unavailable");
+  }
+
+  // One-time data back-fill: all wiki pages that pre-date the Responsible AI
+  // feature launch (2026-07-17) should be flagged responsible_ai = true.
+  // This runs on every startup but is a no-op once all legacy rows are updated.
+  try {
+    const result = await db.execute(
+      sql`UPDATE wiki_pages SET responsible_ai = true WHERE responsible_ai = false AND created_at < '2026-07-18'::date`
+    );
+    const count = (result as unknown as { rowCount?: number }).rowCount ?? 0;
+    if (count > 0) {
+      logger.info({ count }, "Responsible AI back-fill: updated legacy wiki pages");
+    }
+  } catch (e) {
+    logger.error({ err: e }, "Responsible AI back-fill failed — some legacy pages may remain un-flagged");
   }
 
   await new Promise<void>((resolve, reject) => {

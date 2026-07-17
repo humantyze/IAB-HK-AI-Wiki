@@ -90,6 +90,7 @@ export async function extractWikiPages(
   rawText: string,
   sourceRef: string,
   candidateImageUrls: string[] = [],
+  responsibleAi: boolean = false,
 ): Promise<{ created: number; updated: number }> {
   const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
   const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
@@ -220,6 +221,7 @@ ${jsonSchema}`;
             relatedSlugs: mergedRelated,
             sources: newSources,
             imageUrl: existing.imageUrl ?? page.image_url ?? null,
+            responsibleAi: existing.responsibleAi || responsibleAi,
             updatedAt: new Date(),
           })
           .where(eq(wikiPagesTable.slug, slug));
@@ -236,6 +238,7 @@ ${jsonSchema}`;
           relatedSlugs: page.related_slugs,
           sources: [{ label: sourceLabel, ref: sourceRef }],
           imageUrl: page.image_url ?? null,
+          responsibleAi,
         });
         created++;
       }

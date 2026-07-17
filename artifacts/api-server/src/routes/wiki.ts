@@ -21,6 +21,7 @@ function formatPageSummary(p: {
   bodyMarkdown: unknown;
   imageUrl: string | null;
   sources: unknown;
+  responsibleAi: boolean;
 }) {
   const sources = (p.sources as Array<{ ref?: string }>) ?? [];
   return {
@@ -33,6 +34,7 @@ function formatPageSummary(p: {
     excerpt: (p.bodyMarkdown as string).replace(/^#+\s.*/gm, "").replace(/^[-*]\s+/gm, "").replace(/[*_`]/g, "").trim().slice(0, 200),
     imageUrl: p.imageUrl ?? null,
     synthesized: sources.some((s) => s.ref === "wiki-seed-synthesis"),
+    responsibleAi: p.responsibleAi,
   };
 }
 
@@ -50,6 +52,7 @@ async function fetchAllPageSummaries() {
       bodyMarkdown: wikiPagesTable.bodyMarkdown,
       imageUrl: wikiPagesTable.imageUrl,
       sources: wikiPagesTable.sources,
+      responsibleAi: wikiPagesTable.responsibleAi,
     })
     .from(wikiPagesTable)
     .orderBy(asc(wikiPagesTable.title));

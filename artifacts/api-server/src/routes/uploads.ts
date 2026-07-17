@@ -41,6 +41,7 @@ const UploadFormSchema = z.object({
   contributorName: z.string().optional(),
   contentType: z.enum(["whitepaper", "case_study", "market_data", "regulation_update", "trend_insight"]),
   rawText: z.string().optional().default(""),
+  responsibleAi: z.preprocess((v) => v === true || v === "true" || v === "on" || v === "1", z.boolean()).optional().default(false),
 });
 
 const ALLOWED_MIME_TYPES: string[] = [
@@ -353,6 +354,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
       contentHash,
       status: "pending",
       processingErrors: syncErrors.length > 0 ? syncErrors : null,
+      responsibleAi: data.responsibleAi ?? false,
     })
     .returning();
 
@@ -375,6 +377,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
     const sourceRef = `Upload #${uploadId} — ${data.contentType.replace(/_/g, " ")}`;
     const capturedExtractions = fileExtractions.slice();
     const capturedSyncErrors = syncErrors.slice();
+    const capturedResponsibleAi = data.responsibleAi ?? false;
 
     setImmediate(() => {
       void (async () => {
@@ -389,6 +392,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
               extraction.text,
               sourceRef,
               extraction.imageUrls,
+              capturedResponsibleAi,
             );
             totalCreated += created;
             totalUpdated += updated;

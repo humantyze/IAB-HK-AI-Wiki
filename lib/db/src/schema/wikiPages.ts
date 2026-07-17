@@ -1,4 +1,4 @@
-import { pgTable, serial, text, jsonb, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, jsonb, timestamp, boolean } from "drizzle-orm/pg-core";
 
 export const wikiPagesTable = pgTable("wiki_pages", {
   id: serial("id").primaryKey(),
@@ -10,6 +10,7 @@ export const wikiPagesTable = pgTable("wiki_pages", {
   sources: jsonb("sources").notNull().$type<Array<{ label: string; ref: string }>>().default([]),
   bodySegments: jsonb("body_segments").notNull().$type<Array<{ ref: string; label: string; markdown: string }>>().default([]),
   imageUrl: text("image_url"),
+  responsibleAi: boolean("responsible_ai").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -20,6 +20,7 @@ export const uploadsTable = pgTable("uploads", {
   contentHash: text("content_hash"),
   status: text("status").notNull().default("pending"),
   processingErrors: jsonb("processing_errors").$type<ProcessingError[]>(),
+  responsibleAi: boolean("responsible_ai").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   processedAt: timestamp("processed_at"),
 });

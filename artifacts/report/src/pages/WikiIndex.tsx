@@ -15,6 +15,7 @@ interface WikiPageSummary {
   excerpt: string;
   imageUrl?: string | null;
   synthesized?: boolean;
+  responsibleAi?: boolean;
 }
 
 interface KnowledgeCitation {
@@ -210,6 +211,7 @@ export default function WikiIndex() {
   const [searchError, setSearchError] = useState(false);
   // citationAnimGen[n]: 0 = not yet seen, 1 = first reveal (pop-in), 2+ = re-referenced (pulse)
   const [citationAnimGen, setCitationAnimGen] = useState<Record<number, number>>({});
+  const [responsibleAiOnly, setResponsibleAiOnly] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "graph">("grid");
   const [graphFilteredPages, setGraphFilteredPages] = useState<WikiPageSummary[]>([]);
   const graphDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -536,10 +538,11 @@ export default function WikiIndex() {
 
   const filtered = basePages.filter((p) => {
     const matchesTag = activeTag === "All" || p.tags.includes(activeTag);
-    if (aiResults !== null) return matchesTag;
+    const matchesResponsibleAi = !responsibleAiOnly || p.responsibleAi === true;
+    if (aiResults !== null) return matchesTag && matchesResponsibleAi;
     const q = query.toLowerCase();
     const matchesQuery = !q || p.title.toLowerCase().includes(q) || p.excerpt.toLowerCase().includes(q);
-    return matchesTag && matchesQuery;
+    return matchesTag && matchesQuery && matchesResponsibleAi;
   });
 
   const filteredSlugsKey = filtered.map((p) => p.slug).sort().join(",");
@@ -766,6 +769,17 @@ export default function WikiIndex() {
               {tag}
             </button>
           ))}
+          <button
+            onClick={() => setResponsibleAiOnly((prev) => !prev)}
+            className="text-xs px-3 py-1 rounded-full border font-medium transition-all"
+            style={
+              responsibleAiOnly
+                ? { backgroundColor: "#dbeafe", color: "#1d4ed8", borderColor: "#93c5fd" }
+                : { backgroundColor: "#fff", color: "#6b7280", borderColor: "#e5e7eb" }
+            }
+          >
+            Responsible AI
+          </button>
         </div>
 
         <div className="border-t border-gray-100 pt-4 pb-2 flex items-center justify-between">

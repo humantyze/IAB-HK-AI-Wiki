@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const uploadSchema = z.object({
   uploaderName: z.string().min(1, "Name is required"),
@@ -29,6 +30,7 @@ const uploadSchema = z.object({
   contributorName: z.string().optional(),
   contentType: z.enum(["whitepaper", "case_study", "market_data", "regulation_update", "trend_insight"]),
   rawText: z.string().optional(),
+  responsibleAi: z.boolean().optional().default(false),
 });
 
 type StepDef = { label: string; detail: string; Icon: LucideIcon; afterSeconds: number };
@@ -162,7 +164,7 @@ export default function AdminDashboard() {
 
   const form = useForm<z.infer<typeof uploadSchema>>({
     resolver: zodResolver(uploadSchema),
-    defaultValues: { uploaderName: "", uploaderEmail: "", contentType: "market_data", contributorName: "", rawText: "" },
+    defaultValues: { uploaderName: "", uploaderEmail: "", contentType: "market_data", contributorName: "", rawText: "", responsibleAi: false },
   });
 
   useEffect(() => {
@@ -269,10 +271,11 @@ export default function AdminDashboard() {
         rawText: rawText || undefined,
         contentType: values.contentType,
         files: selectedFiles.length > 0 ? selectedFiles : undefined,
+        responsibleAi: values.responsibleAi ?? false,
       });
 
       const fileNames = selectedFiles.map((f) => f.name);
-      form.reset({ uploaderName: values.uploaderName, uploaderEmail: values.uploaderEmail, rawText: "", contentType: values.contentType, contributorName: values.contributorName });
+      form.reset({ uploaderName: values.uploaderName, uploaderEmail: values.uploaderEmail, rawText: "", contentType: values.contentType, contributorName: values.contributorName, responsibleAi: false });
       setSelectedFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
       setSubmitResult({ fileNames, wikiCountBefore, uploadId: result.id });
@@ -669,6 +672,30 @@ export default function AdminDashboard() {
                             {...field}
                           />
                         </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="responsibleAi"
+                    render={({ field }) => (
+                      <FormItem>
+                        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border/40 bg-background/20">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value ?? false}
+                              onCheckedChange={field.onChange}
+                              id="responsibleAi"
+                              className="border-primary/40 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                            />
+                          </FormControl>
+                          <label htmlFor="responsibleAi" className="flex flex-col gap-0.5 cursor-pointer select-none">
+                            <span className="font-display tracking-[0.15em] uppercase text-[10px] text-foreground/80">Responsible AI</span>
+                            <span className="text-[11px] text-foreground/50 font-light normal-case tracking-normal">All wiki pages generated from this upload will be flagged as Responsible AI content</span>
+                          </label>
+                        </div>
                         <FormMessage />
                       </FormItem>
                     )}

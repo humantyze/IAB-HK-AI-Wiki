@@ -12,6 +12,7 @@ interface UploadData {
   contentType: string;
   rawText?: string;
   files?: File[];
+  responsibleAi?: boolean;
 }
 
 export class UploadError extends Error {
@@ -36,6 +37,7 @@ export function useSubmitUpload() {
       if (data.contributorName) formData.append("contributorName", data.contributorName);
       formData.append("contentType", data.contentType);
       if (data.rawText) formData.append("rawText", data.rawText);
+      formData.append("responsibleAi", data.responsibleAi ? "true" : "false");
       if (data.files) {
         for (const f of data.files) {
           formData.append("files", f);
