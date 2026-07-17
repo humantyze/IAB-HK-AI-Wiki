@@ -371,6 +371,7 @@ export default function AdminDashboard() {
           Submit source material — whitepapers, case studies, market data, etc. The AI reads it and <span className="font-medium text-foreground/90">automatically generates wiki knowledge pages</span> from the content. No further action required.
         </div>
 
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         <Card className="border-primary/20 shadow-[0_10px_50px_rgba(0,240,255,0.03)] bg-card/40 backdrop-blur-md rounded-2xl overflow-hidden">
           <div className="h-1 w-full bg-gradient-to-r from-primary to-transparent" />
           <CardHeader className="pb-4 sm:pb-8 pt-6 sm:pt-10 px-4 sm:px-10">
@@ -766,8 +767,8 @@ export default function AdminDashboard() {
         </Card>
 
         {/* Submission History */}
-        {uploads && uploads.length > 0 && (
-          <div className="mt-10">
+        {uploads && uploads.length > 0 ? (
+          <div>
             <div className="flex items-center gap-3 mb-4">
               <History className="w-4 h-4 text-foreground/40" />
               <h2 className="font-display text-xs uppercase tracking-widest text-foreground/50">Submission History</h2>
@@ -848,7 +849,8 @@ export default function AdminDashboard() {
               })}
             </div>
           </div>
-        )}
+        ) : null}
+        </div>
       </main>
     </div>
   );
