@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { Link } from "wouter";
 import { Search, BookOpen, Clock, ChevronRight, Lock, Sparkles, LayoutGrid, Network, X, Lightbulb } from "lucide-react";
-import WikiGraph from "../components/WikiGraph";
 import { useJsonLd } from "@/lib/useJsonLd";
 import { usePageMeta } from "@/hooks/usePageMeta";
+
+const WikiGraph = lazy(() => import("../components/WikiGraph"));
 
 interface WikiPageSummary {
   id: number;
@@ -997,10 +998,18 @@ export default function WikiIndex() {
             <div className="w-8 h-8 border-2 border-[#D63425]/20 border-t-[#D63425] rounded-full animate-spin" />
           </div>
         ) : viewMode === "graph" ? (
-          <WikiGraph
-            pages={graphFilteredPages}
-            allPages={pages ?? []}
-          />
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center py-24">
+                <div className="w-8 h-8 border-2 border-[#D63425]/20 border-t-[#D63425] rounded-full animate-spin" />
+              </div>
+            }
+          >
+            <WikiGraph
+              pages={graphFilteredPages}
+              allPages={pages ?? []}
+            />
+          </Suspense>
         ) : filtered.length === 0 ? (
           isSearching ? (
             <div className="text-center py-20 text-gray-400">
