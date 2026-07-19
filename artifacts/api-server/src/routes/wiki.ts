@@ -175,8 +175,30 @@ router.post("/wiki/search", async (req, res) => {
   }
 });
 
+// In-memory cache for related-pages results. The centroid + cosine scan is
+// expensive and results change rarely; a 1h TTL bounds staleness from
+// mutations happening outside this file (upload processing, re-indexing).
+const RELATED_CACHE_TTL_MS = 60 * 60 * 1000;
+const relatedCache = new Map<string, { data: ReturnType<typeof formatPageSummary>[]; expiresAt: number }>();
+
+// Any wiki mutation can change OTHER pages' related lists (the similarity
+// scan runs across all pages), so mutations clear the whole cache.
+function clearRelatedCache(): void {
+  relatedCache.clear();
+}
+
 router.get("/wiki/:slug/related", async (req, res) => {
   const slug = req.params.slug as string;
+
+  const cached = relatedCache.get(slug);
+  if (cached) {
+    if (cached.expiresAt > Date.now()) {
+      res.json(cached.data);
+      return;
+    }
+    relatedCache.delete(slug);
+  }
+
   try {
     // 1. Fetch all chunk embeddings for this page
     const ownChunks = await db
@@ -190,6 +212,7 @@ router.get("/wiki/:slug/related", async (req, res) => {
       );
 
     if (ownChunks.length === 0) {
+      relatedCache.set(slug, { data: [], expiresAt: Date.now() + RELATED_CACHE_TTL_MS });
       res.json([]);
       return;
     }
@@ -232,6 +255,7 @@ router.get("/wiki/:slug/related", async (req, res) => {
     }
 
     if (topSlugs.length === 0) {
+      relatedCache.set(slug, { data: [], expiresAt: Date.now() + RELATED_CACHE_TTL_MS });
       res.json([]);
       return;
     }
@@ -256,6 +280,7 @@ router.get("/wiki/:slug/related", async (req, res) => {
     const bySlug = new Map(pages.map((p) => [p.slug, p]));
     const ordered = topSlugs.flatMap((s) => { const p = bySlug.get(s); return p ? [formatPageSummary(p)] : []; });
 
+    relatedCache.set(slug, { data: ordered, expiresAt: Date.now() + RELATED_CACHE_TTL_MS });
     res.json(ordered);
   } catch (err) {
     logger.error({ err, slug }, "Failed to compute embedding-based related pages");
@@ -372,6 +397,7 @@ router.delete("/wiki/:slug/image", requireSuperAuth, async (req, res) => {
       res.status(404).json({ error: "Page not found" });
       return;
     }
+    clearRelatedCache();
     logger.info({ slug }, "Wiki page image cleared by super-admin");
     res.json({ ok: true, slug: updated.slug, title: updated.title });
   } catch (err) {
@@ -472,6 +498,7 @@ router.post("/wiki/backfill-images", requireSuperAuth, async (_req, res) => {
       }
     }
 
+    if (pagesUpdated > 0) clearRelatedCache();
     logger.info({ pagesUpdated, uploadsProcessed }, "Wiki image backfill complete");
     res.json({ pagesUpdated, uploadsProcessed });
   } catch (err) {
@@ -499,6 +526,7 @@ router.post("/wiki/synthesize-gaps", requireSuperAuth, async (_req, res) => {
     const existingPages = pages.map((p) => ({ title: p.title, slug: p.slug }));
 
     const { created, updated } = await synthesizeWikiGaps(sectionSummaries, existingPages);
+    if (created > 0 || updated > 0) clearRelatedCache();
     logger.info({ created, updated }, "Wiki gap synthesis complete");
     res.json({ created, updated });
   } catch (err) {
@@ -573,6 +601,7 @@ router.post("/wiki/merge", requireSuperAuth, async (req, res) => {
     );
     await db.delete(wikiPagesTable).where(eq(wikiPagesTable.slug, deleteSlug));
 
+    clearRelatedCache();
     logger.info({ keepSlug, deleteSlug, mergeContent }, "Wiki pages merged");
     res.json({ ok: true, keepSlug, deletedSlug: deleteSlug });
   } catch (err) {
@@ -595,6 +624,7 @@ router.delete("/wiki/pages", requireSuperAuth, async (req, res) => {
       ),
     );
     const result = await db.delete(wikiPagesTable).where(inArray(wikiPagesTable.slug, slugs as string[])).returning({ slug: wikiPagesTable.slug });
+    clearRelatedCache();
     logger.info({ deleted: result.length, slugs }, "Wiki pages deleted");
     res.json({ deleted: result.length });
   } catch (err) {
