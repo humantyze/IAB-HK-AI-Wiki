@@ -661,8 +661,8 @@ export default function SuperAdminDashboard() {
                 </div>
               </CardHeader>
 
-              <CardContent className="px-4 sm:px-10 pb-6 sm:pb-10 grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="rounded-xl border border-border/50 bg-background/50 p-6 inline-block col-span-full">
+              <CardContent className="px-4 sm:px-10 pb-6 sm:pb-10 space-y-4">
+                <div className="rounded-xl border border-border/50 bg-background/50 p-6 block">
                   <div className="text-[10px] font-display uppercase tracking-widest text-foreground/85 mb-2">Wiki Pages</div>
                   <div className="text-4xl font-bold font-serif text-green-400">
                     {wikiPageCount === null ? "—" : wikiPageCount}
@@ -1054,38 +1054,6 @@ export default function SuperAdminDashboard() {
                   )}
                 </div>
 
-                <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-6">
-                  <h3 className="font-display text-sm tracking-widest uppercase text-rose-400 mb-2">Clear Page Image</h3>
-                  <p className="text-sm text-foreground/85 mb-4 leading-relaxed">
-                    Remove the header image from a specific wiki page. Paste the page slug from its URL (the part after <span className="font-mono text-xs">/wiki/</span>).
-                  </p>
-                  {clearImageResult && (
-                    <div className="mb-4 flex items-center gap-2">
-                      {clearImageResult.ok
-                        ? <><CheckCircle2 className="w-4 h-4 text-rose-400" /><span className="text-sm text-foreground/90">Image cleared from <strong>{clearImageResult.title}</strong></span></>
-                        : <><AlertCircle className="w-4 h-4 text-destructive" /><span className="text-sm text-foreground/90">{clearImageResult.error}</span></>
-                      }
-                    </div>
-                  )}
-                  <div className="flex gap-3 flex-wrap">
-                    <Input
-                      value={clearImageSlug}
-                      onChange={(e) => { setClearImageSlug(e.target.value); setClearImageResult(null); }}
-                      placeholder="iab-ai-intellectual-property-and-transactions-playbook-2025"
-                      className="flex-1 min-w-[260px] bg-background/50 border-border/50 h-11 rounded-xl focus-visible:ring-rose-500/30 font-mono text-xs"
-                    />
-                    <Button
-                      onClick={handleClearImage}
-                      disabled={clearImageRunning || !clearImageSlug.trim()}
-                      className="font-display uppercase tracking-[0.15em] text-[11px] bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl h-11 px-6 transition-all shrink-0"
-                    >
-                      {clearImageRunning
-                        ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Clearing…</>
-                        : <><ImageOff className="w-3.5 h-3.5 mr-2" />Clear Image</>}
-                    </Button>
-                  </div>
-                </div>
-
                 <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6 col-span-full">
                   <h3 className="font-display text-sm tracking-widest uppercase text-red-400 mb-2">Delete Wiki Pages</h3>
                   <p className="text-sm text-foreground/85 mb-4 leading-relaxed">
@@ -1234,6 +1202,39 @@ export default function SuperAdminDashboard() {
                       : <><Sparkles className="w-3.5 h-3.5 mr-2" />Regenerate Quiz</>}
                   </Button>
                 </div>
+
+                <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-6">
+                  <h3 className="font-display text-sm tracking-widest uppercase text-rose-400 mb-2">Clear Page Image</h3>
+                  <p className="text-sm text-foreground/85 mb-4 leading-relaxed">
+                    Remove the header image from a specific wiki page. Paste the page slug from its URL (the part after <span className="font-mono text-xs">/wiki/</span>).
+                  </p>
+                  {clearImageResult && (
+                    <div className="mb-4 flex items-center gap-2">
+                      {clearImageResult.ok
+                        ? <><CheckCircle2 className="w-4 h-4 text-rose-400" /><span className="text-sm text-foreground/90">Image cleared from <strong>{clearImageResult.title}</strong></span></>
+                        : <><AlertCircle className="w-4 h-4 text-destructive" /><span className="text-sm text-foreground/90">{clearImageResult.error}</span></>
+                      }
+                    </div>
+                  )}
+                  <div className="flex gap-3 flex-wrap">
+                    <Input
+                      value={clearImageSlug}
+                      onChange={(e) => { setClearImageSlug(e.target.value); setClearImageResult(null); }}
+                      placeholder="iab-ai-intellectual-property-and-transactions-playbook-2025"
+                      className="flex-1 min-w-[260px] bg-background/50 border-border/50 h-11 rounded-xl focus-visible:ring-rose-500/30 font-mono text-xs"
+                    />
+                    <Button
+                      onClick={handleClearImage}
+                      disabled={clearImageRunning || !clearImageSlug.trim()}
+                      className="font-display uppercase tracking-[0.15em] text-[11px] bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl h-11 px-6 transition-all shrink-0"
+                    >
+                      {clearImageRunning
+                        ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Clearing…</>
+                        : <><ImageOff className="w-3.5 h-3.5 mr-2" />Clear Image</>}
+                    </Button>
+                  </div>
+                </div>
+
               </CardContent>
             </Card>
           </TabsContent>
