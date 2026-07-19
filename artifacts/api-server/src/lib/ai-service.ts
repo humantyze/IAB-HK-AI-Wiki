@@ -662,10 +662,11 @@ export async function moderateContent(text: string): Promise<ModerationResult> {
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 60_000 });
 
-  // Sample the first 20 000 chars — enough for a reliable verdict without blowing the context
-  const MAX_CHARS = 20_000;
-  const sample = text.length > MAX_CHARS
-    ? text.slice(0, MAX_CHARS) + "\n\n[...truncated for moderation]"
+  // Sample the first 800 words — enough to identify off-topic content without burning tokens
+  const MAX_WORDS = 800;
+  const words = text.split(/\s+/);
+  const sample = words.length > MAX_WORDS
+    ? words.slice(0, MAX_WORDS).join(" ") + "\n\n[...truncated for moderation]"
     : text;
 
   let rawJson = "";
