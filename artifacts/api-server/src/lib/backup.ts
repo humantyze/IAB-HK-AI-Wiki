@@ -111,3 +111,44 @@ export async function getBackupHistory(limit = 20) {
     .orderBy(desc(backupLogTable.createdAt))
     .limit(limit);
 }
+
+export interface RestoreResult {
+  restored: true;
+  fileName: string;
+}
+
+/**
+ * Restore the database from a stored backup.
+ * Downloads the SQL file from GCS, runs psql to apply it, then triggers a
+ * full knowledge-index rebuild in the background.
+ */
+export async function restoreBackup(backupId: number): Promise<RestoreResult> {
+  const [row] = await db
+    .select()
+    .from(backupLogTable)
+    .where(sql`${backupLogTable.id} = ${backupId}`)
+    .limit(1);
+
+  if (!row || !row.storageObjectPath) {
+    throw new Error(`Backup #${backupId} not found`);
+  }
+
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) throw new Error("DATABASE_URL is not set");
+
+  const tmpPath = path.join("/tmp", `restore-${Date.now()}-${row.fileName}`);
+
+  logger.info({ backupId, fileName: row.fileName }, "Downloading backup from GCS for restore");
+  const bucket = getBackupBucket();
+  await bucket.file(row.storageObjectPath).download({ destination: tmpPath });
+
+  try {
+    logger.info({ backupId, fileName: row.fileName }, "Running psql restore");
+    await execFileAsync("psql", [databaseUrl, "--file", tmpPath, "--single-transaction"]);
+    logger.info({ backupId, fileName: row.fileName }, "Database restore complete");
+  } finally {
+    await fs.unlink(tmpPath).catch(() => {});
+  }
+
+  return { restored: true, fileName: row.fileName };
+}

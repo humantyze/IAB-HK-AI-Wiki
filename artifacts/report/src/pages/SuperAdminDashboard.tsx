@@ -85,6 +85,9 @@ export default function SuperAdminDashboard() {
   const [lastBackup, setLastBackup] = useState<BackupEntry | null | undefined>(undefined);
   const [backupHistory, setBackupHistory] = useState<BackupEntry[]>([]);
   const [backupRunning, setBackupRunning] = useState(false);
+  const [restoreConfirmId, setRestoreConfirmId] = useState<number | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
 
   const deleteUpload = useDeleteUpload();
   const uploadImpact = useUploadImpact();
@@ -1381,6 +1384,18 @@ export default function SuperAdminDashboard() {
                           <DatabaseBackup className="w-3.5 h-3.5 text-sky-400/60 shrink-0" />
                           <span className="text-xs font-mono text-foreground/90 flex-1 truncate">{b.fileName}</span>
                           <span className="text-xs text-foreground/65 shrink-0">{format(new Date(b.backedUpAt), "d MMM, HH:mm")}</span>
+                          <a
+                            href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/api/super-admin/backup/download/${b.id}`}
+                            className="text-[10px] font-display uppercase tracking-widest text-sky-400/70 hover:text-sky-400 border border-sky-500/20 hover:border-sky-500/40 rounded-lg px-2 py-1 transition-colors shrink-0"
+                          >
+                            Download
+                          </a>
+                          <button
+                            onClick={() => { setRestoreConfirmId(b.id); setRestoreError(null); }}
+                            className="text-[10px] font-display uppercase tracking-widest text-amber-400/70 hover:text-amber-400 border border-amber-500/20 hover:border-amber-500/40 rounded-lg px-2 py-1 transition-colors shrink-0"
+                          >
+                            Restore
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -1391,6 +1406,82 @@ export default function SuperAdminDashboard() {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* RESTORE BLOCKING OVERLAY */}
+      {restoring && (
+        <div className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center gap-4">
+          <div className="w-10 h-10 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+          <p className="font-display uppercase tracking-widest text-sm text-amber-400">Restoring database…</p>
+          <p className="text-xs text-foreground/65 max-w-xs text-center">This may take 15–30 seconds. Do not close the page.</p>
+        </div>
+      )}
+
+      {/* RESTORE CONFIRM DIALOG */}
+      {(() => {
+        const restoreTarget = restoreConfirmId !== null ? backupHistory.find((b) => b.id === restoreConfirmId) : null;
+        return (
+          <Dialog open={restoreConfirmId !== null} onOpenChange={(open) => { if (!open && !restoring) { setRestoreConfirmId(null); setRestoreError(null); } }}>
+            <DialogContent className="bg-card border-border/50 rounded-2xl max-w-md">
+              <DialogHeader>
+                <DialogTitle className="font-serif text-xl">Restore from Backup?</DialogTitle>
+                <DialogDescription className="text-foreground/85 mt-2 leading-relaxed">
+                  {restoreTarget ? (
+                    <>Restore to <span className="font-mono text-foreground/90">{restoreTarget.fileName}</span> ({format(new Date(restoreTarget.backedUpAt), "d MMM yyyy, HH:mm")}).</>
+                  ) : "Restore this backup."}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs text-foreground/85 flex gap-2 leading-relaxed">
+                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <span>This will <strong>permanently replace all current data</strong> — every wiki page, upload record, and knowledge chunk will be overwritten with the backup's contents. The knowledge index will be rebuilt afterwards. This cannot be undone.</span>
+              </div>
+              {restoreError && (
+                <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive flex gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  {restoreError}
+                </div>
+              )}
+              <DialogFooter className="gap-3">
+                <Button
+                  variant="ghost"
+                  onClick={() => { setRestoreConfirmId(null); setRestoreError(null); }}
+                  disabled={restoring}
+                  className="font-display uppercase tracking-widest text-[11px] text-foreground/90"
+                >
+                  <X className="w-3.5 h-3.5 mr-1" />Cancel
+                </Button>
+                <Button
+                  disabled={restoring || restoreConfirmId === null}
+                  onClick={async () => {
+                    if (restoreConfirmId === null) return;
+                    setRestoring(true);
+                    setRestoreError(null);
+                    try {
+                      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+                      const res = await fetch(`${baseUrl}/api/super-admin/backup/restore/${restoreConfirmId}`, {
+                        method: "POST",
+                        credentials: "include",
+                      });
+                      if (!res.ok) {
+                        const body = await res.json().catch(() => ({})) as { error?: string };
+                        throw new Error(body.error ?? "Restore failed");
+                      }
+                      window.location.reload();
+                    } catch (err) {
+                      setRestoreError(err instanceof Error ? err.message : "Restore failed");
+                      setRestoring(false);
+                    }
+                  }}
+                  className="font-display uppercase tracking-[0.15em] text-[11px] bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-xl"
+                >
+                  {restoring
+                    ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Restoring…</>
+                    : <><RotateCcw className="w-3.5 h-3.5 mr-2" />Restore Database</>}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       {/* DELETE CONTRIBUTION DIALOG */}
       <Dialog open={deleteConfirmId !== null} onOpenChange={(open) => { if (!open) { setDeleteConfirmId(null); setDeleteImpact(null); } }}>

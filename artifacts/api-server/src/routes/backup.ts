@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { requireSuperAuth } from "../middlewares/auth";
-import { runBackup, getBackupHistory } from "../lib/backup";
+import { runBackup, getBackupHistory, restoreBackup } from "../lib/backup";
+import { reindexAll } from "../lib/knowledge-index";
 import { logger } from "../lib/logger";
 import { db } from "@workspace/db";
 import { backupLogTable } from "@workspace/db";
@@ -54,6 +55,31 @@ router.get("/super-admin/backup/download/:id", requireSuperAuth, async (req, res
   } catch (err) {
     const message = err instanceof Error ? err.message : "Download failed";
     logger.error({ err }, "Backup download failed");
+    res.status(500).json({ error: message });
+  }
+});
+
+router.post("/super-admin/backup/restore/:id", requireSuperAuth, async (req, res) => {
+  const id = parseInt(req.params["id"] as string, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid backup ID" });
+    return;
+  }
+
+  try {
+    logger.info({ backupId: id }, "Restore requested by super-admin");
+    const result = await restoreBackup(id);
+
+    setImmediate(() => {
+      void reindexAll()
+        .then((counts) => logger.info({ backupId: id, counts }, "Knowledge index rebuilt after restore"))
+        .catch((err: unknown) => logger.error({ err, backupId: id }, "Knowledge reindex after restore failed"));
+    });
+
+    res.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Restore failed";
+    logger.error({ err, backupId: id }, "Restore failed");
     res.status(500).json({ error: message });
   }
 });
