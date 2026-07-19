@@ -11,7 +11,7 @@
  * hard-breaks existing features.
  */
 
-export const DEEPSEEK_MODEL = "deepseek/deepseek-v3.2";
+export const DEEPSEEK_MODEL = "deepseek/deepseek-v4-pro";
 
 export interface TextAIConfig {
   baseUrl: string;
