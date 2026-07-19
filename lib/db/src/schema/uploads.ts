@@ -21,6 +21,8 @@ export const uploadsTable = pgTable("uploads", {
   status: text("status").notNull().default("pending"),
   processingErrors: jsonb("processing_errors").$type<ProcessingError[]>(),
   responsibleAi: boolean("responsible_ai").notNull().default(false),
+  moderationStatus: text("moderation_status").notNull().default("clear"),
+  moderationReason: text("moderation_reason"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   processedAt: timestamp("processed_at"),
 });

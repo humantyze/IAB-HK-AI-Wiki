@@ -1,6 +1,6 @@
 import { and, asc, eq, lt } from "drizzle-orm";
 import { db, uploadsTable, type ProcessingError, type Upload } from "@workspace/db";
-import { extractWikiPages } from "./ai-service";
+import { extractWikiPages, moderateContent } from "./ai-service";
 import { indexSource, removeSource } from "./knowledge-index";
 import { logger } from "./logger";
 
@@ -29,6 +29,42 @@ export async function reprocessUpload(upload: Upload): Promise<ReprocessOutcome>
   const sourceRef = `Upload #${upload.id} — ${upload.contentType.replace(/_/g, " ")}`;
   const uploadTitle = `${upload.contributorName ? `${upload.contributorName} — ` : ""}${upload.contentType.replace(/_/g, " ")}`;
 
+  // ── Content moderation ──────────────────────────────────────────────────────
+  let moderationStatus = "clear";
+  let moderationReason: string | null = null;
+
+  try {
+    logger.info({ uploadId: upload.id }, "Running content moderation during reprocess");
+    const modResult = await moderateContent(upload.rawText);
+    moderationStatus = modResult.verdict;
+    moderationReason = modResult.reason || null;
+    logger.info({ uploadId: upload.id, verdict: modResult.verdict }, "Content moderation complete");
+  } catch (err) {
+    logger.warn({ err, uploadId: upload.id }, "Content moderation threw unexpectedly — defaulting to 'clear'");
+  }
+
+  if (moderationStatus === "rejected") {
+    errors.push({
+      step: "content_moderation",
+      message: moderationReason ?? "Content rejected by moderation",
+      ts: new Date().toISOString(),
+    });
+    await db
+      .update(uploadsTable)
+      .set({
+        status: "failed",
+        processedAt: new Date(),
+        processingErrors: errors,
+        moderationStatus: "rejected",
+        moderationReason,
+      })
+      .where(eq(uploadsTable.id, upload.id))
+      .catch((dbErr) => logger.error({ dbErr, uploadId: upload.id }, "Failed to write moderation rejection to DB"));
+
+    return { id: upload.id, status: "failed", wikiPagesCreated: 0, wikiPagesUpdated: 0, errors };
+  }
+
+  // ── Wiki extraction ──────────────────────────────────────────────────────────
   try {
     const { created, updated } = await extractWikiPages(sourceLabel, upload.rawText, sourceRef, []);
     wikiPagesCreated = created;
@@ -80,6 +116,8 @@ export async function reprocessUpload(upload: Upload): Promise<ReprocessOutcome>
       status: finalStatus,
       processedAt: new Date(),
       processingErrors: errors.length > 0 ? errors : null,
+      moderationStatus,
+      moderationReason,
     })
     .where(eq(uploadsTable.id, upload.id))
     .catch((dbErr) => logger.error({ dbErr, uploadId: upload.id }, "Failed to write reprocess result to DB"));

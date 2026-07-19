@@ -619,3 +619,82 @@ One entry per input page, in the same order.`;
   logger.info({ updated }, "Wiki title regeneration complete");
   return { updated };
 }
+
+// ── Content Moderation ────────────────────────────────────────────────────────
+
+export type ModerationVerdict = "clear" | "flagged" | "rejected";
+
+export interface ModerationResult {
+  verdict: ModerationVerdict;
+  reason: string;
+}
+
+const MODERATION_SYSTEM_PROMPT = `You are a content moderation assistant for an AI/marketing/advertising industry knowledge base maintained by IAB Hong Kong.
+
+Evaluate the submitted content against these four criteria:
+1. ON-TOPIC: Content must be relevant to AI, marketing, advertising, media buying, ad tech, or closely related industry topics. Completely unrelated content (e.g. recipes, sports scores, personal blogs) should be rejected.
+2. NO SPAM: Content must not be meaningless filler, repetitive promotional copy unrelated to the industry, or gibberish.
+3. NO HATE SPEECH OR HARASSMENT: Content must not contain hate speech, threats, harassment, or discriminatory material targeting individuals or groups.
+4. NO EXPOSED PERSONAL DATA: Content must not include email addresses, phone numbers, home addresses, national ID numbers, or other personal data that should not be public.
+
+Respond ONLY with a valid JSON object — no markdown fences, no commentary:
+{"verdict":"clear"|"flagged"|"rejected","reason":"one sentence"}
+
+Verdict guidance:
+- "clear": Passes all checks. Proceed without concern.
+- "flagged": Borderline — e.g. somewhat off-topic, mildly promotional, or contains minor concerns. Pipeline continues but the submission is marked for human awareness.
+- "rejected": Clearly fails at least one check. Do not extract wiki pages from this content.`;
+
+/**
+ * Runs LLM-based content moderation on the provided text.
+ * Defaults to "clear" if the LLM is unavailable or its response cannot be parsed,
+ * so a configuration error never silently blocks legitimate uploads.
+ */
+export async function moderateContent(text: string): Promise<ModerationResult> {
+  const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+
+  if (!baseUrl || !apiKey) {
+    logger.warn("OpenAI env vars not set — skipping content moderation, defaulting to 'clear'");
+    return { verdict: "clear", reason: "Moderation skipped: LLM not configured" };
+  }
+
+  const { default: OpenAI } = await import("openai");
+  const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 60_000 });
+
+  // Sample the first 20 000 chars — enough for a reliable verdict without blowing the context
+  const MAX_CHARS = 20_000;
+  const sample = text.length > MAX_CHARS
+    ? text.slice(0, MAX_CHARS) + "\n\n[...truncated for moderation]"
+    : text;
+
+  let rawJson = "";
+  try {
+    const stream = await client.chat.completions.create({
+      model: "gpt-5-mini",
+      stream: true,
+      max_tokens: 150,
+      temperature: 0,
+      messages: [
+        { role: "system", content: MODERATION_SYSTEM_PROMPT },
+        { role: "user", content: `Moderate the following content:\n\n${sample}` },
+      ],
+    });
+
+    for await (const chunk of stream) {
+      rawJson += chunk.choices[0]?.delta?.content ?? "";
+    }
+
+    const fenceMatch = rawJson.match(/```(?:json)?\s*([\s\S]*?)```/);
+    const jsonStr = (fenceMatch ? fenceMatch[1] : rawJson).trim();
+    const parsed = JSON.parse(jsonStr) as { verdict?: string; reason?: string };
+    const verdict = parsed.verdict as ModerationVerdict;
+    if (!["clear", "flagged", "rejected"].includes(verdict)) {
+      throw new Error(`Unexpected verdict value: ${verdict}`);
+    }
+    return { verdict, reason: parsed.reason ?? "" };
+  } catch (err) {
+    logger.warn({ err, rawJson }, "Content moderation response could not be parsed — defaulting to 'clear'");
+    return { verdict: "clear", reason: "Moderation parse error — defaulted to clear" };
+  }
+}

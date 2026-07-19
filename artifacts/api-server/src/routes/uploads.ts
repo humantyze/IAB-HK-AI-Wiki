@@ -8,7 +8,7 @@ import { z } from "zod";
 import { db, uploadsTable, wikiPagesTable } from "@workspace/db";
 import type { ProcessingError } from "@workspace/db";
 import { requireAuth, requireSuperAuth } from "../middlewares/auth";
-import { extractWikiPages, describeDocumentVisuals, removeRefFromPage } from "../lib/ai-service";
+import { extractWikiPages, describeDocumentVisuals, removeRefFromPage, moderateContent } from "../lib/ai-service";
 import { indexSource, removeSource, indexWikiPage } from "../lib/knowledge-index";
 import { extractTextOnly, extractImages, renderPdfPagesBatched } from "../lib/pdf-extractor";
 import { dispatchExtraction, SUPPORTED_MIME_TYPES, isSupportedMimeType } from "../lib/doc-extractor";
@@ -385,6 +385,40 @@ router.post("/uploads", requireAuth, (req, res, next) => {
         let totalCreated = 0;
         let totalUpdated = 0;
 
+        // ── Content moderation ───────────────────────────────────────────────
+        let moderationStatus = "clear";
+        let moderationReason: string | null = null;
+        try {
+          logger.info({ uploadId }, "Running content moderation");
+          const modResult = await moderateContent(capturedExtractions.map((e) => e.text).join("\n\n"));
+          moderationStatus = modResult.verdict;
+          moderationReason = modResult.reason || null;
+          logger.info({ uploadId, verdict: modResult.verdict }, "Content moderation complete");
+        } catch (err) {
+          logger.warn({ err, uploadId }, "Content moderation threw unexpectedly — defaulting to 'clear'");
+        }
+
+        if (moderationStatus === "rejected") {
+          const modError: ProcessingError = {
+            step: "content_moderation",
+            message: moderationReason ?? "Content rejected by moderation",
+            ts: new Date().toISOString(),
+          };
+          await db
+            .update(uploadsTable)
+            .set({
+              status: "failed",
+              processedAt: new Date(),
+              processingErrors: [...capturedSyncErrors, modError],
+              moderationStatus: "rejected",
+              moderationReason,
+            })
+            .where(eq(uploadsTable.id, uploadId));
+          logger.info({ uploadId }, "Upload rejected by content moderation — pipeline stopped");
+          return;
+        }
+        // ────────────────────────────────────────────────────────────────────
+
         for (const extraction of capturedExtractions) {
           try {
             const { created, updated } = await extractWikiPages(
@@ -437,6 +471,8 @@ router.post("/uploads", requireAuth, (req, res, next) => {
             status: finalStatus,
             processedAt: new Date(),
             processingErrors: [...capturedSyncErrors, ...asyncErrors].length > 0 ? [...capturedSyncErrors, ...asyncErrors] : null,
+            moderationStatus,
+            moderationReason,
           })
           .where(eq(uploadsTable.id, uploadId));
 
@@ -472,6 +508,8 @@ router.post("/uploads", requireAuth, (req, res, next) => {
               .set({
                 status: finalStatus,
                 processingErrors: [...capturedSyncErrors, ...asyncErrors],
+                moderationStatus,
+                moderationReason,
               })
               .where(eq(uploadsTable.id, uploadId));
           }
@@ -484,30 +522,62 @@ router.post("/uploads", requireAuth, (req, res, next) => {
       })();
     });
   } else {
-    // Only pasted text — run knowledge indexing then mark processed
+    // Only pasted text — run moderation then knowledge indexing then mark processed
+    const capturedPastedText = pastedText;
+    const capturedUploadId = uploadRecord.id;
     setImmediate(() => {
       void (async () => {
+        // ── Content moderation ─────────────────────────────────────────────────
+        let moderationStatus = "clear";
+        let moderationReason: string | null = null;
+        try {
+          logger.info({ uploadId: capturedUploadId }, "Running content moderation (pasted text)");
+          const modResult = await moderateContent(capturedPastedText);
+          moderationStatus = modResult.verdict;
+          moderationReason = modResult.reason || null;
+          logger.info({ uploadId: capturedUploadId, verdict: modResult.verdict }, "Content moderation complete");
+        } catch (err) {
+          logger.warn({ err, uploadId: capturedUploadId }, "Content moderation threw unexpectedly — defaulting to 'clear'");
+        }
+
+        if (moderationStatus === "rejected") {
+          await db.update(uploadsTable).set({
+            status: "failed",
+            processedAt: new Date(),
+            processingErrors: [{
+              step: "content_moderation",
+              message: moderationReason ?? "Content rejected by moderation",
+              ts: new Date().toISOString(),
+            }],
+            moderationStatus: "rejected",
+            moderationReason,
+          }).where(eq(uploadsTable.id, capturedUploadId)).catch(() => {});
+          logger.info({ uploadId: capturedUploadId }, "Pasted-text upload rejected by content moderation — pipeline stopped");
+          return;
+        }
+        // ──────────────────────────────────────────────────────────────────────
+
         // Move to an eligible status first so the upload is never indexed while
         // still "pending", then index. A failure downgrades it to "partial".
-        await db.update(uploadsTable).set({ status: "processed", processedAt: new Date() }).where(eq(uploadsTable.id, uploadRecord.id));
+        await db.update(uploadsTable).set({ status: "processed", processedAt: new Date(), moderationStatus, moderationReason }).where(eq(uploadsTable.id, capturedUploadId));
         try {
           const uploadTitle = `${data.contributorName ? `${data.contributorName} — ` : ""}${data.contentType.replace(/_/g, " ")}`;
           await indexSource({
             sourceType: "upload",
-            sourceId: uploadRecord.id,
+            sourceId: capturedUploadId,
             sourceSlug: null,
             title: uploadTitle,
-            text: pastedText,
+            text: capturedPastedText,
           });
           // Fire-and-forget: regenerate sample questions from updated content
           setImmediate(() => { void generateAndStoreQuestions(); });
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          logger.error({ err, uploadId: uploadRecord.id }, "Knowledge indexing failed for pasted-text upload");
+          logger.error({ err, uploadId: capturedUploadId }, "Knowledge indexing failed for pasted-text upload");
           await db.update(uploadsTable).set({
             status: "partial",
             processingErrors: [{ step: "knowledge_indexing", message, ts: new Date().toISOString() }],
-          }).where(eq(uploadsTable.id, uploadRecord.id)).catch(() => {});
+          }).where(eq(uploadsTable.id, capturedUploadId)).catch(() => {});
         }
       })();
     });
