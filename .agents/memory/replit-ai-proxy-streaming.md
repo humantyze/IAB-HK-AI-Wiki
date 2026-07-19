@@ -21,3 +21,10 @@ for await (const chunk of stream) {
 ```
 
 This applies to every model exposed by the proxy (gpt-5, gpt-5-mini, etc.).
+
+## max_completion_tokens, not max_tokens
+
+`gpt-5` / `gpt-5-mini` via this proxy reject `max_tokens` with a 400 error:
+> "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead."
+
+**How to apply:** Always use `max_completion_tokens` when capping token output for these models.

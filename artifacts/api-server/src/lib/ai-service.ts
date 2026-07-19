@@ -673,7 +673,7 @@ export async function moderateContent(text: string): Promise<ModerationResult> {
     const stream = await client.chat.completions.create({
       model: "gpt-5-mini",
       stream: true,
-      max_tokens: 150,
+      max_completion_tokens: 150,
       temperature: 0,
       messages: [
         { role: "system", content: MODERATION_SYSTEM_PROMPT },
