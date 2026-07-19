@@ -143,6 +143,19 @@ export async function restoreBackup(backupId: number): Promise<RestoreResult> {
   await bucket.file(row.storageObjectPath).download({ destination: tmpPath });
 
   try {
+    // Drop and recreate the public schema so existing tables don't conflict with
+    // the plain-SQL dump (created without --clean). This is intentionally outside
+    // a transaction because DROP SCHEMA cannot be rolled back once committed, but
+    // that is acceptable for an explicit admin restore operation.
+    logger.info({ backupId }, "Resetting public schema before restore");
+    await execFileAsync("psql", [
+      databaseUrl,
+      "-c",
+      "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO PUBLIC;",
+    ]);
+
+    // Apply the dump. --single-transaction makes the restore itself atomic so a
+    // partial failure leaves the schema empty rather than half-populated.
     logger.info({ backupId, fileName: row.fileName }, "Running psql restore");
     await execFileAsync("psql", [databaseUrl, "--file", tmpPath, "--single-transaction"]);
     logger.info({ backupId, fileName: row.fileName }, "Database restore complete");
@@ -150,5 +163,8 @@ export async function restoreBackup(backupId: number): Promise<RestoreResult> {
     await fs.unlink(tmpPath).catch(() => {});
   }
 
+  // Reindex is intentionally async: it can take 30–120 s and should not block
+  // the HTTP response. The caller (UI) reloads the page after the response and
+  // the knowledge index will be ready shortly after.
   return { restored: true, fileName: row.fileName };
 }

@@ -86,6 +86,7 @@ export default function SuperAdminDashboard() {
   const [backupHistory, setBackupHistory] = useState<BackupEntry[]>([]);
   const [backupRunning, setBackupRunning] = useState(false);
   const [restoreConfirmId, setRestoreConfirmId] = useState<number | null>(null);
+  const [restoreAcknowledged, setRestoreAcknowledged] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [restoreError, setRestoreError] = useState<string | null>(null);
 
@@ -1391,7 +1392,7 @@ export default function SuperAdminDashboard() {
                             Download
                           </a>
                           <button
-                            onClick={() => { setRestoreConfirmId(b.id); setRestoreError(null); }}
+                            onClick={() => { setRestoreConfirmId(b.id); setRestoreError(null); setRestoreAcknowledged(false); }}
                             className="text-[10px] font-display uppercase tracking-widest text-amber-400/70 hover:text-amber-400 border border-amber-500/20 hover:border-amber-500/40 rounded-lg px-2 py-1 transition-colors shrink-0"
                           >
                             Restore
@@ -1420,7 +1421,7 @@ export default function SuperAdminDashboard() {
       {(() => {
         const restoreTarget = restoreConfirmId !== null ? backupHistory.find((b) => b.id === restoreConfirmId) : null;
         return (
-          <Dialog open={restoreConfirmId !== null} onOpenChange={(open) => { if (!open && !restoring) { setRestoreConfirmId(null); setRestoreError(null); } }}>
+          <Dialog open={restoreConfirmId !== null} onOpenChange={(open) => { if (!open && !restoring) { setRestoreConfirmId(null); setRestoreError(null); setRestoreAcknowledged(false); } }}>
             <DialogContent className="bg-card border-border/50 rounded-2xl max-w-md">
               <DialogHeader>
                 <DialogTitle className="font-serif text-xl">Restore from Backup?</DialogTitle>
@@ -1432,8 +1433,20 @@ export default function SuperAdminDashboard() {
               </DialogHeader>
               <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs text-foreground/85 flex gap-2 leading-relaxed">
                 <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                <span>This will <strong>permanently replace all current data</strong> — every wiki page, upload record, and knowledge chunk will be overwritten with the backup's contents. The knowledge index will be rebuilt afterwards. This cannot be undone.</span>
+                <span>This will <strong>permanently replace all current data</strong> — every wiki page, upload record, and knowledge chunk will be overwritten with the backup's contents. The knowledge index will be rebuilt in the background afterwards. This cannot be undone.</span>
               </div>
+              <label className="flex items-start gap-3 cursor-pointer select-none rounded-xl border border-border/30 bg-background/40 p-3 hover:bg-background/60 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={restoreAcknowledged}
+                  onChange={(e) => setRestoreAcknowledged(e.target.checked)}
+                  disabled={restoring}
+                  className="mt-0.5 accent-amber-500 w-4 h-4 shrink-0"
+                />
+                <span className="text-xs text-foreground/80 leading-relaxed">
+                  I understand that all current data will be <strong>permanently overwritten</strong> and this action cannot be undone.
+                </span>
+              </label>
               {restoreError && (
                 <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive flex gap-2">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
@@ -1443,14 +1456,14 @@ export default function SuperAdminDashboard() {
               <DialogFooter className="gap-3">
                 <Button
                   variant="ghost"
-                  onClick={() => { setRestoreConfirmId(null); setRestoreError(null); }}
+                  onClick={() => { setRestoreConfirmId(null); setRestoreError(null); setRestoreAcknowledged(false); }}
                   disabled={restoring}
                   className="font-display uppercase tracking-widest text-[11px] text-foreground/90"
                 >
                   <X className="w-3.5 h-3.5 mr-1" />Cancel
                 </Button>
                 <Button
-                  disabled={restoring || restoreConfirmId === null}
+                  disabled={restoring || restoreConfirmId === null || !restoreAcknowledged}
                   onClick={async () => {
                     if (restoreConfirmId === null) return;
                     setRestoring(true);
