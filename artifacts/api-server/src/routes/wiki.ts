@@ -130,7 +130,9 @@ router.post("/wiki/search", async (req, res) => {
         },
       ],
       response_format: { type: "json_object" },
-      max_completion_tokens: 512,
+      // Reasoning tokens count against this cap; 512 caused truncated JSON
+      // ("malformed LLM output" warnings) on nearly every query.
+      max_completion_tokens: 2000,
     });
 
     const rawContent = (response.choices[0]?.message?.content ?? "").trim();

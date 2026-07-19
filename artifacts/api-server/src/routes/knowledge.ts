@@ -141,7 +141,11 @@ router.post("/knowledge/search", async (req, res) => {
             content: `Question: ${trimmed}\n\nContext passages:\n${context}`,
           },
         ],
-        max_completion_tokens: 600,
+        // gpt-5-mini is a reasoning model: hidden reasoning tokens count
+        // against this cap. 600 was too low — hard questions (esp. Chinese)
+        // burned the budget on reasoning and truncated the visible answer
+        // (observed as chars=30, finishReason="length").
+        max_completion_tokens: 2500,
         stream: true,
       },
       { signal: clientAbort.signal },
