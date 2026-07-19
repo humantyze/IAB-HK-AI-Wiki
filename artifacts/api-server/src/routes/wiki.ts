@@ -85,7 +85,7 @@ router.post("/wiki/search", async (req, res) => {
   // keeps the prompt small. Falls back to all pages if retrieval finds nothing.
   let candidatePages = allPages;
   try {
-    const hits = await retrieve(query.trim(), { sourceTypes: ["wiki"], limit: 24, rerank: false });
+    const hits = await retrieve(query.trim(), { sourceTypes: ["wiki"], limit: 24 });
     const orderedSlugs: string[] = [];
     const seen = new Set<string>();
     for (const h of hits) {
@@ -176,7 +176,7 @@ router.post("/wiki/search", async (req, res) => {
 });
 
 router.get("/wiki/:slug/related", async (req, res) => {
-  const { slug } = req.params;
+  const slug = req.params.slug as string;
   try {
     // 1. Fetch all chunk embeddings for this page
     const ownChunks = await db
@@ -247,6 +247,8 @@ router.get("/wiki/:slug/related", async (req, res) => {
         updatedAt: wikiPagesTable.updatedAt,
         bodyMarkdown: wikiPagesTable.bodyMarkdown,
         imageUrl: wikiPagesTable.imageUrl,
+        sources: wikiPagesTable.sources,
+        responsibleAi: wikiPagesTable.responsibleAi,
       })
       .from(wikiPagesTable)
       .where(inArray(wikiPagesTable.slug, topSlugs));
@@ -308,7 +310,7 @@ router.get("/wiki/duplicates", requireSuperAuth, async (_req, res) => {
 });
 
 router.get("/wiki/:slug", async (req, res) => {
-  const { slug } = req.params;
+  const slug = req.params.slug as string;
 
   const [page] = await db
     .select()
@@ -359,7 +361,7 @@ router.get("/wiki-image", async (req, res) => {
  * Super-admin: clear the image on a specific wiki page.
  */
 router.delete("/wiki/:slug/image", requireSuperAuth, async (req, res) => {
-  const { slug } = req.params;
+  const slug = req.params.slug as string;
   try {
     const [updated] = await db
       .update(wikiPagesTable)

@@ -196,7 +196,7 @@ router.post("/uploads", requireAuth, (req, res, next) => {
       .where(
         and(
           eq(uploadsTable.contentHash, contentHash),
-          not(and(eq(uploadsTable.status, "failed"), eq(uploadsTable.rawText, ""))),
+          or(ne(uploadsTable.status, "failed"), ne(uploadsTable.rawText, "")),
         )
       )
       .limit(1);

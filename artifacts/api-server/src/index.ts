@@ -95,6 +95,7 @@ async function main() {
           return generateAndStoreQuiz();
         }
         logger.info({ count: entries.length }, "Quiz cache already populated — skipping startup generation");
+        return;
       })
       .catch((e) => {
         logger.error({ err: e }, "Unexpected error during startup quiz cache check");
