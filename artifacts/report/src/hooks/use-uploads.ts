@@ -148,6 +148,61 @@ export interface RegressResult {
   uploadsDeleted: number;
 }
 
+export interface ClearFlagResult {
+  id: number;
+  moderationStatus: string;
+}
+
+export function useClearFlag() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (uploadId: number): Promise<ClearFlagResult> => {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/uploads/${uploadId}/moderation`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ moderationStatus: "clear" }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Clear flag failed" }));
+        throw new Error((err as { error?: string }).error || "Clear flag failed");
+      }
+      return res.json() as Promise<ClearFlagResult>;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/uploads"] });
+    },
+  });
+}
+
+export interface RemoveUploadPagesResult {
+  wikiPagesDeleted: number;
+  wikiPagesUpdated: number;
+}
+
+export function useRemoveUploadPages() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (uploadId: number): Promise<RemoveUploadPagesResult> => {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/uploads/${uploadId}/wiki-pages`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Remove pages failed" }));
+        throw new Error((err as { error?: string }).error || "Remove pages failed");
+      }
+      return res.json() as Promise<RemoveUploadPagesResult>;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/uploads"] });
+      qc.invalidateQueries({ queryKey: ["/api/wiki"] });
+    },
+  });
+}
+
 export function useRegress() {
   const qc = useQueryClient();
   return useMutation({

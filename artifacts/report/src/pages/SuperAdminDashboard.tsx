@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 
 import { useSuperAuth } from "@/hooks/use-super-auth";
-import { useUploads, useDeleteUpload, useUploadImpact, useRegressPreview, useRegress, type UploadImpact } from "@/hooks/use-uploads";
+import { useUploads, useDeleteUpload, useUploadImpact, useRegressPreview, useRegress, useClearFlag, useRemoveUploadPages, type UploadImpact } from "@/hooks/use-uploads";
 import { useToast } from "@/hooks/use-toast";
 
 import { Button } from "@/components/ui/button";
@@ -90,6 +90,10 @@ export default function SuperAdminDashboard() {
   const uploadImpact = useUploadImpact();
   const regressPreview = useRegressPreview();
   const regress = useRegress();
+  const clearFlag = useClearFlag();
+  const removeUploadPages = useRemoveUploadPages();
+
+  const [removePageConfirmId, setRemovePageConfirmId] = useState<number | null>(null);
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [deleteImpact, setDeleteImpact] = useState<UploadImpact | null>(null);
@@ -744,6 +748,71 @@ export default function SuperAdminDashboard() {
                   );
                 })()}
 
+                {uploads && (() => {
+                  const flaggedUploads = (uploads as Array<{
+                    id: number;
+                    uploaderName?: string | null;
+                    filePath?: string | null;
+                    contentType: string;
+                    moderationStatus?: string | null;
+                    moderationReason?: string | null;
+                    createdAt: string;
+                  }>).filter((u) => u.moderationStatus === "flagged");
+                  if (flaggedUploads.length === 0) return null;
+                  return (
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-6 col-span-full">
+                      <h3 className="font-display text-sm tracking-widest uppercase text-amber-400 mb-1">Needs Review</h3>
+                      <p className="text-xs text-foreground/90 mb-4">These uploads were flagged by content moderation as potentially borderline. Review the reason and either approve (clear flag) or remove the wiki pages they produced.</p>
+                      <div className="space-y-2">
+                        {flaggedUploads.map((upload) => (
+                          <div key={upload.id} className="rounded-lg border border-amber-500/20 bg-background/30 overflow-hidden">
+                            <div className="flex items-start gap-3 px-4 py-3">
+                              <span className="font-mono text-xs text-foreground/65 mt-0.5 shrink-0">#{upload.id}</span>
+                              <Badge variant="outline" className="text-[10px] font-display tracking-widest uppercase border-amber-500/30 text-amber-400/70 shrink-0 mt-0.5">
+                                flagged
+                              </Badge>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs text-foreground/90 truncate">
+                                  {upload.filePath ? upload.filePath.replace(/^\d+-\d+-/, "") : (upload.uploaderName ?? "Text submission")}
+                                </p>
+                                {upload.moderationReason && (
+                                  <p className="text-xs text-amber-400/80 mt-1 leading-relaxed line-clamp-2">{upload.moderationReason}</p>
+                                )}
+                              </div>
+                              <span className="text-xs text-foreground/65 shrink-0 mt-0.5">
+                                {new Date(upload.createdAt).toLocaleDateString("en-HK", { day: "numeric", month: "short", timeZone: "Asia/Hong_Kong" })}
+                              </span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                  onClick={() => {
+                                    clearFlag.mutate(upload.id, {
+                                      onSuccess: () => toast({ title: "Flag cleared", description: `Upload #${upload.id} approved.` }),
+                                      onError: (err) => toast({ title: "Failed to clear flag", description: err.message, variant: "destructive" }),
+                                    });
+                                  }}
+                                  disabled={clearFlag.isPending}
+                                  className="text-xs font-display uppercase tracking-widest text-emerald-400/80 hover:text-emerald-400 border border-emerald-500/20 hover:border-emerald-500/40 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-40"
+                                  title="Clear flag — mark as approved"
+                                >
+                                  {clearFlag.isPending ? "…" : "Clear Flag"}
+                                </button>
+                                <button
+                                  onClick={() => setRemovePageConfirmId(upload.id)}
+                                  disabled={removeUploadPages.isPending}
+                                  className="text-xs font-display uppercase tracking-widest text-destructive/70 hover:text-destructive border border-destructive/20 hover:border-destructive/40 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-40"
+                                  title="Remove wiki pages produced by this upload"
+                                >
+                                  Remove Pages
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-6 col-span-full">
                   <h3 className="font-display text-sm tracking-widest uppercase text-orange-400 mb-2">Reprocess Uploads → Wiki</h3>
                   <p className="text-sm text-foreground/85 mb-4 leading-relaxed">
@@ -1389,6 +1458,49 @@ export default function SuperAdminDashboard() {
               {wiping
                 ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Wiping…</>
                 : <><Trash2 className="w-3.5 h-3.5 mr-2" />Wipe Everything</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* REMOVE PAGES CONFIRM DIALOG */}
+      <Dialog open={removePageConfirmId !== null} onOpenChange={(open) => { if (!open) setRemovePageConfirmId(null); }}>
+        <DialogContent className="bg-card border-border/50 rounded-2xl max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl">Remove Wiki Pages?</DialogTitle>
+            <DialogDescription className="text-foreground/85 mt-2 leading-relaxed">
+              This will delete all wiki pages produced by Upload #{removePageConfirmId}. The upload record will remain so you have an audit trail. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-3">
+            <Button
+              variant="ghost"
+              onClick={() => setRemovePageConfirmId(null)}
+              className="font-display uppercase tracking-widest text-[11px] text-foreground/90"
+            >
+              <X className="w-3.5 h-3.5 mr-1" />Cancel
+            </Button>
+            <Button
+              disabled={removeUploadPages.isPending}
+              onClick={() => {
+                if (removePageConfirmId === null) return;
+                const id = removePageConfirmId;
+                removeUploadPages.mutate(id, {
+                  onSuccess: (result) => {
+                    setRemovePageConfirmId(null);
+                    toast({ title: "Pages removed", description: `${result.wikiPagesDeleted} page(s) deleted, ${result.wikiPagesUpdated} updated.` });
+                  },
+                  onError: (err) => {
+                    setRemovePageConfirmId(null);
+                    toast({ title: "Failed to remove pages", description: err.message, variant: "destructive" });
+                  },
+                });
+              }}
+              className="font-display uppercase tracking-widest text-[11px] bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/30 rounded-xl"
+            >
+              {removeUploadPages.isPending
+                ? <><div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />Removing…</>
+                : <><Trash2 className="w-3.5 h-3.5 mr-2" />Remove Pages</>}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -100,6 +100,8 @@ router.get("/uploads", requireSuperAuth, async (_req, res) => {
       processingErrors: (u.processingErrors as ProcessingError[] | null) ?? [],
       createdAt: u.createdAt.toISOString(),
       processedAt: u.processedAt?.toISOString() ?? null,
+      moderationStatus: u.moderationStatus ?? "clear",
+      moderationReason: u.moderationReason ?? null,
     })),
   );
 });
@@ -726,6 +728,92 @@ router.delete("/uploads/:id", requireSuperAuth, async (req, res) => {
     sectionsReverted: 0,
     versionsDeleted: 0,
   });
+});
+
+router.patch("/uploads/:id/moderation", requireSuperAuth, async (req, res) => {
+  const uploadId = parseInt(String(req.params.id), 10);
+  if (isNaN(uploadId)) {
+    res.status(400).json({ error: "Invalid upload ID" });
+    return;
+  }
+
+  const body = req.body as { moderationStatus?: string };
+  const allowed = ["clear", "flagged", "rejected"];
+  if (!body.moderationStatus || !allowed.includes(body.moderationStatus)) {
+    res.status(400).json({ error: "moderationStatus must be one of: clear, flagged, rejected" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(uploadsTable)
+    .set({ moderationStatus: body.moderationStatus })
+    .where(eq(uploadsTable.id, uploadId))
+    .returning({ id: uploadsTable.id, moderationStatus: uploadsTable.moderationStatus });
+
+  if (!updated) {
+    res.status(404).json({ error: "Upload not found" });
+    return;
+  }
+
+  logger.info({ uploadId, moderationStatus: body.moderationStatus }, "Upload moderation status updated");
+  res.json({ id: updated.id, moderationStatus: updated.moderationStatus });
+});
+
+router.delete("/uploads/:id/wiki-pages", requireSuperAuth, async (req, res) => {
+  const uploadId = parseInt(String(req.params.id), 10);
+  if (isNaN(uploadId)) {
+    res.status(400).json({ error: "Invalid upload ID" });
+    return;
+  }
+
+  const isThisUpload = (ref: string) => {
+    const match = ref.match(/^Upload #(\d+)/);
+    return match ? Number(match[1]) === uploadId : false;
+  };
+
+  const allWikiPages = await db.select().from(wikiPagesTable);
+  const deletedWikiPageIds: number[] = [];
+  const updatedWikiSlugs: string[] = [];
+
+  for (const page of allWikiPages) {
+    const sources = (page.sources as Array<{ label: string; ref: string }>) ?? [];
+    if (!sources.some((s) => isThisUpload(s.ref))) continue;
+
+    const reconciled = removeRefFromPage(page, isThisUpload);
+    if (reconciled.isEmpty) {
+      await db.delete(wikiPagesTable).where(eq(wikiPagesTable.id, page.id));
+      deletedWikiPageIds.push(page.id);
+    } else {
+      await db
+        .update(wikiPagesTable)
+        .set({
+          sources: reconciled.sources,
+          bodySegments: reconciled.bodySegments,
+          bodyMarkdown: reconciled.bodyMarkdown,
+          updatedAt: new Date(),
+        })
+        .where(eq(wikiPagesTable.id, page.id));
+      updatedWikiSlugs.push(page.slug);
+    }
+  }
+
+  setImmediate(() => {
+    void (async () => {
+      try {
+        for (const id of deletedWikiPageIds) {
+          await removeSource("wiki", id);
+        }
+        for (const slug of updatedWikiSlugs) {
+          await indexWikiPage(slug);
+        }
+      } catch (err) {
+        logger.error({ err, uploadId }, "Knowledge index reconciliation after wiki-pages delete failed");
+      }
+    })();
+  });
+
+  logger.info({ uploadId, deletedWikiPageIds, updatedWikiSlugs }, "Wiki pages removed for upload (upload record kept)");
+  res.json({ wikiPagesDeleted: deletedWikiPageIds.length, wikiPagesUpdated: updatedWikiSlugs.length });
 });
 
 export default router;
