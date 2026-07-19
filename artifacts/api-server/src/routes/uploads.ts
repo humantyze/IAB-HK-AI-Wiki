@@ -116,6 +116,8 @@ router.get("/uploads/:id/status", requireAuth, async (req, res) => {
       id: uploadsTable.id,
       status: uploadsTable.status,
       processingErrors: uploadsTable.processingErrors,
+      moderationStatus: uploadsTable.moderationStatus,
+      moderationReason: uploadsTable.moderationReason,
     })
     .from(uploadsTable)
     .where(eq(uploadsTable.id, uploadId))
@@ -130,6 +132,8 @@ router.get("/uploads/:id/status", requireAuth, async (req, res) => {
     id: upload.id,
     status: upload.status,
     processingErrors: (upload.processingErrors as ProcessingError[] | null) ?? [],
+    moderationStatus: upload.moderationStatus ?? null,
+    moderationReason: upload.moderationReason ?? null,
   });
 });
 
@@ -216,6 +220,9 @@ router.post("/uploads", requireAuth, (req, res, next) => {
 
   interface FileExtraction { label: string; text: string; imageUrls: string[] }
   const fileExtractions: FileExtraction[] = [];
+  // PDFs that need visual analysis deferred to background so the 201 isn't blocked
+  interface PendingVisual { filePath: string; label: string; index: number }
+  const pendingVisuals: PendingVisual[] = [];
   if (pastedText) {
     fileExtractions.push({ label: data.contributorName ?? data.contentType.replace(/_/g, " "), text: pastedText, imageUrls: [] });
   }
@@ -243,31 +250,8 @@ router.post("/uploads", requireAuth, (req, res, next) => {
         continue;
       }
 
-      // NON-CRITICAL: visual analysis — process in batches of 2 pages to avoid
-      // accumulating WASM pixmaps in memory; each batch is described then freed
-      try {
-        logger.info({ filename: fname }, "Rendering PDF pages for visual analysis (batched)");
-        const batchDescriptions: string[] = [];
-        await renderPdfPagesBatched(file.path, 6, 2, async (batchBuffers, startPage) => {
-          logger.info({ filename: fname, startPage, pages: batchBuffers.length }, "Describing PDF batch");
-          const desc = await describeDocumentVisuals(batchBuffers, fname);
-          if (desc) batchDescriptions.push(desc);
-        });
-        if (batchDescriptions.length > 0) {
-          fileText = `${fileText}\n\n---\n\n## Visual Content (charts, tables, diagrams)\n\n${batchDescriptions.join("\n\n")}`;
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        logger.warn({ err, filename: fname }, "PDF visual analysis failed — continuing without visuals");
-        syncErrors.push({ step: "visual_analysis", message: `${fname}: ${message}`, ts: new Date().toISOString() });
-      }
-
-      // NON-CRITICAL: image extraction — known to fail in Cloud Run, silent skip
-      try {
-        fileImageUrls = await extractImages(file.path);
-      } catch (err) {
-        logger.warn({ err, filename: fname }, "PDF image extraction failed — continuing without images");
-      }
+      // Visual analysis and image extraction are deferred to the background task
+      // so the 201 response is never held up by slow vision-API calls (30–90 s).
 
     } else if (isSupportedMimeType(mime)) {
       // CRITICAL: non-PDF extraction — no fallback
@@ -289,7 +273,11 @@ router.post("/uploads", requireAuth, (req, res, next) => {
     }
 
     if (fileText) {
+      const extractionIndex = fileExtractions.length;
       fileExtractions.push({ label: fname, text: fileText, imageUrls: fileImageUrls });
+      if (mime === "application/pdf") {
+        pendingVisuals.push({ filePath: file.path, label: fname, index: extractionIndex });
+      }
     }
   }
 
@@ -378,12 +366,44 @@ router.post("/uploads", requireAuth, (req, res, next) => {
     const capturedExtractions = fileExtractions.slice();
     const capturedSyncErrors = syncErrors.slice();
     const capturedResponsibleAi = data.responsibleAi ?? false;
+    const capturedPendingVisuals = pendingVisuals.slice();
 
     setImmediate(() => {
       void (async () => {
         const asyncErrors: ProcessingError[] = [];
         let totalCreated = 0;
         let totalUpdated = 0;
+
+        // ── PDF visual analysis (deferred from sync path) ────────────────────
+        for (const pending of capturedPendingVisuals) {
+          try {
+            logger.info({ filename: pending.label }, "Rendering PDF pages for visual analysis (batched, background)");
+            const batchDescriptions: string[] = [];
+            await renderPdfPagesBatched(pending.filePath, 6, 2, async (batchBuffers, startPage) => {
+              logger.info({ filename: pending.label, startPage, pages: batchBuffers.length }, "Describing PDF batch");
+              const desc = await describeDocumentVisuals(batchBuffers, pending.label);
+              if (desc) batchDescriptions.push(desc);
+            });
+            if (batchDescriptions.length > 0) {
+              capturedExtractions[pending.index].text += `\n\n---\n\n## Visual Content (charts, tables, diagrams)\n\n${batchDescriptions.join("\n\n")}`;
+            }
+            logger.info({ filename: pending.label }, "PDF visual analysis complete");
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            logger.warn({ err, filename: pending.label }, "PDF visual analysis failed — continuing without visuals");
+            asyncErrors.push({ step: "visual_analysis", message: `${pending.label}: ${message}`, ts: new Date().toISOString() });
+          }
+          // Image extraction (non-critical, deferred alongside visuals)
+          try {
+            capturedExtractions[pending.index].imageUrls = await extractImages(pending.filePath);
+          } catch { /* silent — image extraction is best-effort */ }
+        }
+        // Update rawText in DB to persist visual descriptions for future reprocessing
+        if (capturedPendingVisuals.length > 0) {
+          const enrichedText = capturedExtractions.map((e) => e.text).join("\n\n---\n\n");
+          await db.update(uploadsTable).set({ rawText: enrichedText }).where(eq(uploadsTable.id, uploadId)).catch(() => {});
+        }
+        // ────────────────────────────────────────────────────────────────────
 
         // ── Content moderation ───────────────────────────────────────────────
         let moderationStatus = "clear";

@@ -188,7 +188,7 @@ export default function AdminDashboard() {
         // Primary: poll upload status so partial outcomes are never masked by early wiki-count growth
         const statusRes = await fetch(`${baseUrl}/api/uploads/${submitResult.uploadId}/status`, { credentials: "include" });
         if (!statusRes.ok) return;
-        const statusData = await statusRes.json() as { status: string };
+        const statusData = await statusRes.json() as { status: string; moderationStatus?: string | null; moderationReason?: string | null };
 
         if (statusData.status === "processed" || statusData.status === "partial" || statusData.status === "failed") {
           // Processing complete — fetch final wiki count regardless of outcome
@@ -205,10 +205,17 @@ export default function AdminDashboard() {
           setIsSlowProcessing(false);
 
           if (statusData.status === "failed") {
-            setUploadWarning(
-              "Your file was uploaded but we couldn't generate any wiki content from it. " +
-              "The IAB HK team has been notified and will review it.",
-            );
+            if (statusData.moderationStatus === "rejected") {
+              setUploadWarning(
+                "This content wasn't approved for the knowledge base — it doesn't appear to be relevant to AI or marketing." +
+                (statusData.moderationReason ? ` (${statusData.moderationReason})` : ""),
+              );
+            } else {
+              setUploadWarning(
+                "Your file was uploaded but we couldn't generate any wiki content from it. " +
+                "The IAB HK team has been notified and will review it.",
+              );
+            }
           } else if (statusData.status === "partial") {
             setUploadWarning(
               "Wiki pages were generated, but some optional steps (such as image or visual analysis) " +
@@ -300,7 +307,7 @@ export default function AdminDashboard() {
       const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
       const statusRes = await fetch(`${baseUrl}/api/uploads/${submitResult.uploadId}/status`, { credentials: "include" });
       if (!statusRes.ok) return;
-      const statusData = await statusRes.json() as { status: string };
+      const statusData = await statusRes.json() as { status: string; moderationStatus?: string | null; moderationReason?: string | null };
 
       if (statusData.status === "processed" || statusData.status === "partial" || statusData.status === "failed") {
         let finalCount = submitResult.wikiCountBefore;
@@ -317,10 +324,17 @@ export default function AdminDashboard() {
         setPollTimedOut(false);
 
         if (statusData.status === "failed") {
-          setUploadWarning(
-            "Your file was uploaded but we couldn't generate any wiki content from it. " +
-            "The IAB HK team has been notified and will review it.",
-          );
+          if (statusData.moderationStatus === "rejected") {
+            setUploadWarning(
+              "This content wasn't approved for the knowledge base — it doesn't appear to be relevant to AI or marketing." +
+              (statusData.moderationReason ? ` (${statusData.moderationReason})` : ""),
+            );
+          } else {
+            setUploadWarning(
+              "Your file was uploaded but we couldn't generate any wiki content from it. " +
+              "The IAB HK team has been notified and will review it.",
+            );
+          }
         } else if (statusData.status === "partial") {
           setUploadWarning(
             "Wiki pages were generated, but some optional steps (such as image or visual analysis) " +
