@@ -5,6 +5,7 @@ import { generateAndStoreQuestions, getStoredQuestions } from "../lib/question-g
 import { getStoredQuiz, generateAndStoreQuiz } from "../lib/quiz-generator";
 import { regenerateWikiTitles } from "../lib/ai-service";
 import { logger } from "../lib/logger";
+import { getTextAIConfig } from "../lib/ai-text-model";
 
 const router: IRouter = Router();
 
@@ -89,8 +90,7 @@ router.post("/knowledge/search", async (req, res) => {
     return;
   }
 
-  const aiBaseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  const aiConfig = getTextAIConfig("gpt-5-mini");
 
   // Render passages with their citation numbers for grounding the prompt.
   // Truncate each passage to keep the total input well within the model's
@@ -105,7 +105,7 @@ router.post("/knowledge/search", async (req, res) => {
     })
     .join("\n\n---\n\n");
 
-  if (!aiBaseUrl || !apiKey) {
+  if (!aiConfig) {
     // No chat model configured — return the retrieved passages directly (JSON).
     res.json({ answer: null, grounded: true, citations, passages: passagesJson });
     return;
@@ -121,10 +121,10 @@ router.post("/knowledge/search", async (req, res) => {
   let openaiStream: AsyncIterable<Record<string, unknown>>;
   try {
     const { default: OpenAI } = await import("openai");
-    const client = new OpenAI({ apiKey, baseURL: aiBaseUrl, timeout: 30_000 });
+    const client = new OpenAI({ apiKey: aiConfig.apiKey, baseURL: aiConfig.baseUrl, timeout: 30_000 });
     openaiStream = (await client.chat.completions.create(
       {
-        model: "gpt-5-mini",
+        model: aiConfig.model,
         messages: [
           {
             role: "system",
@@ -141,11 +141,10 @@ router.post("/knowledge/search", async (req, res) => {
             content: `Question: ${trimmed}\n\nContext passages:\n${context}`,
           },
         ],
-        // gpt-5-mini is a reasoning model: hidden reasoning tokens count
-        // against this cap. 600 was too low — hard questions (esp. Chinese)
-        // burned the budget on reasoning and truncated the visible answer
+        // Generous cap — reasoning-capable models count hidden reasoning
+        // tokens against it; lower caps previously truncated answers
         // (observed as chars=30, finishReason="length").
-        max_completion_tokens: 2500,
+        max_completion_tokens: 8192,
         stream: true,
       },
       { signal: clientAbort.signal },

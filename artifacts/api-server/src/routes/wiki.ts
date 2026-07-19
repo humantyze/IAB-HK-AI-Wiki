@@ -9,6 +9,7 @@ import { generateDownloadUrl } from "../lib/gcsClient";
 import { extractImages } from "../lib/pdf-extractor";
 import { assignImageToWikiPage, synthesizeWikiGaps } from "../lib/ai-service";
 import { logger } from "../lib/logger";
+import { getTextAIConfig } from "../lib/ai-text-model";
 
 let synthesizeRunning = false;
 
@@ -73,10 +74,9 @@ router.post("/wiki/search", async (req, res) => {
 
   const allPages = await fetchAllPageSummaries();
 
-  const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  const aiConfig = getTextAIConfig("gpt-5-mini");
 
-  if (!baseUrl || !apiKey) {
+  if (!aiConfig) {
     res.json({ ranked: false, pages: allPages });
     return;
   }
@@ -104,14 +104,14 @@ router.post("/wiki/search", async (req, res) => {
 
   try {
     const { default: OpenAI } = await import("openai");
-    const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 20_000 });
+    const client = new OpenAI({ apiKey: aiConfig.apiKey, baseURL: aiConfig.baseUrl, timeout: 20_000 });
 
     const pageList = candidatePages
       .map((p, i) => `${i + 1}. slug:"${p.slug}" | title:"${p.title}" | tags:[${p.tags.join(", ")}] | excerpt:"${p.excerpt.slice(0, 120)}"`)
       .join("\n");
 
     const response = await client.chat.completions.create({
-      model: "gpt-5-mini",
+      model: aiConfig.model,
       messages: [
         {
           role: "system",
@@ -130,9 +130,9 @@ router.post("/wiki/search", async (req, res) => {
         },
       ],
       response_format: { type: "json_object" },
-      // Reasoning tokens count against this cap; 512 caused truncated JSON
-      // ("malformed LLM output" warnings) on nearly every query.
-      max_completion_tokens: 2000,
+      // Keep a generous cap — reasoning-capable models count hidden reasoning
+      // tokens against it, and lower caps previously truncated the JSON.
+      max_completion_tokens: 8192,
     });
 
     const rawContent = (response.choices[0]?.message?.content ?? "").trim();

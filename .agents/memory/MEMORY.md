@@ -1,4 +1,5 @@
 - [pgvector + Jina AI embeddings](pgvector-local-embeddings.md) — how semantic RAG works in this repo: Jina AI API embeddings (1024-dim), composite db rebuild required after schema changes.
 - [Prerender script keeps in sync with schema](prerender-schema-sync.md) — prerender.mjs queries DB at build time; any dropped table must also be removed from this script or the production build will fail.
 - [Replit AI proxy requires streaming](replit-ai-proxy-streaming.md) — gpt-5/gpt-5-mini return empty content unless stream:true; always collect deltas.
+- [Text vs vision AI split](ai-provider-split.md) — text calls use DeepSeek via OpenRouter integration (getTextAIConfig helper); vision must stay on OpenAI proxy; embeddings stay Jina.
 - [Embedding provider history](embedding-provider-history.md) — Zhipu AI key has no embedding models; Replit/OpenRouter proxies block /embeddings; settled on Jina AI (JINA_API_KEY, jina-embeddings-v3, 1024-dim).

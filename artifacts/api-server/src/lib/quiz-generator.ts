@@ -4,6 +4,7 @@ import { desc } from "drizzle-orm";
 import { retrieve } from "./knowledge-index";
 import { getStoredQuestions } from "./question-generator";
 import { logger } from "./logger";
+import { getTextAIConfig } from "./ai-text-model";
 
 /**
  * Bump this date whenever the quiz prompt or distractor schema changes.
@@ -39,9 +40,8 @@ export async function generateAndStoreQuiz(): Promise<void> {
 }
 
 async function _generateQuiz(): Promise<void> {
-  const aiBaseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-  if (!aiBaseUrl || !apiKey) {
+  const aiConfig = getTextAIConfig("gpt-5-mini");
+  if (!aiConfig) {
     logger.warn("Quiz generation skipped — AI integration not configured");
     return;
   }
@@ -53,7 +53,7 @@ async function _generateQuiz(): Promise<void> {
   }
 
   const { default: OpenAI } = await import("openai");
-  const client = new OpenAI({ apiKey, baseURL: aiBaseUrl, timeout: 60_000 });
+  const client = new OpenAI({ apiKey: aiConfig.apiKey, baseURL: aiConfig.baseUrl, timeout: 60_000 });
 
   const entries: QuizEntry[] = [];
 
@@ -69,7 +69,7 @@ async function _generateQuiz(): Promise<void> {
 
       // Replit AI proxy requires stream:true — collect all deltas
       const stream = await client.chat.completions.create({
-        model: "gpt-5-mini",
+        model: aiConfig.model,
         stream: true,
         messages: [
           {

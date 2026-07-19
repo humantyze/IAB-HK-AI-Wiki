@@ -2,6 +2,7 @@ import { db, wikiPagesTable } from "@workspace/db";
 import { indexWikiPage } from "./knowledge-index";
 import { eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
+import { getTextAIConfig } from "./ai-text-model";
 
 export interface WikiPageExtract {
   slug: string;
@@ -92,15 +93,14 @@ export async function extractWikiPages(
   candidateImageUrls: string[] = [],
   responsibleAi: boolean = false,
 ): Promise<{ created: number; updated: number }> {
-  const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  const aiConfig = getTextAIConfig("gpt-5");
 
-  if (!baseUrl || !apiKey) {
-    throw new Error("OpenAI env vars (AI_INTEGRATIONS_OPENAI_BASE_URL / AI_INTEGRATIONS_OPENAI_API_KEY) are not set — cannot run wiki extraction");
+  if (!aiConfig) {
+    throw new Error("No AI integration configured (OpenRouter or OpenAI env vars) — cannot run wiki extraction");
   }
 
   const { default: OpenAI } = await import("openai");
-  const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 600_000 });
+  const client = new OpenAI({ apiKey: aiConfig.apiKey, baseURL: aiConfig.baseUrl, timeout: 600_000 });
 
   // Fetch existing pages so the model can reuse slugs for already-known concepts
   // rather than inventing divergent slugs that bypass the merge path.
@@ -155,7 +155,7 @@ ${jsonSchema}`;
   const userPrompt = `Source: ${sourceLabel}\n\nText:\n${truncatedText}`;
 
   const response = await client.chat.completions.create({
-    model: "gpt-5",
+    model: aiConfig.model,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
@@ -266,16 +266,15 @@ export async function assignImageToWikiPage(
 ): Promise<string | null> {
   if (candidateImageUrls.length === 0) return null;
 
-  const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-  if (!baseUrl || !apiKey) return null;
+  const aiConfig = getTextAIConfig("gpt-5-mini");
+  if (!aiConfig) return null;
 
   try {
     const { default: OpenAI } = await import("openai");
-    const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 30_000 });
+    const client = new OpenAI({ apiKey: aiConfig.apiKey, baseURL: aiConfig.baseUrl, timeout: 30_000 });
 
     const response = await client.chat.completions.create({
-      model: "gpt-5-mini",
+      model: aiConfig.model,
       messages: [
         {
           role: "system",
@@ -293,7 +292,7 @@ export async function assignImageToWikiPage(
         },
       ],
       response_format: { type: "json_object" },
-      max_completion_tokens: 64,
+      max_completion_tokens: 8192,
     });
 
     const raw = response.choices[0]?.message?.content ?? "{}";
@@ -380,14 +379,13 @@ export async function synthesizeWikiGaps(
   sectionSummaries: Array<{ title: string; bodyMarkdown: string }>,
   existingPages: Array<{ title: string; slug: string }>,
 ): Promise<{ created: number; updated: number }> {
-  const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  const aiConfig = getTextAIConfig("gpt-5");
 
-  if (!baseUrl || !apiKey) return { created: 0, updated: 0 };
+  if (!aiConfig) return { created: 0, updated: 0 };
 
   try {
     const { default: OpenAI } = await import("openai");
-    const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 120_000 });
+    const client = new OpenAI({ apiKey: aiConfig.apiKey, baseURL: aiConfig.baseUrl, timeout: 120_000 });
 
     const sectionOverview = sectionSummaries
       .map((s) => `### ${s.title}\n${s.bodyMarkdown.slice(0, 1500)}`)
@@ -430,7 +428,7 @@ JSON schema:
     const userPrompt = `Already extracted wiki pages:\n${alreadyExtracted}\n\n---\n\nContent:\n${sectionOverview}`;
 
     const response = await client.chat.completions.create({
-      model: "gpt-5",
+      model: aiConfig.model,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -552,12 +550,11 @@ JSON schema:
  * Only the title field is updated — body, tags, slugs, etc. are untouched.
  */
 export async function regenerateWikiTitles(): Promise<{ updated: number }> {
-  const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-  if (!baseUrl || !apiKey) return { updated: 0 };
+  const aiConfig = getTextAIConfig("gpt-5");
+  if (!aiConfig) return { updated: 0 };
 
   const { default: OpenAI } = await import("openai");
-  const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 120_000 });
+  const client = new OpenAI({ apiKey: aiConfig.apiKey, baseURL: aiConfig.baseUrl, timeout: 120_000 });
 
   const pages = await db
     .select({ slug: wikiPagesTable.slug, title: wikiPagesTable.title, bodyMarkdown: wikiPagesTable.bodyMarkdown })
@@ -592,7 +589,7 @@ One entry per input page, in the same order.`;
 
     try {
       const response = await client.chat.completions.create({
-        model: "gpt-5",
+        model: aiConfig.model,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -664,16 +661,15 @@ Verdict guidance:
  * so a configuration error never silently blocks legitimate uploads.
  */
 export async function moderateContent(text: string): Promise<ModerationResult> {
-  const baseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  const aiConfig = getTextAIConfig("gpt-5-mini");
 
-  if (!baseUrl || !apiKey) {
-    logger.warn("OpenAI env vars not set — skipping content moderation, defaulting to 'clear'");
+  if (!aiConfig) {
+    logger.warn("AI env vars not set — skipping content moderation, defaulting to 'clear'");
     return { verdict: "clear", reason: "Moderation skipped: LLM not configured" };
   }
 
   const { default: OpenAI } = await import("openai");
-  const client = new OpenAI({ apiKey, baseURL: baseUrl, timeout: 60_000 });
+  const client = new OpenAI({ apiKey: aiConfig.apiKey, baseURL: aiConfig.baseUrl, timeout: 60_000 });
 
   // Sample the first 800 words — enough to identify off-topic content without burning tokens
   const MAX_WORDS = 800;
@@ -685,7 +681,7 @@ export async function moderateContent(text: string): Promise<ModerationResult> {
   let rawJson = "";
   try {
     const stream = await client.chat.completions.create({
-      model: "gpt-5-mini",
+      model: aiConfig.model,
       stream: true,
       messages: [
         { role: "system", content: MODERATION_SYSTEM_PROMPT },

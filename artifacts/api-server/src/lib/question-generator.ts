@@ -2,6 +2,7 @@ import { db, wikiPagesTable, knowledgeQuestionsTable } from "@workspace/db";
 import { desc } from "drizzle-orm";
 import { retrieve } from "./knowledge-index";
 import { logger } from "./logger";
+import { getTextAIConfig } from "./ai-text-model";
 import { generateAndStoreQuiz } from "./quiz-generator";
 
 let regenRunning = false;
@@ -28,9 +29,8 @@ export async function generateAndStoreQuestions(): Promise<{ questions: string[]
 }
 
 async function _generate(): Promise<{ questions: string[] }> {
-  const aiBaseUrl = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-  const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-  if (!aiBaseUrl || !apiKey) {
+  const aiConfig = getTextAIConfig("gpt-5-mini");
+  if (!aiConfig) {
     logger.warn("Question generation skipped — AI integration not configured");
     return { questions: [] };
   }
@@ -50,12 +50,12 @@ async function _generate(): Promise<{ questions: string[] }> {
     .join("\n");
 
   const { default: OpenAI } = await import("openai");
-  const client = new OpenAI({ apiKey, baseURL: aiBaseUrl, timeout: 45_000 });
+  const client = new OpenAI({ apiKey: aiConfig.apiKey, baseURL: aiConfig.baseUrl, timeout: 45_000 });
 
   // The Replit AI proxy only delivers content via streaming — non-streaming
   // completions return empty content. Collect all deltas into a single string.
   const stream = await client.chat.completions.create({
-    model: "gpt-5-mini",
+    model: aiConfig.model,
     stream: true,
     messages: [
       {
