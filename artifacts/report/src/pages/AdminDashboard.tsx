@@ -350,15 +350,15 @@ export default function AdminDashboard() {
             </div>
           </div>
           <div className="flex items-center space-x-3 sm:space-x-6">
-            <Link href="/" className="hidden sm:block text-[11px] font-display uppercase tracking-widest text-foreground/70 hover:text-primary transition-colors">
+            <Link href="/" className="hidden sm:block text-[11px] font-display uppercase tracking-widest text-foreground/85 hover:text-primary transition-colors">
               View Knowledge Base
             </Link>
             <div className="hidden sm:block w-px h-6 bg-border" />
-            <Link href="/super-admin/login" className="hidden sm:block text-[11px] font-display uppercase tracking-widest text-foreground/40 hover:text-foreground/70 transition-colors">
+            <Link href="/super-admin/login" className="hidden sm:block text-[11px] font-display uppercase tracking-widest text-foreground/65 hover:text-foreground/70 transition-colors">
               Admin Panel
             </Link>
             <div className="hidden sm:block w-px h-6 bg-border" />
-            <Button variant="ghost" size="sm" onClick={() => logout()} className="text-foreground/70 hover:text-destructive font-display uppercase tracking-widest text-[11px]">
+            <Button variant="ghost" size="sm" onClick={() => logout()} className="text-foreground/85 hover:text-destructive font-display uppercase tracking-widest text-[11px]">
               <LogOut className="w-3 h-3 sm:mr-2" /><span className="hidden sm:inline">Terminate Session</span>
             </Button>
           </div>
@@ -366,8 +366,8 @@ export default function AdminDashboard() {
       </header>
 
       <main className="max-w-[1600px] mx-auto px-6 py-12 relative z-10">
-        <div className="mb-8 p-5 rounded-xl border border-border/40 bg-card/30 backdrop-blur-md text-sm text-foreground/80 leading-relaxed">
-          <span className="font-semibold text-foreground/80">How this works: </span>
+        <div className="mb-8 p-5 rounded-xl border border-border/40 bg-card/30 backdrop-blur-md text-sm text-foreground/90 leading-relaxed">
+          <span className="font-semibold text-foreground/90">How this works: </span>
           Submit source material — whitepapers, case studies, market data, etc. The AI reads it and <span className="font-medium text-foreground/90">automatically generates wiki knowledge pages</span> from the content. No further action required.
         </div>
 
@@ -376,7 +376,7 @@ export default function AdminDashboard() {
           <div className="h-1 w-full bg-gradient-to-r from-primary to-transparent" />
           <CardHeader className="pb-4 sm:pb-8 pt-6 sm:pt-10 px-4 sm:px-10">
             <CardTitle className="font-serif text-xl sm:text-3xl font-bold">Content Submission Panel</CardTitle>
-            <CardDescription className="text-sm sm:text-base mt-2 font-light text-foreground/70">
+            <CardDescription className="text-sm sm:text-base mt-2 font-light text-foreground/85">
               Submit intelligence, research, or market data. The AI will extract wiki knowledge pages from your content automatically.
             </CardDescription>
           </CardHeader>
@@ -391,7 +391,7 @@ export default function AdminDashboard() {
                       <span className="absolute inset-0 rounded-2xl animate-ping bg-primary/10" />
                     </div>
                     <h3 className="font-serif text-xl font-bold text-foreground/90 mb-2">Processing Your Content</h3>
-                    <p className="text-sm text-foreground/50 font-light">This takes around 10–30 seconds. Please keep this tab open.</p>
+                    <p className="text-sm text-foreground/85 font-light">This takes around 10–30 seconds. Please keep this tab open.</p>
                   </div>
 
                   <div className="space-y-2">
@@ -421,15 +421,15 @@ export default function AdminDashboard() {
                             ) : active ? (
                               <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                             ) : (
-                              <step.Icon className="w-3.5 h-3.5 text-foreground/30" />
+                              <step.Icon className="w-3.5 h-3.5 text-foreground/90" />
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-medium leading-tight ${done ? "text-primary/80" : active ? "text-foreground/90" : "text-foreground/40"}`}>
+                            <p className={`text-sm font-medium leading-tight ${done ? "text-primary/80" : active ? "text-foreground/90" : "text-foreground/65"}`}>
                               {step.label}
                             </p>
                             {active && (
-                              <p className="text-[11px] text-foreground/50 mt-0.5 font-light">{step.detail}</p>
+                              <p className="text-[11px] text-foreground/85 mt-0.5 font-light">{step.detail}</p>
                             )}
                           </div>
                           {done && <span className="text-[10px] font-display text-primary/50 tracking-widest uppercase shrink-0">Done</span>}
@@ -461,7 +461,7 @@ export default function AdminDashboard() {
                     {submitResult.fileNames.length > 0 && (
                       <div className="space-y-0.5 mt-1">
                         {submitResult.fileNames.map((name) => (
-                          <p key={name} className="text-sm text-foreground/50 font-mono truncate">{name}</p>
+                          <p key={name} className="text-sm text-foreground/85 font-mono truncate">{name}</p>
                         ))}
                       </div>
                     )}
@@ -472,7 +472,7 @@ export default function AdminDashboard() {
                       <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
                       <div>
                         <p className="text-sm font-medium text-amber-400/90">Content not extracted</p>
-                        <p className="text-xs text-foreground/60 mt-1 leading-relaxed">{uploadWarning}</p>
+                        <p className="text-xs text-foreground/90 mt-1 leading-relaxed">{uploadWarning}</p>
                       </div>
                     </div>
                   ) : (
@@ -492,14 +492,14 @@ export default function AdminDashboard() {
                         {wikiCountAfter !== null ? (
                           <>
                             <p className="text-sm font-medium text-primary/80">Wiki pages generated</p>
-                            <p className="text-xs text-foreground/50 mt-0.5">
+                            <p className="text-xs text-foreground/85 mt-0.5">
                               {wikiCountAfter - submitResult.wikiCountBefore} new page{wikiCountAfter - submitResult.wikiCountBefore !== 1 ? "s" : ""} added to the knowledge base
                             </p>
                           </>
                         ) : (
                           <>
-                            <p className="text-sm font-medium text-foreground/80">AI is generating wiki pages…</p>
-                            <p className="text-xs text-foreground/50 mt-0.5">
+                            <p className="text-sm font-medium text-foreground/90">AI is generating wiki pages…</p>
+                            <p className="text-xs text-foreground/85 mt-0.5">
                               {pollTimedOut
                                 ? "Processing is taking longer than expected. Click \"Re-check status\" to see if it's done."
                                 : isSlowProcessing
@@ -534,7 +534,7 @@ export default function AdminDashboard() {
 
                   <Button
                     onClick={() => { setSubmitResult(null); setWikiCountAfter(null); setUploadWarning(null); setIsSlowProcessing(false); setIsPolling(false); setPollTimedOut(false); setIsRechecking(false); }}
-                    className="w-full h-12 font-display uppercase tracking-[0.2em] text-xs bg-background/50 hover:bg-background/80 text-foreground/70 border border-border/50 rounded-xl transition-all"
+                    className="w-full h-12 font-display uppercase tracking-[0.2em] text-xs bg-background/50 hover:bg-background/80 text-foreground/85 border border-border/50 rounded-xl transition-all"
                   >
                     <PlusCircle className="w-4 h-4 mr-2" />Submit Another
                   </Button>
@@ -560,25 +560,25 @@ export default function AdminDashboard() {
                         <p className={`text-sm font-semibold ${uploadError.code === "DUPLICATE_UPLOAD" ? "text-amber-400/90" : "text-destructive/90"}`}>
                           {getErrorCopy(uploadError.code).headline}
                         </p>
-                        <p className="text-xs text-foreground/70 mt-1 leading-relaxed">
+                        <p className="text-xs text-foreground/85 mt-1 leading-relaxed">
                           {getErrorCopy(uploadError.code).body}
                           {uploadError.code === "DUPLICATE_UPLOAD" && uploadError.meta?.existingCreatedAt && (
                             <> Originally submitted on {new Date(uploadError.meta.existingCreatedAt as string).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}.</>
                           )}
                         </p>
                         {uploadError.code === "DUPLICATE_UPLOAD" && uploadError.meta?.existingFilePath && (
-                          <p className="text-xs text-foreground/50 mt-1 font-mono truncate">
+                          <p className="text-xs text-foreground/85 mt-1 font-mono truncate">
                             {(uploadError.meta.existingFilePath as string).split(", ").map((f) => f.replace(/^\d+-\d+-/, "")).join(", ")}
                           </p>
                         )}
-                        <p className="text-xs text-foreground/50 mt-1.5 italic">
+                        <p className="text-xs text-foreground/85 mt-1.5 italic">
                           {getErrorCopy(uploadError.code).action}
                         </p>
                       </div>
                       <button
                         type="button"
                         onClick={() => setUploadError(null)}
-                        className="text-foreground/30 hover:text-foreground/60 transition-colors shrink-0"
+                        className="text-foreground/90 hover:text-foreground/60 transition-colors shrink-0"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -591,7 +591,7 @@ export default function AdminDashboard() {
                       name="uploaderName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70">
+                          <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/85">
                             Your Name <span className="text-destructive">*</span>
                           </FormLabel>
                           <FormControl>
@@ -606,7 +606,7 @@ export default function AdminDashboard() {
                       name="uploaderEmail"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70">
+                          <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/85">
                             Work Email <span className="text-destructive">*</span>
                           </FormLabel>
                           <FormControl>
@@ -624,7 +624,7 @@ export default function AdminDashboard() {
                       name="contributorName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70">Source</FormLabel>
+                          <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/85">Source</FormLabel>
                           <FormControl>
                             <Input placeholder="Enter author or organization name" className="bg-background/50 border-border/50 h-12 rounded-xl focus-visible:ring-primary/30" {...field} />
                           </FormControl>
@@ -637,7 +637,7 @@ export default function AdminDashboard() {
                       name="contentType"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70">Type of Content</FormLabel>
+                          <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/85">Type of Content</FormLabel>
                           <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                               <SelectTrigger className="bg-background/50 border-border/50 h-12 rounded-xl focus:ring-primary/30">
@@ -663,8 +663,8 @@ export default function AdminDashboard() {
                     name="rawText"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70">
-                          Paste text here <span className="text-foreground/50 normal-case tracking-normal font-sans text-[11px]">(Optional if uploading a file — content is read automatically)</span>
+                        <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/85">
+                          Paste text here <span className="text-foreground/85 normal-case tracking-normal font-sans text-[11px]">(Optional if uploading a file — content is read automatically)</span>
                         </FormLabel>
                         <FormControl>
                           <Textarea
@@ -693,8 +693,8 @@ export default function AdminDashboard() {
                             />
                           </FormControl>
                           <label htmlFor="responsibleAi" className="flex flex-col gap-0.5 cursor-pointer select-none">
-                            <span className="font-display tracking-[0.15em] uppercase text-[10px] text-foreground/80">Responsible AI</span>
-                            <span className="text-[11px] text-foreground/50 font-light normal-case tracking-normal">All wiki pages generated from this upload will be flagged as Responsible AI content</span>
+                            <span className="font-display tracking-[0.15em] uppercase text-[10px] text-foreground/90">Responsible AI</span>
+                            <span className="text-[11px] text-foreground/85 font-light normal-case tracking-normal">All wiki pages generated from this upload will be flagged as Responsible AI content</span>
                           </label>
                         </div>
                         <FormMessage />
@@ -703,8 +703,8 @@ export default function AdminDashboard() {
                   />
 
                   <div className="space-y-3">
-                    <div className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70">
-                      Attach File <span className="text-foreground/50 normal-case tracking-normal font-sans text-[11px]">(Optional — PDF, DOCX, PPTX, images)</span>
+                    <div className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/85">
+                      Attach File <span className="text-foreground/85 normal-case tracking-normal font-sans text-[11px]">(Optional — PDF, DOCX, PPTX, images)</span>
                     </div>
 
                     {selectedFiles.length > 0 && (
@@ -712,12 +712,12 @@ export default function AdminDashboard() {
                         {selectedFiles.map((file, idx) => (
                           <div key={`${file.name}-${idx}`} className="flex items-center gap-3 px-4 py-3 rounded-xl border border-primary/20 bg-primary/5">
                             <Paperclip className="w-4 h-4 text-primary/60 shrink-0" />
-                            <span className="flex-1 text-sm text-foreground/80 font-mono truncate">{file.name}</span>
-                            <span className="text-xs text-foreground/40 shrink-0">{(file.size / 1024 / 1024).toFixed(1)} MB</span>
+                            <span className="flex-1 text-sm text-foreground/90 font-mono truncate">{file.name}</span>
+                            <span className="text-xs text-foreground/65 shrink-0">{(file.size / 1024 / 1024).toFixed(1)} MB</span>
                             <button
                               type="button"
                               onClick={() => setSelectedFiles((prev) => prev.filter((_, i) => i !== idx))}
-                              className="text-foreground/30 hover:text-destructive transition-colors shrink-0"
+                              className="text-foreground/90 hover:text-destructive transition-colors shrink-0"
                             >
                               <X className="w-4 h-4" />
                             </button>
@@ -727,8 +727,8 @@ export default function AdminDashboard() {
                     )}
 
                     <label className="flex items-center gap-3 px-5 py-4 rounded-xl border border-dashed border-border/40 bg-background/20 hover:bg-background/40 hover:border-primary/30 transition-all cursor-pointer group">
-                      <UploadIcon className="w-4 h-4 text-foreground/40 group-hover:text-primary/60 transition-colors" />
-                      <span className="text-sm text-foreground/50 group-hover:text-foreground/70 transition-colors font-light">
+                      <UploadIcon className="w-4 h-4 text-foreground/65 group-hover:text-primary/60 transition-colors" />
+                      <span className="text-sm text-foreground/85 group-hover:text-foreground/70 transition-colors font-light">
                         {selectedFiles.length > 0 ? "Add another file" : "Click to attach a file"}
                       </span>
                       <input
@@ -770,8 +770,8 @@ export default function AdminDashboard() {
         {uploads && uploads.length > 0 ? (
           <div>
             <div className="flex items-center gap-3 mb-4">
-              <History className="w-4 h-4 text-foreground/40" />
-              <h2 className="font-display text-xs uppercase tracking-widest text-foreground/50">Submission History</h2>
+              <History className="w-4 h-4 text-foreground/65" />
+              <h2 className="font-display text-xs uppercase tracking-widest text-foreground/85">Submission History</h2>
             </div>
             <div className="space-y-2">
               {(uploads as Array<{
@@ -793,7 +793,7 @@ export default function AdminDashboard() {
                     ? "border-amber-500/30 text-amber-400/70"
                     : upload.status === "failed" || upload.status === "error"
                     ? "border-destructive/30 text-destructive/70"
-                    : "border-border/30 text-foreground/40";
+                    : "border-border/30 text-foreground/65";
                 return (
                   <div key={upload.id} className="rounded-xl border border-border/30 bg-card/30 backdrop-blur-sm overflow-hidden">
                     <div className="flex items-center gap-3 px-4 py-3 hover:bg-background/30 transition-colors">
@@ -805,12 +805,12 @@ export default function AdminDashboard() {
                           <Badge variant="outline" className={`text-[10px] font-display tracking-widest uppercase ${statusColor}`}>
                             {upload.status}
                           </Badge>
-                          <span className="text-xs text-foreground/60 truncate">
+                          <span className="text-xs text-foreground/90 truncate">
                             {upload.filePath ? upload.filePath.replace(/^\d+-\d+-/, "") : (upload.uploaderName ?? "Text submission")}
                           </span>
                         </div>
                       </div>
-                      <span className="text-xs text-foreground/40 shrink-0">
+                      <span className="text-xs text-foreground/65 shrink-0">
                         {new Date(upload.createdAt).toLocaleDateString("en-HK", {
                           day: "numeric", month: "short", year: "numeric",
                           timeZone: "Asia/Hong_Kong",
@@ -819,7 +819,7 @@ export default function AdminDashboard() {
                       {hasErrors && (
                         <button
                           onClick={() => setExpandedHistoryId(isExpanded ? null : upload.id)}
-                          className="text-foreground/30 hover:text-amber-400 transition-colors p-1 shrink-0"
+                          className="text-foreground/90 hover:text-amber-400 transition-colors p-1 shrink-0"
                           title={isExpanded ? "Hide errors" : "Show processing errors"}
                         >
                           {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -828,16 +828,16 @@ export default function AdminDashboard() {
                     </div>
                     {hasErrors && isExpanded && (
                       <div className="border-t border-border/20 px-4 py-3 bg-background/40 space-y-1.5">
-                        <p className="text-[10px] font-display uppercase tracking-widest text-foreground/40 mb-2">Processing Errors</p>
+                        <p className="text-[10px] font-display uppercase tracking-widest text-foreground/65 mb-2">Processing Errors</p>
                         {errors.map((err, i) => (
-                          <div key={i} className="flex items-start gap-2 text-xs text-foreground/60 font-mono">
+                          <div key={i} className="flex items-start gap-2 text-xs text-foreground/90 font-mono">
                             <span className={`shrink-0 mt-0.5 text-[10px] uppercase font-display tracking-wide ${
                               err.step === "text_extraction" || err.step === "wiki_extraction"
                                 ? "text-destructive/70"
                                 : "text-amber-400/70"
                             }`}>[{err.step}]</span>
                             <span className="break-all leading-relaxed">{err.message}</span>
-                            <span className="shrink-0 text-foreground/30 ml-auto whitespace-nowrap">
+                            <span className="shrink-0 text-foreground/90 ml-auto whitespace-nowrap">
                               {new Date(err.ts).toLocaleTimeString("en-HK", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Hong_Kong" })}
                             </span>
                           </div>

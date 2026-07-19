@@ -614,11 +614,11 @@ export default function SuperAdminDashboard() {
             </div>
           </div>
           <div className="flex items-center space-x-3 sm:space-x-6">
-            <Link href="/" className="hidden sm:block text-[11px] font-display uppercase tracking-widest text-foreground/70 hover:text-accent transition-colors">
+            <Link href="/" className="hidden sm:block text-[11px] font-display uppercase tracking-widest text-foreground/85 hover:text-accent transition-colors">
               View Knowledge Base
             </Link>
             <div className="hidden sm:block w-px h-6 bg-border" />
-            <Button variant="ghost" size="sm" onClick={() => logout()} className="text-foreground/70 hover:text-destructive font-display uppercase tracking-widest text-[11px]">
+            <Button variant="ghost" size="sm" onClick={() => logout()} className="text-foreground/85 hover:text-destructive font-display uppercase tracking-widest text-[11px]">
               <LogOut className="w-3 h-3 sm:mr-2" /><span className="hidden sm:inline">Terminate Session</span>
             </Button>
           </div>
@@ -650,7 +650,7 @@ export default function SuperAdminDashboard() {
                       <BookOpen className="w-6 h-6 text-green-400" />
                       Knowledge Base
                     </CardTitle>
-                    <CardDescription className="text-sm sm:text-base mt-2 font-light text-foreground/70">
+                    <CardDescription className="text-sm sm:text-base mt-2 font-light text-foreground/85">
                       Monitor the public Knowledge Base. Wiki pages are created automatically each time a contributor uploads a PDF.
                     </CardDescription>
                   </div>
@@ -659,11 +659,11 @@ export default function SuperAdminDashboard() {
 
               <CardContent className="px-4 sm:px-10 pb-6 sm:pb-10 grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="rounded-xl border border-border/50 bg-background/50 p-6 inline-block col-span-full">
-                  <div className="text-[10px] font-display uppercase tracking-widest text-foreground/70 mb-2">Wiki Pages</div>
+                  <div className="text-[10px] font-display uppercase tracking-widest text-foreground/85 mb-2">Wiki Pages</div>
                   <div className="text-4xl font-bold font-serif text-green-400">
                     {wikiPageCount === null ? "—" : wikiPageCount}
                   </div>
-                  <p className="text-xs text-foreground/70 mt-1">pages in the knowledge base</p>
+                  <p className="text-xs text-foreground/85 mt-1">pages in the knowledge base</p>
                 </div>
 
                 {/* Ingestion Pipeline Status */}
@@ -680,7 +680,7 @@ export default function SuperAdminDashboard() {
                   return (
                     <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-6 col-span-full">
                       <h3 className="font-display text-sm tracking-widest uppercase text-destructive/80 mb-1">Ingestion Pipeline Status</h3>
-                      <p className="text-xs text-foreground/60 mb-4">Uploads that encountered errors during processing. Expand each row to see technical details.</p>
+                      <p className="text-xs text-foreground/90 mb-4">Uploads that encountered errors during processing. Expand each row to see technical details.</p>
                       <div className="space-y-2">
                         {ingestionUploads.map((upload) => {
                           const errors = upload.processingErrors ?? [];
@@ -691,20 +691,20 @@ export default function SuperAdminDashboard() {
                           return (
                             <div key={upload.id} className="rounded-lg border border-border/30 bg-background/30 overflow-hidden">
                               <div className="flex items-center gap-3 px-4 py-3">
-                                <span className="font-mono text-xs text-foreground/40">#{upload.id}</span>
+                                <span className="font-mono text-xs text-foreground/65">#{upload.id}</span>
                                 <Badge variant="outline" className={`text-[10px] font-display tracking-widest uppercase ${statusColor}`}>
                                   {upload.status}
                                 </Badge>
-                                <span className="text-xs text-foreground/60 truncate flex-1">
+                                <span className="text-xs text-foreground/90 truncate flex-1">
                                   {upload.filePath ? upload.filePath.replace(/^\d+-\d+-/, "") : (upload.uploaderName ?? "Text submission")}
                                 </span>
-                                <span className="text-xs text-foreground/40 shrink-0">
+                                <span className="text-xs text-foreground/65 shrink-0">
                                   {new Date(upload.createdAt).toLocaleDateString("en-HK", { day: "numeric", month: "short", timeZone: "Asia/Hong_Kong" })}
                                 </span>
                                 {errors.length > 0 && (
                                   <button
                                     onClick={() => setExpandedWikiUploadId(isExpanded ? null : upload.id)}
-                                    className="text-foreground/30 hover:text-amber-400 transition-colors p-1 shrink-0"
+                                    className="text-foreground/90 hover:text-amber-400 transition-colors p-1 shrink-0"
                                     title={isExpanded ? "Hide errors" : "Show processing errors"}
                                   >
                                     {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -712,7 +712,7 @@ export default function SuperAdminDashboard() {
                                 )}
                                 <button
                                   onClick={() => handleDeleteButtonClick(upload.id)}
-                                  className="text-foreground/30 hover:text-destructive transition-colors p-1 shrink-0"
+                                  className="text-foreground/90 hover:text-destructive transition-colors p-1 shrink-0"
                                   title="Delete contribution"
                                 >
                                   <Trash2 className="w-4 h-4" />
@@ -720,16 +720,16 @@ export default function SuperAdminDashboard() {
                               </div>
                               {errors.length > 0 && isExpanded && (
                                 <div className="border-t border-border/20 px-4 py-3 bg-background/40 space-y-1.5">
-                                  <p className="text-[10px] font-display uppercase tracking-widest text-foreground/40 mb-2">Processing Errors</p>
+                                  <p className="text-[10px] font-display uppercase tracking-widest text-foreground/65 mb-2">Processing Errors</p>
                                   {errors.map((err, i) => (
-                                    <div key={i} className="flex items-start gap-2 text-xs text-foreground/60 font-mono">
+                                    <div key={i} className="flex items-start gap-2 text-xs text-foreground/90 font-mono">
                                       <span className={`shrink-0 mt-0.5 text-[10px] uppercase font-display tracking-wide ${
                                         err.step === "text_extraction" || err.step === "wiki_extraction"
                                           ? "text-destructive/70"
                                           : "text-amber-400/70"
                                       }`}>[{err.step}]</span>
                                       <span className="break-all leading-relaxed">{err.message}</span>
-                                      <span className="shrink-0 text-foreground/30 ml-auto whitespace-nowrap">
+                                      <span className="shrink-0 text-foreground/90 ml-auto whitespace-nowrap">
                                         {new Date(err.ts).toLocaleTimeString("en-HK", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Hong_Kong" })}
                                       </span>
                                     </div>
@@ -746,7 +746,7 @@ export default function SuperAdminDashboard() {
 
                 <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-6 col-span-full">
                   <h3 className="font-display text-sm tracking-widest uppercase text-orange-400 mb-2">Reprocess Uploads → Wiki</h3>
-                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                  <p className="text-sm text-foreground/85 mb-4 leading-relaxed">
                     Re-run wiki extraction for individual uploads, or all at once. Use this to regenerate wiki pages after a wipe or if pages were missing. Runs one file at a time (~2 min per upload).
                   </p>
 
@@ -761,8 +761,8 @@ export default function SuperAdminDashboard() {
                         return (
                           <div key={u.id} className="flex items-center gap-3 px-4 py-2.5 rounded-lg border border-orange-500/10 bg-background/40">
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium text-foreground/80 truncate">{label}</p>
-                              <p className="text-[10px] text-foreground/40 mt-0.5">
+                              <p className="text-xs font-medium text-foreground/90 truncate">{label}</p>
+                              <p className="text-[10px] text-foreground/65 mt-0.5">
                                 {format(new Date(u.createdAt), "d MMM yyyy")} · {u.status}
                                 {!eligible && " · no stored text"}
                               </p>
@@ -796,7 +796,7 @@ export default function SuperAdminDashboard() {
                   {reprocessResult && (
                     <div className="mb-4 flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-orange-400" />
-                      <span className="text-sm text-foreground/80">
+                      <span className="text-sm text-foreground/90">
                         <strong>{reprocessResult.count}</strong> upload(s) queued — wiki pages generating in background
                       </span>
                     </div>
@@ -814,7 +814,7 @@ export default function SuperAdminDashboard() {
 
                 <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-6">
                   <h3 className="font-display text-sm tracking-widest uppercase text-violet-400 mb-2">Backfill Images from PDFs</h3>
-                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                  <p className="text-sm text-foreground/85 mb-4 leading-relaxed">
                     Retroactively extract images from archived PDFs and assign the most relevant image to each wiki page that currently has none. Already-imaged pages are skipped. This may take a few minutes.
                   </p>
                   {imageBackfillResult && (
@@ -822,19 +822,19 @@ export default function SuperAdminDashboard() {
                       {imageBackfillResult.message ? (
                         <div className="flex items-center gap-2">
                           <CheckCircle2 className="w-4 h-4 text-green-400" />
-                          <span className="text-sm text-foreground/80">{imageBackfillResult.message}</span>
+                          <span className="text-sm text-foreground/90">{imageBackfillResult.message}</span>
                         </div>
                       ) : (
                         <>
                           <div className="flex items-center gap-2">
                             <CheckCircle2 className="w-4 h-4 text-violet-400" />
-                            <span className="text-sm text-foreground/80">
+                            <span className="text-sm text-foreground/90">
                               <strong>{imageBackfillResult.pagesUpdated}</strong> page(s) received images
                             </span>
                           </div>
                           <div className="flex items-center gap-2">
                             <ImagePlay className="w-4 h-4 text-violet-400/60" />
-                            <span className="text-sm text-foreground/80">
+                            <span className="text-sm text-foreground/90">
                               from <strong>{imageBackfillResult.uploadsProcessed}</strong> PDF(s) processed
                             </span>
                           </div>
@@ -855,13 +855,13 @@ export default function SuperAdminDashboard() {
 
                 <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-6">
                   <h3 className="font-display text-sm tracking-widest uppercase text-sky-400 mb-2">Synthesize Gap Pages</h3>
-                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                  <p className="text-sm text-foreground/85 mb-4 leading-relaxed">
                     Use AI to identify cross-cutting themes and frameworks implied across all uploaded content but not yet represented as dedicated wiki pages. Creates 3–8 new synthesized pages per run. Pages are clearly marked as AI-synthesized.
                   </p>
                   {synthesizeResult && (
                     <div className="mb-4 flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-sky-400" />
-                      <span className="text-sm text-foreground/80">
+                      <span className="text-sm text-foreground/90">
                         <strong>{synthesizeResult.created}</strong> new gap page{synthesizeResult.created !== 1 ? "s" : ""} added to the knowledge base
                       </span>
                     </div>
@@ -879,7 +879,7 @@ export default function SuperAdminDashboard() {
 
                 <div className="rounded-xl border border-teal-500/20 bg-teal-500/5 p-6 col-span-full">
                   <h3 className="font-display text-sm tracking-widest uppercase text-teal-400 mb-2">Find &amp; Merge Duplicate Pages</h3>
-                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                  <p className="text-sm text-foreground/85 mb-4 leading-relaxed">
                     Scan for wiki pages that share a near-identical title (case-insensitive, punctuation-agnostic). For each duplicate group, choose which page to keep and optionally merge the other page's content before deleting it.
                   </p>
                   <Button
@@ -893,7 +893,7 @@ export default function SuperAdminDashboard() {
                   </Button>
 
                   {duplicateScanned && duplicateGroups.length === 0 && (
-                    <div className="flex items-center gap-2 text-sm text-foreground/60 rounded-xl border border-border/30 bg-background/30 p-4">
+                    <div className="flex items-center gap-2 text-sm text-foreground/90 rounded-xl border border-border/30 bg-background/30 p-4">
                       <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
                       No duplicate titles found — all pages are unique.
                     </div>
@@ -918,7 +918,7 @@ export default function SuperAdminDashboard() {
                               </div>
                             ) : (
                               <>
-                                <p className="text-[10px] font-display uppercase tracking-widest text-foreground/50">Duplicate group {groupIdx + 1} · {group.length} pages</p>
+                                <p className="text-[10px] font-display uppercase tracking-widest text-foreground/85">Duplicate group {groupIdx + 1} · {group.length} pages</p>
                                 <div className="space-y-1.5">
                                   {group.map((page) => {
                                     const isKeep = sel?.keepSlug === page.slug;
@@ -932,7 +932,7 @@ export default function SuperAdminDashboard() {
                                               setMergeSelections((prev) => new Map(prev).set(groupIdx, { keepSlug: page.slug, deleteSlug: others[0]?.slug ?? "" }));
                                             }}
                                             title="Keep this page"
-                                            className={`text-[10px] font-display uppercase tracking-wide px-2 py-0.5 rounded border transition-colors ${isKeep ? "bg-teal-500/20 border-teal-500/40 text-teal-400" : "border-border/30 text-foreground/30 hover:text-teal-400 hover:border-teal-500/30"}`}
+                                            className={`text-[10px] font-display uppercase tracking-wide px-2 py-0.5 rounded border transition-colors ${isKeep ? "bg-teal-500/20 border-teal-500/40 text-teal-400" : "border-border/30 text-foreground/90 hover:text-teal-400 hover:border-teal-500/30"}`}
                                           >
                                             Keep
                                           </button>
@@ -942,16 +942,16 @@ export default function SuperAdminDashboard() {
                                               setMergeSelections((prev) => new Map(prev).set(groupIdx, { keepSlug: others[0]?.slug ?? "", deleteSlug: page.slug }));
                                             }}
                                             title="Delete this page"
-                                            className={`text-[10px] font-display uppercase tracking-wide px-2 py-0.5 rounded border transition-colors ${isDelete ? "bg-red-500/10 border-red-500/30 text-red-400" : "border-border/30 text-foreground/30 hover:text-red-400 hover:border-red-500/30"}`}
+                                            className={`text-[10px] font-display uppercase tracking-wide px-2 py-0.5 rounded border transition-colors ${isDelete ? "bg-red-500/10 border-red-500/30 text-red-400" : "border-border/30 text-foreground/90 hover:text-red-400 hover:border-red-500/30"}`}
                                           >
                                             Delete
                                           </button>
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                          <p className="text-xs text-foreground/80 truncate">{page.title}</p>
-                                          <p className="text-[10px] text-foreground/40 font-mono">{page.slug}</p>
+                                          <p className="text-xs text-foreground/90 truncate">{page.title}</p>
+                                          <p className="text-[10px] text-foreground/65 font-mono">{page.slug}</p>
                                         </div>
-                                        <span className="text-[10px] text-foreground/30 shrink-0">{new Date(page.updatedAt).toLocaleDateString("en-HK", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Hong_Kong" })}</span>
+                                        <span className="text-[10px] text-foreground/90 shrink-0">{new Date(page.updatedAt).toLocaleDateString("en-HK", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Hong_Kong" })}</span>
                                       </div>
                                     );
                                   })}
@@ -964,7 +964,7 @@ export default function SuperAdminDashboard() {
                                       onChange={(e) => setMergeContentFlags((prev) => new Map(prev).set(groupIdx, e.target.checked))}
                                       className="accent-teal-500 w-3.5 h-3.5"
                                     />
-                                    <span className="text-xs text-foreground/60">Merge deleted page's content into kept page</span>
+                                    <span className="text-xs text-foreground/90">Merge deleted page's content into kept page</span>
                                   </label>
                                   <Button
                                     onClick={() => handleMergeGroup(groupIdx)}
@@ -987,14 +987,14 @@ export default function SuperAdminDashboard() {
 
                 <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-6">
                   <h3 className="font-display text-sm tracking-widest uppercase text-rose-400 mb-2">Clear Page Image</h3>
-                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                  <p className="text-sm text-foreground/85 mb-4 leading-relaxed">
                     Remove the header image from a specific wiki page. Paste the page slug from its URL (the part after <span className="font-mono text-xs">/wiki/</span>).
                   </p>
                   {clearImageResult && (
                     <div className="mb-4 flex items-center gap-2">
                       {clearImageResult.ok
-                        ? <><CheckCircle2 className="w-4 h-4 text-rose-400" /><span className="text-sm text-foreground/80">Image cleared from <strong>{clearImageResult.title}</strong></span></>
-                        : <><AlertCircle className="w-4 h-4 text-destructive" /><span className="text-sm text-foreground/80">{clearImageResult.error}</span></>
+                        ? <><CheckCircle2 className="w-4 h-4 text-rose-400" /><span className="text-sm text-foreground/90">Image cleared from <strong>{clearImageResult.title}</strong></span></>
+                        : <><AlertCircle className="w-4 h-4 text-destructive" /><span className="text-sm text-foreground/90">{clearImageResult.error}</span></>
                       }
                     </div>
                   )}
@@ -1019,13 +1019,13 @@ export default function SuperAdminDashboard() {
 
                 <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6 col-span-full">
                   <h3 className="font-display text-sm tracking-widest uppercase text-red-400 mb-2">Delete Wiki Pages</h3>
-                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                  <p className="text-sm text-foreground/85 mb-4 leading-relaxed">
                     Permanently remove individual wiki pages and their knowledge index entries. This cannot be undone.
                   </p>
                   {deletePageResult && (
                     <div className="mb-4 flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-red-400" />
-                      <span className="text-sm text-foreground/80"><strong>{deletePageResult.deleted}</strong> page{deletePageResult.deleted !== 1 ? "s" : ""} permanently deleted</span>
+                      <span className="text-sm text-foreground/90"><strong>{deletePageResult.deleted}</strong> page{deletePageResult.deleted !== 1 ? "s" : ""} permanently deleted</span>
                     </div>
                   )}
                   {!deletePagesPanelOpen ? (
@@ -1038,7 +1038,7 @@ export default function SuperAdminDashboard() {
                   ) : (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-foreground/50">
+                        <span className="text-xs text-foreground/85">
                           {wikiPageListLoading ? "Loading pages…" : `${wikiPageList.length} pages · ${selectedSlugs.size} selected`}
                         </span>
                         <div className="flex items-center gap-2">
@@ -1050,14 +1050,14 @@ export default function SuperAdminDashboard() {
                           </button>
                           <button
                             onClick={() => { setDeletePagesPanelOpen(false); setSelectedSlugs(new Set()); }}
-                            className="text-foreground/40 hover:text-foreground/70 transition-colors"
+                            className="text-foreground/65 hover:text-foreground/70 transition-colors"
                           >
                             <X className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
                       {wikiPageListLoading ? (
-                        <div className="flex items-center gap-2 text-foreground/40 text-sm py-4">
+                        <div className="flex items-center gap-2 text-foreground/65 text-sm py-4">
                           <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />Loading…
                         </div>
                       ) : (
@@ -1074,7 +1074,7 @@ export default function SuperAdminDashboard() {
                                 }}
                                 className="accent-red-500 w-3.5 h-3.5 shrink-0"
                               />
-                              <span className="text-xs text-foreground/80 leading-snug flex-1 min-w-0">
+                              <span className="text-xs text-foreground/90 leading-snug flex-1 min-w-0">
                                 {page.synthesized && <span className="text-sky-400 mr-1">✦</span>}{page.title}
                               </span>
                             </label>
@@ -1096,13 +1096,13 @@ export default function SuperAdminDashboard() {
 
                 <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-6">
                   <h3 className="font-display text-sm tracking-widest uppercase text-indigo-400 mb-2">Regenerate Wiki Titles</h3>
-                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                  <p className="text-sm text-foreground/85 mb-4 leading-relaxed">
                     Re-titles all existing wiki pages using the improved naming rules — concept-focused noun phrases that stand alone without the source document name. Runs AI on every page in batches; takes 1–2 minutes.
                   </p>
                   {regenTitlesResult && (
                     <div className="mb-4 flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-indigo-400" />
-                      <span className="text-sm text-foreground/80">
+                      <span className="text-sm text-foreground/90">
                         <strong>{regenTitlesResult.updated}</strong> page title{regenTitlesResult.updated !== 1 ? "s" : ""} updated
                       </span>
                     </div>
@@ -1120,13 +1120,13 @@ export default function SuperAdminDashboard() {
 
                 <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-6">
                   <h3 className="font-display text-sm tracking-widest uppercase text-cyan-400 mb-2">Regenerate Sample Questions</h3>
-                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                  <p className="text-sm text-foreground/85 mb-4 leading-relaxed">
                     Generate 10 sample questions from current wiki content, scored against the knowledge index so only questions with rich answers are shown. Runs automatically after every upload.
                   </p>
                   {regenQuestionsResult && (
                     <div className="mb-4 flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-cyan-400" />
-                      <span className="text-sm text-foreground/80">
+                      <span className="text-sm text-foreground/90">
                         <strong>{regenQuestionsResult.count}</strong> question{regenQuestionsResult.count !== 1 ? "s" : ""} generated and live
                       </span>
                     </div>
@@ -1144,13 +1144,13 @@ export default function SuperAdminDashboard() {
 
                 <div className="rounded-xl border border-teal-500/20 bg-teal-500/5 p-6">
                   <h3 className="font-display text-sm tracking-widest uppercase text-teal-400 mb-2">Regenerate Quiz Cache</h3>
-                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                  <p className="text-sm text-foreground/85 mb-4 leading-relaxed">
                     Rebuild the multiple-choice quiz from current sample questions and wiki content. Runs automatically after questions are regenerated. Use this to force a refresh after prompt changes or manual edits.
                   </p>
                   {regenQuizResult && (
                     <div className="mb-4 flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-teal-400" />
-                      <span className="text-sm text-foreground/80">
+                      <span className="text-sm text-foreground/90">
                         <strong>{regenQuizResult.count}</strong> question{regenQuizResult.count !== 1 ? "s" : ""} generated and live
                       </span>
                     </div>
@@ -1178,12 +1178,12 @@ export default function SuperAdminDashboard() {
                   <RotateCcw className="w-6 h-6 text-amber-400" />
                   Time-based Regression
                 </CardTitle>
-                <CardDescription className="text-sm sm:text-base mt-2 font-light text-foreground/70">
+                <CardDescription className="text-sm sm:text-base mt-2 font-light text-foreground/85">
                   Roll back the knowledge base to a chosen date. Wiki pages and contributions created after that date will be permanently removed.
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-4 sm:px-10 pb-6 sm:pb-10 space-y-6">
-                <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-foreground/70 flex gap-3">
+                <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-foreground/85 flex gap-3">
                   <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
                   <div>
                     <span className="font-medium text-destructive">This action is irreversible.</span> All contributions and wiki pages created after the chosen date will be permanently deleted. Use the preview to review the impact before confirming.
@@ -1192,7 +1192,7 @@ export default function SuperAdminDashboard() {
 
                 <div className="flex items-end gap-4 flex-wrap">
                   <div className="flex-1 min-w-[220px]">
-                    <label className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/70 block mb-2">
+                    <label className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/85 block mb-2">
                       <Calendar className="w-3 h-3 inline mr-1" />Target Date
                     </label>
                     <Input
@@ -1222,13 +1222,13 @@ export default function SuperAdminDashboard() {
                       ].map(({ label, value, color }) => (
                         <div key={label} className="rounded-xl border border-border/40 bg-background/40 p-4 text-center">
                           <div className={`text-3xl font-bold font-serif ${color}`}>{value}</div>
-                          <div className="text-[10px] font-display uppercase tracking-widest text-foreground/50 mt-1">{label}</div>
+                          <div className="text-[10px] font-display uppercase tracking-widest text-foreground/85 mt-1">{label}</div>
                         </div>
                       ))}
                     </div>
 
                     {regressPreviewData.wikiPagesRemoved === 0 && regressPreviewData.uploadsRemoved === 0 ? (
-                      <div className="flex items-center gap-2 text-sm text-foreground/60 rounded-xl border border-border/30 bg-background/30 p-4">
+                      <div className="flex items-center gap-2 text-sm text-foreground/90 rounded-xl border border-border/30 bg-background/30 p-4">
                         <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
                         No data found after this date — nothing would be removed.
                       </div>
@@ -1244,7 +1244,7 @@ export default function SuperAdminDashboard() {
                 )}
                 <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 mt-2">
                   <h3 className="font-display text-sm tracking-widest uppercase text-destructive mb-2">Wipe All Data</h3>
-                  <p className="text-sm text-foreground/70 mb-4 leading-relaxed">
+                  <p className="text-sm text-foreground/85 mb-4 leading-relaxed">
                     Permanently delete every wiki page, contribution upload, and knowledge chunk from the database. This cannot be undone. Use only to clear seed or test data before going live.
                   </p>
                   <Button
@@ -1267,27 +1267,27 @@ export default function SuperAdminDashboard() {
                   <DatabaseBackup className="w-6 h-6 text-sky-400" />
                   Database Backup
                 </CardTitle>
-                <CardDescription className="text-sm sm:text-base mt-2 font-light text-foreground/70">
+                <CardDescription className="text-sm sm:text-base mt-2 font-light text-foreground/85">
                   Manual and automated backups of the knowledge base. Daily automatic backup runs at 02:00 HKT.
                 </CardDescription>
               </CardHeader>
               <CardContent className="px-4 sm:px-10 pb-6 sm:pb-10 space-y-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="rounded-xl border border-border/50 bg-background/50 p-6">
-                    <div className="text-[10px] font-display uppercase tracking-widest text-foreground/70 mb-2">Last Backup</div>
+                    <div className="text-[10px] font-display uppercase tracking-widest text-foreground/85 mb-2">Last Backup</div>
                     {lastBackup === undefined ? (
                       <div className="w-4 h-4 border border-foreground/30 border-t-transparent rounded-full animate-spin" />
                     ) : lastBackup === null ? (
-                      <p className="text-sm text-foreground/50">No backups yet</p>
+                      <p className="text-sm text-foreground/85">No backups yet</p>
                     ) : (
                       <>
-                        <p className="text-sm font-mono text-foreground/80 truncate">{lastBackup.fileName}</p>
-                        <p className="text-xs text-foreground/50 mt-1">{format(new Date(lastBackup.backedUpAt), "d MMM yyyy, HH:mm")}</p>
+                        <p className="text-sm font-mono text-foreground/90 truncate">{lastBackup.fileName}</p>
+                        <p className="text-xs text-foreground/85 mt-1">{format(new Date(lastBackup.backedUpAt), "d MMM yyyy, HH:mm")}</p>
                       </>
                     )}
                   </div>
                   <div className="rounded-xl border border-border/50 bg-background/50 p-6 flex flex-col justify-between">
-                    <div className="text-[10px] font-display uppercase tracking-widest text-foreground/70 mb-3">Run Backup Now</div>
+                    <div className="text-[10px] font-display uppercase tracking-widest text-foreground/85 mb-3">Run Backup Now</div>
                     <Button
                       onClick={handleBackupNow}
                       disabled={backupRunning}
@@ -1303,14 +1303,14 @@ export default function SuperAdminDashboard() {
                 {backupHistory.length > 0 && (
                   <div className="rounded-xl border border-border/30 bg-background/30 overflow-hidden">
                     <div className="px-5 py-3 border-b border-border/30">
-                      <span className="font-display text-[10px] uppercase tracking-widest text-foreground/60">Backup History</span>
+                      <span className="font-display text-[10px] uppercase tracking-widest text-foreground/90">Backup History</span>
                     </div>
                     <div className="divide-y divide-border/20">
                       {backupHistory.slice(0, 10).map((b) => (
                         <div key={b.id} className="px-5 py-3 flex items-center gap-3">
                           <DatabaseBackup className="w-3.5 h-3.5 text-sky-400/60 shrink-0" />
-                          <span className="text-xs font-mono text-foreground/60 flex-1 truncate">{b.fileName}</span>
-                          <span className="text-xs text-foreground/40 shrink-0">{format(new Date(b.backedUpAt), "d MMM, HH:mm")}</span>
+                          <span className="text-xs font-mono text-foreground/90 flex-1 truncate">{b.fileName}</span>
+                          <span className="text-xs text-foreground/65 shrink-0">{format(new Date(b.backedUpAt), "d MMM, HH:mm")}</span>
                         </div>
                       ))}
                     </div>
@@ -1327,7 +1327,7 @@ export default function SuperAdminDashboard() {
         <DialogContent className="bg-card border-border/50 rounded-2xl max-w-md">
           <DialogHeader>
             <DialogTitle className="font-serif text-xl">Delete Contribution?</DialogTitle>
-            <DialogDescription className="text-foreground/70 mt-2 leading-relaxed">
+            <DialogDescription className="text-foreground/85 mt-2 leading-relaxed">
               Permanently remove contribution <span className="font-mono text-foreground/90">#{deleteTarget?.id}</span>
               {deleteTarget && (
                 <> ({deleteTarget.contentType.replace(/_/g, " ")} by {deleteTarget.contributorName || "Anonymous"})</>
@@ -1335,7 +1335,7 @@ export default function SuperAdminDashboard() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-foreground/70 flex gap-2">
+          <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-foreground/85 flex gap-2">
             <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
             Wiki pages sourced exclusively from this contribution will be removed. This cannot be undone.
           </div>
@@ -1343,7 +1343,7 @@ export default function SuperAdminDashboard() {
             <Button
               variant="ghost"
               onClick={() => { setDeleteConfirmId(null); setDeleteImpact(null); }}
-              className="font-display uppercase tracking-widest text-[11px] text-foreground/60"
+              className="font-display uppercase tracking-widest text-[11px] text-foreground/90"
             >
               <X className="w-3.5 h-3.5 mr-1" />Cancel
             </Button>
@@ -1365,11 +1365,11 @@ export default function SuperAdminDashboard() {
         <DialogContent className="bg-card border-border/50 rounded-2xl max-w-md">
           <DialogHeader>
             <DialogTitle className="font-serif text-xl">Wipe Entire Database?</DialogTitle>
-            <DialogDescription className="text-foreground/70 mt-2 leading-relaxed">
+            <DialogDescription className="text-foreground/85 mt-2 leading-relaxed">
               This will permanently delete <strong>all</strong> wiki pages, contribution uploads, and knowledge chunks. The backup log is preserved.
             </DialogDescription>
           </DialogHeader>
-          <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-foreground/70 flex gap-2">
+          <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-foreground/85 flex gap-2">
             <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
             This cannot be undone. The database will be completely empty after this operation.
           </div>
@@ -1377,7 +1377,7 @@ export default function SuperAdminDashboard() {
             <Button
               variant="ghost"
               onClick={() => setWipeConfirmOpen(false)}
-              className="font-display uppercase tracking-widest text-[11px] text-foreground/60"
+              className="font-display uppercase tracking-widest text-[11px] text-foreground/90"
             >
               <X className="w-3.5 h-3.5 mr-1" />Cancel
             </Button>
@@ -1399,7 +1399,7 @@ export default function SuperAdminDashboard() {
         <DialogContent className="bg-card border-border/50 rounded-2xl max-w-md">
           <DialogHeader>
             <DialogTitle className="font-serif text-xl">Confirm Regression</DialogTitle>
-            <DialogDescription className="text-foreground/70 mt-2 leading-relaxed">
+            <DialogDescription className="text-foreground/85 mt-2 leading-relaxed">
               You are about to roll back the knowledge base to <span className="font-mono text-foreground/90">{regressDate}</span>.
             </DialogDescription>
           </DialogHeader>
@@ -1411,12 +1411,12 @@ export default function SuperAdminDashboard() {
               ].map(({ label, value }) => (
                 <div key={label} className="rounded-lg border border-border/40 bg-background/40 p-3 text-center">
                   <div className="text-2xl font-bold font-serif text-destructive">{value}</div>
-                  <div className="text-[9px] font-display uppercase tracking-widest text-foreground/50 mt-0.5">{label}</div>
+                  <div className="text-[9px] font-display uppercase tracking-widest text-foreground/85 mt-0.5">{label}</div>
                 </div>
               ))}
             </div>
           )}
-          <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-foreground/70 flex gap-2">
+          <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-xs text-foreground/85 flex gap-2">
             <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
             This cannot be undone. All affected data will be permanently deleted.
           </div>
@@ -1424,7 +1424,7 @@ export default function SuperAdminDashboard() {
             <Button
               variant="ghost"
               onClick={() => setRegressConfirmOpen(false)}
-              className="font-display uppercase tracking-widest text-[11px] text-foreground/60"
+              className="font-display uppercase tracking-widest text-[11px] text-foreground/90"
             >
               <X className="w-3.5 h-3.5 mr-1" />Cancel
             </Button>
