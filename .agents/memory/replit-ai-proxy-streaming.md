@@ -22,9 +22,13 @@ for await (const chunk of stream) {
 
 This applies to every model exposed by the proxy (gpt-5, gpt-5-mini, etc.).
 
-## max_completion_tokens, not max_tokens
+## Unsupported parameters for gpt-5 / gpt-5-mini
 
-`gpt-5` / `gpt-5-mini` via this proxy reject `max_tokens` with a 400 error:
-> "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead."
+These models via the proxy reject certain common OpenAI params with a 400 error — the call is caught, falls back silently, and **must not be fail-open** in critical paths:
 
-**How to apply:** Always use `max_completion_tokens` when capping token output for these models.
+| ❌ Rejected param | ✅ Use instead |
+|---|---|
+| `max_tokens` | `max_completion_tokens` |
+| `temperature: 0` | omit (only default `1` is supported) |
+
+**How to apply:** Strip `max_tokens` and `temperature` from any call to gpt-5/gpt-5-mini. Use `max_completion_tokens` if you need a cap. Do not set `temperature`.

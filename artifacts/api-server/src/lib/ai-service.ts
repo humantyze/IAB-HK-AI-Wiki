@@ -674,7 +674,6 @@ export async function moderateContent(text: string): Promise<ModerationResult> {
       model: "gpt-5-mini",
       stream: true,
       max_completion_tokens: 150,
-      temperature: 0,
       messages: [
         { role: "system", content: MODERATION_SYSTEM_PROMPT },
         { role: "user", content: `Moderate the following content:\n\n${sample}` },
