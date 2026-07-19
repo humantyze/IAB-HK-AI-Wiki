@@ -1413,7 +1413,7 @@ export default function SuperAdminDashboard() {
         <div className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center gap-4">
           <div className="w-10 h-10 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
           <p className="font-display uppercase tracking-widest text-sm text-amber-400">Restoring database…</p>
-          <p className="text-xs text-foreground/65 max-w-xs text-center">This may take 15–30 seconds. Do not close the page.</p>
+          <p className="text-xs text-foreground/65 max-w-xs text-center">This includes rebuilding the knowledge index and may take up to 2 minutes. Do not close the page.</p>
         </div>
       )}
 

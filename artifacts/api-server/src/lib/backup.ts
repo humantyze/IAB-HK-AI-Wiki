@@ -143,28 +143,34 @@ export async function restoreBackup(backupId: number): Promise<RestoreResult> {
   await bucket.file(row.storageObjectPath).download({ destination: tmpPath });
 
   try {
-    // Drop and recreate the public schema so existing tables don't conflict with
-    // the plain-SQL dump (created without --clean). This is intentionally outside
-    // a transaction because DROP SCHEMA cannot be rolled back once committed, but
-    // that is acceptable for an explicit admin restore operation.
+    // Step 1: Reset public schema so existing objects don't conflict with the
+    // plain-SQL dump (pg_dump --format=plain without --clean doesn't emit DROP
+    // statements). Uses IF EXISTS so this is safe even if the schema is absent.
+    // Intentionally outside a transaction — DROP SCHEMA is not transactional.
     logger.info({ backupId }, "Resetting public schema before restore");
     await execFileAsync("psql", [
       databaseUrl,
+      "-v", "ON_ERROR_STOP=1",
       "-c",
-      "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO PUBLIC;",
+      "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO PUBLIC;",
     ]);
 
-    // Apply the dump. --single-transaction makes the restore itself atomic so a
-    // partial failure leaves the schema empty rather than half-populated.
+    // Step 2: Apply the dump.
+    // ON_ERROR_STOP=1 ensures psql exits with a non-zero code on any SQL error,
+    // so a failed restore is never silently reported as success.
+    // --single-transaction makes the restore atomic: a partial failure leaves
+    // the schema empty rather than half-populated.
     logger.info({ backupId, fileName: row.fileName }, "Running psql restore");
-    await execFileAsync("psql", [databaseUrl, "--file", tmpPath, "--single-transaction"]);
+    await execFileAsync("psql", [
+      databaseUrl,
+      "-v", "ON_ERROR_STOP=1",
+      "--file", tmpPath,
+      "--single-transaction",
+    ]);
     logger.info({ backupId, fileName: row.fileName }, "Database restore complete");
   } finally {
     await fs.unlink(tmpPath).catch(() => {});
   }
 
-  // Reindex is intentionally async: it can take 30–120 s and should not block
-  // the HTTP response. The caller (UI) reloads the page after the response and
-  // the knowledge index will be ready shortly after.
   return { restored: true, fileName: row.fileName };
 }

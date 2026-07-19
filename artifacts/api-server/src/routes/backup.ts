@@ -70,13 +70,13 @@ router.post("/super-admin/backup/restore/:id", requireSuperAuth, async (req, res
     logger.info({ backupId: id }, "Restore requested by super-admin");
     const result = await restoreBackup(id);
 
-    setImmediate(() => {
-      void reindexAll()
-        .then((counts) => logger.info({ backupId: id, counts }, "Knowledge index rebuilt after restore"))
-        .catch((err: unknown) => logger.error({ err, backupId: id }, "Knowledge reindex after restore failed"));
-    });
+    // Await reindex so the response reflects a fully operational system.
+    // The UI shows a blocking overlay during this time; admins expect ~30-120s.
+    logger.info({ backupId: id }, "Rebuilding knowledge index after restore");
+    const counts = await reindexAll();
+    logger.info({ backupId: id, counts }, "Knowledge index rebuilt after restore");
 
-    res.json(result);
+    res.json({ ...result, reindexed: counts });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Restore failed";
     logger.error({ err, backupId: id }, "Restore failed");
