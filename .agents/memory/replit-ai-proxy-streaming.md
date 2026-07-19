@@ -30,5 +30,6 @@ These models via the proxy reject certain common OpenAI params with a 400 error 
 |---|---|
 | `max_tokens` | `max_completion_tokens` |
 | `temperature: 0` | omit (only default `1` is supported) |
+| `max_completion_tokens: <small value>` | omit entirely — gpt-5-mini is a reasoning model; it burns reasoning tokens first, leaving nothing for output, which produces silent empty `delta.content` |
 
-**How to apply:** Strip `max_tokens` and `temperature` from any call to gpt-5/gpt-5-mini. Use `max_completion_tokens` if you need a cap. Do not set `temperature`.
+**How to apply:** Strip `max_tokens`, `temperature`, and `max_completion_tokens` from calls to gpt-5/gpt-5-mini. Every working call in the codebase (quiz-generator, question-generator) omits all three — follow that pattern.
