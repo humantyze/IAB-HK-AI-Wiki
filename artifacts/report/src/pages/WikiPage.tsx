@@ -165,30 +165,42 @@ function useWikiPage(slug: string) {
   const [page, setPage] = useState<WikiPageData | null>(null);
   const [related, setRelated] = useState<RelatedPage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRelatedLoading, setIsRelatedLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [isError, setIsError] = useState(false);
 
   useEffect(() => {
     const baseUrl = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+    let cancelled = false;
     setIsLoading(true);
+    setIsRelatedLoading(true);
+    setRelated([]);
     setNotFound(false);
     setIsError(false);
 
+    // Main page content: render as soon as it resolves, without waiting for
+    // the (potentially slow) embedding-based related-pages fetch.
     const pagePromise = fetch(`${baseUrl}/api/wiki/${slug}`, { credentials: "include" })
       .then((r) => {
-        if (r.status === 404) { setNotFound(true); setIsLoading(false); return null; }
+        if (r.status === 404) { if (!cancelled) setNotFound(true); return null; }
         return r.json() as Promise<WikiPageData>;
       })
-      .catch(() => { setIsError(true); setIsLoading(false); return null; });
+      .then((data) => {
+        if (data && !cancelled) setPage(data);
+        return data;
+      })
+      .catch(() => { if (!cancelled) setIsError(true); return null; })
+      .finally(() => { if (!cancelled) setIsLoading(false); });
 
     const embeddingRelatedPromise = fetch(`${baseUrl}/api/wiki/${slug}/related`, { credentials: "include" })
       .then((r) => r.ok ? r.json() as Promise<RelatedPage[]> : [])
       .catch(() => [] as RelatedPage[]);
 
+    // Related pages resolve independently; the relatedSlugs fallback still
+    // needs the page data, so it awaits both promises.
     Promise.all([pagePromise, embeddingRelatedPromise])
       .then(([data, embeddingRelated]) => {
-        if (!data) return;
-        setPage(data);
+        if (!data || cancelled) return;
 
         if (embeddingRelated.length > 0) {
           setRelated(embeddingRelated);
@@ -200,15 +212,19 @@ function useWikiPage(slug: string) {
           return fetch(`${baseUrl}/api/wiki`, { credentials: "include" })
             .then((r) => r.json() as Promise<RelatedPage[]>)
             .then((all) => {
+              if (cancelled) return;
               const related = all.filter((p) => data.relatedSlugs.includes(p.slug)).slice(0, 5);
               setRelated(related);
             });
         }
+        return;
       })
-      .finally(() => setIsLoading(false));
+      .finally(() => { if (!cancelled) setIsRelatedLoading(false); });
+
+    return () => { cancelled = true; };
   }, [slug]);
 
-  return { page, related, isLoading, notFound, isError };
+  return { page, related, isLoading, isRelatedLoading, notFound, isError };
 }
 
 interface WikiPageProps {
@@ -217,7 +233,7 @@ interface WikiPageProps {
 
 export default function WikiPage({ params }: WikiPageProps) {
   const { slug } = params;
-  const { page, related, isLoading, notFound, isError } = useWikiPage(slug);
+  const { page, related, isLoading, isRelatedLoading, notFound, isError } = useWikiPage(slug);
   const [activeHeading, setActiveHeading] = useState<string>("");
   const [shareOpen, setShareOpen] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -490,6 +506,22 @@ export default function WikiPage({ params }: WikiPageProps) {
           )}
 
           {/* Related pages */}
+          {isRelatedLoading && related.length === 0 && (
+            <div className="mb-8">
+              <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3 flex items-center gap-1.5">
+                <BookOpen size={10} />
+                Related Pages
+              </h3>
+              <div className="space-y-2">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="p-2.5 rounded-lg border border-gray-100 bg-white">
+                    <div className="h-3 w-4/5 bg-gray-100 rounded animate-pulse mb-2" />
+                    <div className="h-2 w-2/5 bg-gray-50 rounded animate-pulse" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {related.length > 0 && (
             <div className="mb-8">
               <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3 flex items-center gap-1.5">
