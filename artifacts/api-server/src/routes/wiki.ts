@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, asc, isNull, and, ne, sql, cosineDistance, desc, inArray } from "drizzle-orm";
 import path from "path";
+import fs from "fs";
 import { db, wikiPagesTable, uploadsTable, knowledgeChunksTable, EMBEDDING_DIMENSIONS } from "@workspace/db";
 import { requireSuperAuth } from "../middlewares/auth";
 import { retrieve, indexWikiPage } from "../lib/knowledge-index";
@@ -331,6 +332,149 @@ router.get("/wiki/duplicates", requireSuperAuth, async (_req, res) => {
   } catch (err) {
     logger.error({ err }, "Failed to find duplicate wiki pages");
     res.status(500).json({ error: "Failed to find duplicate wiki pages" });
+  }
+});
+
+/**
+ * GET /api/wiki/:slug/source-files
+ * Public: list downloadable original source files (and external source links)
+ * for a wiki page. Upload-backed sources resolve to files on disk; rejected
+ * uploads and missing files are skipped.
+ */
+router.get("/wiki/:slug/source-files", async (req, res) => {
+  const slug = req.params.slug as string;
+
+  try {
+    const [page] = await db
+      .select({ sources: wikiPagesTable.sources })
+      .from(wikiPagesTable)
+      .where(eq(wikiPagesTable.slug, slug))
+      .limit(1);
+
+    if (!page) {
+      res.status(404).json({ error: "Wiki page not found" });
+      return;
+    }
+
+    const sources = (page.sources as Array<{ label?: string; ref?: string }>) ?? [];
+    const links: Array<{ label: string; url: string }> = [];
+    const uploadIds = new Set<number>();
+    const labelByUploadId = new Map<number, string>();
+
+    for (const src of sources) {
+      const ref = typeof src.ref === "string" ? src.ref : "";
+      const label = typeof src.label === "string" && src.label.trim() ? src.label.trim() : ref;
+      if (/^https?:\/\//i.test(ref)) {
+        links.push({ label, url: ref });
+        continue;
+      }
+      const match = ref.match(/^Upload #(\d+)/);
+      if (match) {
+        const id = Number(match[1]);
+        uploadIds.add(id);
+        if (!labelByUploadId.has(id)) labelByUploadId.set(id, label);
+      }
+    }
+
+    const files: Array<{ uploadId: number; filename: string; sizeBytes: number; label: string }> = [];
+
+    if (uploadIds.size > 0) {
+      const uploads = await db
+        .select({
+          id: uploadsTable.id,
+          filePath: uploadsTable.filePath,
+          moderationStatus: uploadsTable.moderationStatus,
+        })
+        .from(uploadsTable)
+        .where(inArray(uploadsTable.id, Array.from(uploadIds)));
+
+      const uploadsDir = path.join(process.cwd(), "uploads");
+      for (const upload of uploads) {
+        if (upload.moderationStatus === "rejected") continue;
+        if (!upload.filePath) continue;
+        const filenames = upload.filePath.split(",").map((f) => f.trim()).filter(Boolean);
+        for (const filename of filenames) {
+          if (path.basename(filename) !== filename) continue;
+          const absPath = path.join(uploadsDir, filename);
+          try {
+            const stat = fs.statSync(absPath);
+            if (!stat.isFile()) continue;
+            files.push({
+              uploadId: upload.id,
+              filename,
+              sizeBytes: stat.size,
+              label: labelByUploadId.get(upload.id) ?? filename,
+            });
+          } catch {
+            // File missing on disk — skip silently.
+          }
+        }
+      }
+    }
+
+    res.json({ files, links });
+  } catch (err) {
+    logger.error({ err, slug }, "Failed to list wiki source files");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * GET /api/wiki-source-file?uploadId=&filename=
+ * Public: stream one original uploaded source file. The filename must belong
+ * to the referenced upload's stored file list (no path traversal), and the
+ * upload must not be rejected by moderation.
+ */
+router.get("/wiki-source-file", async (req, res) => {
+  const { uploadId: rawId, filename } = req.query as { uploadId?: string; filename?: string };
+  const uploadId = parseInt(String(rawId), 10);
+
+  if (isNaN(uploadId) || !filename || typeof filename !== "string") {
+    res.status(400).json({ error: "uploadId and filename are required" });
+    return;
+  }
+  if (path.basename(filename) !== filename || filename.includes("..")) {
+    res.status(400).json({ error: "Invalid filename" });
+    return;
+  }
+
+  try {
+    const [upload] = await db
+      .select({
+        id: uploadsTable.id,
+        filePath: uploadsTable.filePath,
+        moderationStatus: uploadsTable.moderationStatus,
+      })
+      .from(uploadsTable)
+      .where(eq(uploadsTable.id, uploadId))
+      .limit(1);
+
+    if (!upload || upload.moderationStatus === "rejected" || !upload.filePath) {
+      res.status(404).json({ error: "File not found" });
+      return;
+    }
+
+    const allowed = upload.filePath.split(",").map((f) => f.trim()).filter(Boolean);
+    if (!allowed.includes(filename)) {
+      res.status(404).json({ error: "File not found" });
+      return;
+    }
+
+    const absPath = path.join(process.cwd(), "uploads", filename);
+    if (!fs.existsSync(absPath) || !fs.statSync(absPath).isFile()) {
+      res.status(404).json({ error: "File not found" });
+      return;
+    }
+
+    res.download(absPath, filename, (err) => {
+      if (err && !res.headersSent) {
+        logger.error({ err, uploadId, filename }, "Failed to stream source file");
+        res.status(500).json({ error: "Failed to download file" });
+      }
+    });
+  } catch (err) {
+    logger.error({ err, uploadId, filename }, "Failed to download wiki source file");
+    if (!res.headersSent) res.status(500).json({ error: "Internal server error" });
   }
 });
 

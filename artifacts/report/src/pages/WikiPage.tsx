@@ -1,7 +1,17 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Link } from "wouter";
-import { BookOpen, ArrowLeft, Clock, FileText, ChevronRight, ExternalLink, Lock, AlignLeft, Share2 } from "lucide-react";
+import { BookOpen, ArrowLeft, Clock, FileText, ChevronRight, ExternalLink, Lock, AlignLeft, Share2, Download } from "lucide-react";
 import { ShareInsightDialog } from "@/components/ShareInsightDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { extractInsights, fallbackInsight, type Insight } from "@/lib/insights";
 import { useJsonLd } from "@/lib/useJsonLd";
 import { usePageMeta, markdownToPlainText } from "@/hooks/usePageMeta";
@@ -17,6 +27,24 @@ interface WikiPageData {
   imageUrl?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+interface SourceFile {
+  uploadId: number;
+  filename: string;
+  sizeBytes: number;
+  label: string;
+}
+
+interface SourceLink {
+  label: string;
+  url: string;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 interface RelatedPage {
@@ -236,7 +264,39 @@ export default function WikiPage({ params }: WikiPageProps) {
   const { page, related, isLoading, isRelatedLoading, notFound, isError } = useWikiPage(slug);
   const [activeHeading, setActiveHeading] = useState<string>("");
   const [shareOpen, setShareOpen] = useState(false);
+  const [sourceFiles, setSourceFiles] = useState<SourceFile[]>([]);
+  const [sourceLinks, setSourceLinks] = useState<SourceLink[]>([]);
+  const [pendingFile, setPendingFile] = useState<SourceFile | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSourceFiles([]);
+    setSourceLinks([]);
+    const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+    fetch(`${base}/api/wiki/${encodeURIComponent(slug)}/source-files`, { credentials: "include" })
+      .then((r) => (r.ok ? (r.json() as Promise<{ files: SourceFile[]; links: SourceLink[] }>) : null))
+      .then((data) => {
+        if (!data || cancelled) return;
+        setSourceFiles(Array.isArray(data.files) ? data.files : []);
+        setSourceLinks(Array.isArray(data.links) ? data.links : []);
+      })
+      .catch(() => { /* section simply stays hidden */ });
+    return () => { cancelled = true; };
+  }, [slug]);
+
+  const confirmDownload = () => {
+    if (!pendingFile) return;
+    const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
+    const url = `${base}/api/wiki-source-file?uploadId=${pendingFile.uploadId}&filename=${encodeURIComponent(pendingFile.filename)}`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = pendingFile.filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setPendingFile(null);
+  };
 
   const headings = page ? extractHeadings(page.bodyMarkdown) : [];
   const extracted = page ? extractInsights(page.bodyMarkdown) : [];
@@ -467,6 +527,48 @@ export default function WikiPage({ params }: WikiPageProps) {
           <div className="max-w-none">
             {renderMarkdown(page.bodyMarkdown)}
           </div>
+
+          {/* Download source */}
+          {(sourceFiles.length > 0 || sourceLinks.length > 0) && (
+            <div className="mt-10 pt-6 border-t border-gray-100">
+              <h3 className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3 flex items-center gap-1.5">
+                <Download size={10} />
+                Download source
+              </h3>
+              <div className="space-y-2">
+                {sourceFiles.map((f) => (
+                  <button
+                    key={`${f.uploadId}-${f.filename}`}
+                    onClick={() => setPendingFile(f)}
+                    className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-100 bg-gray-50 hover:border-[#D63425]/30 hover:bg-white transition-colors text-left group"
+                  >
+                    <FileText size={16} className="flex-shrink-0 text-gray-400 group-hover:text-[#D63425] transition-colors" />
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-xs font-semibold text-gray-700 truncate">{f.label}</span>
+                      <span className="block text-[10px] text-gray-400 truncate">{f.filename}</span>
+                    </span>
+                    <span className="text-[10px] font-semibold text-gray-400 flex-shrink-0">{formatBytes(f.sizeBytes)}</span>
+                    <Download size={14} className="flex-shrink-0" style={{ color: "#D63425" }} />
+                  </button>
+                ))}
+                {sourceLinks.map((l, i) => (
+                  <a
+                    key={i}
+                    href={l.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-100 bg-gray-50 hover:border-[#D63425]/30 hover:bg-white transition-colors group"
+                  >
+                    <ExternalLink size={16} className="flex-shrink-0 text-gray-400 group-hover:text-[#D63425] transition-colors" />
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-xs font-semibold text-gray-700 truncate">{l.label}</span>
+                      <span className="block text-[10px] text-gray-400 truncate">{l.url}</span>
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
         </main>
 
         {/* Sidebar */}
@@ -607,6 +709,27 @@ export default function WikiPage({ params }: WikiPageProps) {
           </div>
         </aside>
       </div>
+
+      <AlertDialog open={pendingFile !== null} onOpenChange={(open) => { if (!open) setPendingFile(null); }}>
+        <AlertDialogContent style={{ fontFamily: "'Montserrat', sans-serif" }}>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-base">Download source file?</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm">
+              {pendingFile && (
+                <>
+                  You're about to download <span className="font-semibold text-gray-700">{pendingFile.filename}</span> ({formatBytes(pendingFile.sizeBytes)}).
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDownload} style={{ backgroundColor: "#D63425" }}>
+              Download
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ShareInsightDialog
         open={shareOpen}
