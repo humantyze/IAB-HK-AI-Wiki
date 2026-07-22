@@ -765,13 +765,13 @@ export default function AdminDashboard() {
                         </p>
                         <p className="text-xs text-foreground/85 mt-1 leading-relaxed">
                           {getErrorCopy(uploadError.code).body}
-                          {uploadError.code === "DUPLICATE_UPLOAD" && uploadError.meta?.existingCreatedAt && (
-                            <> Originally submitted on {new Date(uploadError.meta.existingCreatedAt as string).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}.</>
+                          {uploadError.code === "DUPLICATE_UPLOAD" && typeof uploadError.meta?.existingCreatedAt === "string" && (
+                            <> Originally submitted on {new Date(uploadError.meta.existingCreatedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}.</>
                           )}
                         </p>
-                        {uploadError.code === "DUPLICATE_UPLOAD" && uploadError.meta?.existingFilePath && (
+                        {uploadError.code === "DUPLICATE_UPLOAD" && typeof uploadError.meta?.existingFilePath === "string" && (
                           <p className="text-xs text-foreground/85 mt-1 font-mono truncate">
-                            {(uploadError.meta.existingFilePath as string).split(", ").map((f) => f.replace(/^\d+-\d+-/, "")).join(", ")}
+                            {uploadError.meta.existingFilePath.split(", ").map((f) => f.replace(/^\d+-\d+-/, "")).join(", ")}
                           </p>
                         )}
                         <p className="text-xs text-foreground/85 mt-1.5 italic">

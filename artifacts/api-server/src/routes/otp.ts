@@ -7,6 +7,7 @@ import {
   hashCode,
   generateCode,
   isRateLimited,
+  recordSend,
   createOtp,
   getOtp,
   incrementAttempts,
@@ -54,7 +55,6 @@ router.post("/otp/send", requireAuth, async (req, res) => {
 
   const code = generateCode();
   const codeHash = hashCode(code);
-  createOtp(email, name, codeHash);
 
   try {
     const resend = getResend();
@@ -79,6 +79,8 @@ router.post("/otp/send", requireAuth, async (req, res) => {
     return;
   }
 
+  recordSend(email);
+  createOtp(email, name, codeHash);
   res.json({ sent: true });
 });
 
@@ -103,16 +105,17 @@ router.post("/otp/verify", requireAuth, async (req, res) => {
   }
 
   const attempts = incrementAttempts(email);
-  if (attempts > MAX_ATTEMPTS) {
-    deleteOtp(email);
-    res.status(400).json({ error: "Too many incorrect attempts. Please request a new code." });
-    return;
-  }
-
   const submittedHash = hashCode(code);
-  if (submittedHash !== entry.codeHash) {
-    const remaining = MAX_ATTEMPTS - attempts;
-    res.status(400).json({ error: `Incorrect code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.` });
+  const isCorrect = submittedHash === entry.codeHash;
+
+  if (!isCorrect) {
+    if (attempts >= MAX_ATTEMPTS) {
+      deleteOtp(email);
+      res.status(400).json({ error: "Too many incorrect attempts. Please request a new code." });
+    } else {
+      const remaining = MAX_ATTEMPTS - attempts;
+      res.status(400).json({ error: `Incorrect code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.` });
+    }
     return;
   }
 

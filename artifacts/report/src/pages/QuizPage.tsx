@@ -145,6 +145,7 @@ export default function QuizPage() {
         const entries = (data as { entries?: QuizEntry[] }).entries;
         if (Array.isArray(entries) && entries.length > 0) {
           setMcqEntries(shuffle(entries).map(shuffleChoices));
+          return;
         } else {
           // fallback: load plain questions for streaming mode
           return fetch(`${baseUrl}/api/knowledge/questions`, { credentials: "include" })

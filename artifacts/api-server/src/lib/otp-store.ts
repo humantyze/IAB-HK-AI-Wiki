@@ -5,10 +5,10 @@ interface OtpEntry {
   codeHash: string;
   expiresAt: number;
   attempts: number;
-  sentAt: number[];
 }
 
 const store = new Map<string, OtpEntry>();
+const sendHistory = new Map<string, number[]>();
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const RATE_WINDOW_MS = 15 * 60 * 1000;
@@ -24,25 +24,26 @@ export function generateCode(): string {
 }
 
 export function isRateLimited(email: string): boolean {
-  const entry = store.get(email);
-  if (!entry) return false;
   const now = Date.now();
-  const recent = entry.sentAt.filter((t) => now - t < RATE_WINDOW_MS);
+  const history = sendHistory.get(email) ?? [];
+  const recent = history.filter((t) => now - t < RATE_WINDOW_MS);
   return recent.length >= MAX_SENDS;
 }
 
-export function createOtp(email: string, name: string, codeHash: string): void {
+export function recordSend(email: string): void {
   const now = Date.now();
-  const existing = store.get(email);
-  const recentSends = existing
-    ? existing.sentAt.filter((t) => now - t < RATE_WINDOW_MS)
-    : [];
+  const history = sendHistory.get(email) ?? [];
+  const recent = history.filter((t) => now - t < RATE_WINDOW_MS);
+  recent.push(now);
+  sendHistory.set(email, recent);
+}
+
+export function createOtp(email: string, name: string, codeHash: string): void {
   store.set(email, {
     name,
     codeHash,
-    expiresAt: now + OTP_TTL_MS,
+    expiresAt: Date.now() + OTP_TTL_MS,
     attempts: 0,
-    sentAt: [...recentSends, now],
   });
 }
 
