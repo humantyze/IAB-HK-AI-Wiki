@@ -144,7 +144,7 @@ export default function QuizPage() {
       .then((data: unknown) => {
         const entries = (data as { entries?: QuizEntry[] }).entries;
         if (Array.isArray(entries) && entries.length > 0) {
-          setMcqEntries(shuffle(entries).map(shuffleChoices));
+          setMcqEntries(shuffle(entries).slice(0, 5).map(shuffleChoices));
           return;
         } else {
           // fallback: load plain questions for streaming mode
@@ -154,13 +154,13 @@ export default function QuizPage() {
               const qs = (qdata as { questions?: string[] }).questions;
               setStreamQuestions(
                 Array.isArray(qs) && qs.length > 0
-                  ? shuffle(qs)
-                  : shuffle(FALLBACK_QUESTIONS),
+                  ? shuffle(qs).slice(0, 5)
+                  : shuffle(FALLBACK_QUESTIONS).slice(0, 5),
               );
             });
         }
       })
-      .catch(() => setStreamQuestions(shuffle(FALLBACK_QUESTIONS)))
+      .catch(() => setStreamQuestions(shuffle(FALLBACK_QUESTIONS).slice(0, 5)))
       .finally(() => setLoading(false));
   }, [baseUrl]);
 
