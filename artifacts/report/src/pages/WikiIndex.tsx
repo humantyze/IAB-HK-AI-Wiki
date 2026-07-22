@@ -452,24 +452,84 @@ export default function WikiIndex() {
         return;
       }
       if (!r.ok) { hadError = true; setSearchError(true); return; }
-      try {
-        const result = await r.json() as { ranked: boolean; pages: WikiPageSummary[]; summary?: string };
-        if (result.ranked && Array.isArray(result.pages)) {
-          finalAiResults = result.pages;
-          finalAiSummary = result.summary && result.summary.trim().length > 0 ? result.summary.trim() : null;
-          finalSearchFallbackPages = null;
-          setAiResults(finalAiResults);
-          setAiSummary(finalAiSummary);
-          setSearchFallbackPages(null);
-        } else {
-          finalAiResults = null;
-          finalAiSummary = null;
-          finalSearchFallbackPages = Array.isArray(result.pages) ? result.pages : null;
-          setAiResults(null);
-          setAiSummary(null);
-          setSearchFallbackPages(finalSearchFallbackPages);
+
+      const ct = r.headers.get("content-type") ?? "";
+
+      if (ct.includes("text/event-stream") && r.body) {
+        const reader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let streamedSummary = "";
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            const events = buffer.split("\n\n");
+            buffer = events.pop() ?? "";
+
+            for (const block of events) {
+              if (!block.trim()) continue;
+              let eventType = "";
+              const dataLines: string[] = [];
+              for (const line of block.split("\n")) {
+                if (line.startsWith("event: ")) eventType = line.slice(7).trim();
+                else if (line.startsWith("data: ")) dataLines.push(line.slice(6));
+              }
+              const data = dataLines.join("\n");
+
+              if (eventType === "slugs") {
+                try {
+                  const ranked = JSON.parse(data) as WikiPageSummary[];
+                  if (ranked.length > 0) {
+                    finalAiResults = ranked;
+                    finalSearchFallbackPages = null;
+                    setAiResults(ranked);
+                    setSearchFallbackPages(null);
+                  } else {
+                    finalAiResults = null;
+                    finalSearchFallbackPages = null;
+                    setAiResults(null);
+                    setSearchFallbackPages(null);
+                  }
+                } catch { /* ignore parse errors */ }
+              } else if (eventType === "token") {
+                try {
+                  const token = JSON.parse(data) as string;
+                  streamedSummary += token;
+                  finalAiSummary = streamedSummary.trim() || null;
+                  setAiSummary(finalAiSummary);
+                } catch { /* ignore parse errors */ }
+              }
+              // "done": stream closes naturally after this event
+            }
+          }
+        } catch (err) {
+          if ((err as Error).name !== "AbortError") { /* keep partial results */ }
         }
-      } catch { /* ignore */ }
+      } else {
+        // JSON fallback (no model configured or stream failed to open)
+        try {
+          const result = await r.json() as { ranked: boolean; pages: WikiPageSummary[]; summary?: string };
+          if (result.ranked && Array.isArray(result.pages)) {
+            finalAiResults = result.pages;
+            finalAiSummary = result.summary && result.summary.trim().length > 0 ? result.summary.trim() : null;
+            finalSearchFallbackPages = null;
+            setAiResults(finalAiResults);
+            setAiSummary(finalAiSummary);
+            setSearchFallbackPages(null);
+          } else {
+            finalAiResults = null;
+            finalAiSummary = null;
+            finalSearchFallbackPages = Array.isArray(result.pages) ? result.pages : null;
+            setAiResults(null);
+            setAiSummary(null);
+            setSearchFallbackPages(finalSearchFallbackPages);
+          }
+        } catch { /* ignore */ }
+      }
     };
 
     (async () => {

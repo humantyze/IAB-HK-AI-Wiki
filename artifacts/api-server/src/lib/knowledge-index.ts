@@ -194,8 +194,24 @@ export async function retrieve(query: string, opts: RetrieveOptions = {}): Promi
     content: knowledgeChunksTable.content,
   };
 
+  // ---- Keyword SQL expressions (independent of the query vector) ----
+  const tsquery = sql`websearch_to_tsquery('simple', ${trimmed})`;
+  const tsvector = sql`to_tsvector('simple', coalesce(${knowledgeChunksTable.title}, '') || ' ' || ${knowledgeChunksTable.content})`;
+  const keywordRank = sql<number>`ts_rank_cd(${tsvector}, ${tsquery})`;
+
+  // ---- Embed query and keyword search run concurrently ----
+  const [queryVector, keywordRows] = await Promise.all([
+    embedQuery(trimmed),
+    db
+      .select(baseSelect)
+      .from(knowledgeChunksTable)
+      .leftJoin(uploadsTable, joinUploads)
+      .where(and(uploadEligible, typeFilter, sql`${tsvector} @@ ${tsquery}`))
+      .orderBy(desc(keywordRank))
+      .limit(candidatePool),
+  ]);
+
   // ---- Dense vector candidates (with similarity score for floor filtering) ----
-  const queryVector = await embedQuery(trimmed);
   const similarityExpr = sql<number>`1 - (${cosineDistance(knowledgeChunksTable.embedding, queryVector)})`;
   const vectorRows = await db
     .select({ ...baseSelect, similarity: similarityExpr })
@@ -209,18 +225,6 @@ export async function retrieve(query: string, opts: RetrieveOptions = {}): Promi
   const vectorSimilarity = new Map<number, number>(
     vectorRows.map((r) => [r.id, Number(r.similarity)]),
   );
-
-  // ---- Keyword (full-text) candidates ----
-  const tsquery = sql`websearch_to_tsquery('simple', ${trimmed})`;
-  const tsvector = sql`to_tsvector('simple', coalesce(${knowledgeChunksTable.title}, '') || ' ' || ${knowledgeChunksTable.content})`;
-  const keywordRank = sql<number>`ts_rank_cd(${tsvector}, ${tsquery})`;
-  const keywordRows = await db
-    .select(baseSelect)
-    .from(knowledgeChunksTable)
-    .leftJoin(uploadsTable, joinUploads)
-    .where(and(uploadEligible, typeFilter, sql`${tsvector} @@ ${tsquery}`))
-    .orderBy(desc(keywordRank))
-    .limit(candidatePool);
 
   // ---- Reciprocal Rank Fusion ----
   const fused = new Map<number, { candidate: Candidate; score: number }>();

@@ -20,7 +20,7 @@ function formatPageSummary(p: {
   tags: unknown;
   relatedSlugs: unknown;
   updatedAt: Date;
-  bodyMarkdown: unknown;
+  excerpt: string;
   imageUrl: string | null;
   sources: unknown;
   responsibleAi: boolean;
@@ -33,7 +33,7 @@ function formatPageSummary(p: {
     tags: (p.tags as string[]) ?? [],
     relatedSlugs: (p.relatedSlugs as string[]) ?? [],
     updatedAt: p.updatedAt.toISOString(),
-    excerpt: (p.bodyMarkdown as string).replace(/^#+\s.*/gm, "").replace(/^[-*]\s+/gm, "").replace(/[*_`]/g, "").trim().slice(0, 200),
+    excerpt: p.excerpt.trim(),
     imageUrl: p.imageUrl ?? null,
     synthesized: sources.some((s) => s.ref === "wiki-seed-synthesis"),
     responsibleAi: p.responsibleAi,
@@ -51,7 +51,7 @@ async function fetchAllPageSummaries() {
       tags: wikiPagesTable.tags,
       relatedSlugs: wikiPagesTable.relatedSlugs,
       updatedAt: wikiPagesTable.updatedAt,
-      bodyMarkdown: wikiPagesTable.bodyMarkdown,
+      excerpt: sql<string>`left(${wikiPagesTable.bodyMarkdown}, 200)`,
       imageUrl: wikiPagesTable.imageUrl,
       sources: wikiPagesTable.sources,
       responsibleAi: wikiPagesTable.responsibleAi,
@@ -77,7 +77,6 @@ router.post("/wiki/search", async (req, res) => {
   }
 
   const allPages = await fetchAllPageSummaries();
-
   const aiConfig = getTextAIConfig("gpt-5-mini");
 
   if (!aiConfig) {
@@ -106,79 +105,117 @@ router.post("/wiki/search", async (req, res) => {
     logger.warn({ err }, "Wiki vector pre-filter failed — ranking over all pages");
   }
 
+  const pageList = candidatePages
+    .map((p, i) => `${i + 1}. slug:"${p.slug}" | title:"${p.title}" | tags:[${p.tags.join(", ")}] | excerpt:"${p.excerpt.slice(0, 120)}"`)
+    .join("\n");
+
+  // Abort the LLM call if the client disconnects before the stream opens.
+  const clientAbort = new AbortController();
+  req.on("close", () => clientAbort.abort());
+
+  // Open the stream BEFORE committing to SSE response headers — this preserves
+  // the JSON fallback when the model is unreachable.
+  type StreamChunk = { choices?: Array<{ delta?: { content?: string | null } }> };
+  let openaiStream: AsyncIterable<StreamChunk>;
   try {
     const { default: OpenAI } = await import("openai");
     const client = new OpenAI({ apiKey: aiConfig.apiKey, baseURL: aiConfig.baseUrl, timeout: 20_000 });
-
-    const pageList = candidatePages
-      .map((p, i) => `${i + 1}. slug:"${p.slug}" | title:"${p.title}" | tags:[${p.tags.join(", ")}] | excerpt:"${p.excerpt.slice(0, 120)}"`)
-      .join("\n");
-
-    const response = await client.chat.completions.create({
-      model: aiConfig.model,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a semantic search assistant for a wiki about AI in Hong Kong's marketing industry. " +
-            "Given a user query, return the slugs of the most relevant wiki pages in ranked order (most relevant first), " +
-            "and a short 2–4 sentence plain-English summary that directly answers or contextualises the query using insights from those top pages. " +
-            "In the summary, whenever you refer to a specific wiki page by name, wrap it with the marker [[Page Title|slug]] using the page's exact title and slug from the list below. " +
-            "Only use this marker format for specific pages you are referencing — do not mark general phrases. " +
-            'Respond with a JSON object in exactly this shape: {"slugs":["slug-one","slug-two"],"summary":"Your summary here."}. No markdown, no explanation outside the JSON. ' +
-            "Detect the language of the user's question and respond in that same language (English or Traditional Chinese). Keep citation markers like [1] unchanged.",
-        },
-        {
-          role: "user",
-          content: `Query: "${query.trim()}"\n\nAvailable pages:\n${pageList}\n\nReturn up to 10 slugs ranked by relevance plus a 2–4 sentence summary as {"slugs":[...],"summary":"..."}.`,
-        },
-      ],
-      response_format: { type: "json_object" },
-      // Keep a generous cap — reasoning-capable models count hidden reasoning
-      // tokens against it, and lower caps previously truncated the JSON.
-      max_completion_tokens: 8192,
-    });
-
-    const rawContent = (response.choices[0]?.message?.content ?? "").trim();
-
-    let rankedSlugs: string[] | null = null;
-    let aiSummary: string | undefined;
-    try {
-      const parsed = JSON.parse(rawContent) as { slugs?: unknown; summary?: unknown };
-      if (Array.isArray(parsed.slugs)) {
-        rankedSlugs = (parsed.slugs as unknown[]).filter((s): s is string => typeof s === "string");
-      }
-      if (typeof parsed.summary === "string" && parsed.summary.trim().length > 0) {
-        aiSummary = parsed.summary.trim();
-      }
-    } catch {
-      rankedSlugs = null;
-    }
-
-    if (rankedSlugs === null) {
-      logger.warn({ query: query.trim() }, "Wiki AI search — malformed LLM output, returning unranked");
-      res.json({ ranked: false, pages: allPages });
-      return;
-    }
-
-    const slugMap = new Map(allPages.map((p) => [p.slug, p]));
-    const seenSlugs = new Set<string>();
-    const ranked = rankedSlugs
-      .filter((slug) => { if (seenSlugs.has(slug)) return false; seenSlugs.add(slug); return true; })
-      .slice(0, 10)
-      .flatMap((slug) => { const p = slugMap.get(slug); return p ? [p] : []; });
-
-    if (ranked.length === 0) {
-      logger.info({ query: query.trim() }, "Wiki AI search — no valid slugs resolved, returning unranked");
-      res.json({ ranked: false, pages: allPages });
-      return;
-    }
-
-    logger.info({ query: query.trim(), ranked: ranked.length }, "Wiki AI search complete");
-    res.json({ ranked: true, pages: ranked, ...(aiSummary ? { summary: aiSummary } : {}) });
+    openaiStream = (await client.chat.completions.create(
+      {
+        model: aiConfig.model,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a semantic search assistant for a wiki about AI in Hong Kong's marketing industry. " +
+              "Given a user query, return the slugs of the most relevant wiki pages in ranked order (most relevant first), " +
+              "then a short 2–4 sentence plain-English summary that directly answers or contextualises the query using insights from those top pages. " +
+              "In the summary, whenever you refer to a specific wiki page by name, wrap it with the marker [[Page Title|slug]] using the page's exact title and slug from the list below. " +
+              "Only use this marker format for specific pages you are referencing — do not mark general phrases. " +
+              "Output EXACTLY in this two-part format — no text before the SLUGS line:\n" +
+              'SLUGS:["slug-one","slug-two"]\n\nYour 2–4 sentence summary here.\n' +
+              "Detect the language of the user's question and respond in that same language (English or Traditional Chinese).",
+          },
+          {
+            role: "user",
+            content: `Query: "${query.trim()}"\n\nAvailable pages:\n${pageList}\n\nReturn up to 10 slugs ranked by relevance plus a 2–4 sentence summary.`,
+          },
+        ],
+        max_completion_tokens: 1024,
+        stream: true,
+      },
+      { signal: clientAbort.signal },
+    )) as AsyncIterable<StreamChunk>;
   } catch (err) {
-    logger.error({ err }, "Wiki AI search failed — client will use local fallback");
+    if ((err as Error).name === "AbortError") { if (!res.headersSent) res.end(); return; }
+    logger.error({ err }, "Wiki AI search stream failed to open — returning unranked");
     res.json({ ranked: false, pages: allPages });
+    return;
+  }
+
+  // Stream is open — safe to commit SSE headers.
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const sendEvent = (event: string, data: string) => {
+    if (!res.writableEnded) res.write(`event: ${event}\ndata: ${data}\n\n`);
+  };
+
+  const slugMap = new Map(allPages.map((p) => [p.slug, p]));
+  let accumulated = "";
+  let slugsEmitted = false;
+
+  try {
+    for await (const chunk of openaiStream) {
+      const delta = chunk.choices?.[0]?.delta?.content ?? "";
+      if (!delta) continue;
+      accumulated += delta;
+
+      if (!slugsEmitted) {
+        // Buffer until we see the end of the first line (the SLUGS: line).
+        const newlineIdx = accumulated.indexOf("\n");
+        if (newlineIdx !== -1) {
+          const firstLine = accumulated.slice(0, newlineIdx).trim();
+          if (firstLine.startsWith("SLUGS:")) {
+            try {
+              const slugArray = JSON.parse(firstLine.slice(6).trim()) as unknown[];
+              const rankedSlugs = slugArray.filter((s): s is string => typeof s === "string");
+              const seenSlugs = new Set<string>();
+              const ranked = rankedSlugs
+                .filter((s) => { if (seenSlugs.has(s)) return false; seenSlugs.add(s); return true; })
+                .slice(0, 10)
+                .flatMap((s) => { const p = slugMap.get(s); return p ? [p] : []; });
+              sendEvent("slugs", JSON.stringify(ranked));
+            } catch {
+              sendEvent("slugs", JSON.stringify([]));
+            }
+          } else {
+            sendEvent("slugs", JSON.stringify([]));
+          }
+          slugsEmitted = true;
+          // Emit any summary text that arrived in the same chunk after the slug line.
+          const rest = accumulated.slice(newlineIdx + 1).trimStart();
+          if (rest) sendEvent("token", JSON.stringify(rest));
+        }
+      } else {
+        sendEvent("token", JSON.stringify(delta));
+      }
+    }
+
+    if (!slugsEmitted) sendEvent("slugs", JSON.stringify([]));
+    sendEvent("done", "");
+    logger.info({ query: query.trim() }, "Wiki AI search streamed");
+  } catch (err) {
+    if ((err as Error).name !== "AbortError") {
+      logger.error({ err }, "Wiki AI search stream error");
+      if (!slugsEmitted) sendEvent("slugs", JSON.stringify([]));
+      sendEvent("done", "");
+    }
+  } finally {
+    if (!res.writableEnded) res.end();
   }
 });
 
@@ -276,7 +313,7 @@ router.get("/wiki/:slug/related", async (req, res) => {
         tags: wikiPagesTable.tags,
         relatedSlugs: wikiPagesTable.relatedSlugs,
         updatedAt: wikiPagesTable.updatedAt,
-        bodyMarkdown: wikiPagesTable.bodyMarkdown,
+        excerpt: sql<string>`left(${wikiPagesTable.bodyMarkdown}, 200)`,
         imageUrl: wikiPagesTable.imageUrl,
         sources: wikiPagesTable.sources,
         responsibleAi: wikiPagesTable.responsibleAi,
