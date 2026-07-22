@@ -1,9 +1,18 @@
 import { Router, type IRouter } from "express";
+import { rateLimit } from "express-rate-limit";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpServer } from "../lib/mcp-server";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
+
+const mcpRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please wait a minute before trying again." },
+});
 
 /**
  * MCP endpoint — Streamable HTTP transport, stateless (no sessions).
@@ -23,11 +32,16 @@ const router: IRouter = Router();
  *   list_wiki_pages   — all slugs + titles
  *   get_wiki_page     — full markdown for a given slug
  *   get_sample_questions — stored AI-generated question list
+ *
+ * Rate limits:
+ *   - 30 req/min per IP (HTTP level, all tools)
+ *   - 10 req/min per IP (tool level, search_knowledge only)
  */
-router.post("/mcp", async (req, res) => {
+router.post("/mcp", mcpRateLimit, async (req, res) => {
   let transport: StreamableHTTPServerTransport | null = null;
   try {
-    const server = createMcpServer();
+    const ip = req.ip ?? "unknown";
+    const server = createMcpServer(ip);
     transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
     });

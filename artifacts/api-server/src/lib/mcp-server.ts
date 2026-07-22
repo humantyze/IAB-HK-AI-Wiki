@@ -5,11 +5,41 @@ import { db, wikiPagesTable } from "@workspace/db";
 import { retrieve } from "./knowledge-index";
 import { getStoredQuestions } from "./question-generator";
 
+const SEARCH_LIMIT = 10;
+const SEARCH_WINDOW_MS = 60 * 1000;
+
+interface WindowEntry {
+  count: number;
+  resetAt: number;
+}
+
+const searchLimiterStore = new Map<string, WindowEntry>();
+
+function checkSearchLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = searchLimiterStore.get(ip);
+
+  if (!entry || now >= entry.resetAt) {
+    searchLimiterStore.set(ip, { count: 1, resetAt: now + SEARCH_WINDOW_MS });
+    return true;
+  }
+
+  if (entry.count >= SEARCH_LIMIT) {
+    return false;
+  }
+
+  entry.count += 1;
+  return true;
+}
+
 /**
  * Build a fresh McpServer with all four read-only tools registered.
  * Called once per HTTP request (stateless Streamable HTTP transport).
+ *
+ * @param ip - Client IP address, used to enforce per-IP rate limits on
+ *   expensive tools (search_knowledge: 10 req/min).
  */
-export function createMcpServer(): McpServer {
+export function createMcpServer(ip: string): McpServer {
   const server = new McpServer({
     name: "hk-ai-marketing-playbook",
     version: "1.0.0",
@@ -22,6 +52,17 @@ export function createMcpServer(): McpServer {
       "Use this to answer questions about AI in Hong Kong marketing, regulations, adtech, and industry trends.",
     { query: z.string().min(3).describe("The question or search query (at least 3 characters)") },
     async ({ query }) => {
+      if (!checkSearchLimit(ip)) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "Rate limit exceeded for search_knowledge. Please wait a minute before trying again.",
+            },
+          ],
+        };
+      }
+
       const chunks = await retrieve(query.trim(), { limit: 6, sourceTypes: ["wiki"] });
       if (chunks.length === 0) {
         return {
