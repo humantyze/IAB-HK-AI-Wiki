@@ -8,6 +8,7 @@ import {
   Paperclip, X, Sparkles, FileText,
   BookOpen, Check, PlusCircle, Eye, Layers, Image,
   AlertTriangle, AlertCircle, History, ChevronDown, ChevronUp,
+  Mail, ShieldCheck, RefreshCw,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -143,6 +144,14 @@ export default function AdminDashboard() {
   const { data: uploads } = useUploads();
   const [expandedHistoryId, setExpandedHistoryId] = useState<number | null>(null);
 
+  const [otpView, setOtpView] = useState<"identity" | "otp" | "form">("identity");
+  const [otpName, setOtpName] = useState("");
+  const [otpEmail, setOtpEmail] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpToken, setOtpToken] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isSubmitting) {
       setSubmitStep(0);
@@ -249,6 +258,75 @@ export default function AdminDashboard() {
 
   if (!isAuthenticated) return null;
 
+  const handleSendOtp = async () => {
+    if (!otpName.trim() || !otpEmail.trim()) {
+      setOtpError("Please enter your name and email.");
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(otpEmail.trim())) {
+      setOtpError("Please enter a valid email address.");
+      return;
+    }
+    setOtpError(null);
+    setOtpLoading(true);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/otp/send`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: otpName.trim(), email: otpEmail.trim() }),
+      });
+      const body = await res.json() as { sent?: boolean; error?: string };
+      if (!res.ok) {
+        setOtpError(body.error ?? "Failed to send verification code. Please try again.");
+        return;
+      }
+      setOtpCode("");
+      setOtpView("otp");
+    } catch {
+      setOtpError("Network error. Please try again.");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (otpCode.length !== 6) {
+      setOtpError("Please enter the 6-digit code.");
+      return;
+    }
+    setOtpError(null);
+    setOtpLoading(true);
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const res = await fetch(`${baseUrl}/api/otp/verify`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: otpEmail.trim(), code: otpCode.trim() }),
+      });
+      const body = await res.json() as { token?: string; error?: string };
+      if (!res.ok) {
+        setOtpError(body.error ?? "Verification failed. Please try again.");
+        return;
+      }
+      if (!body.token) {
+        setOtpError("Verification failed. Please try again.");
+        return;
+      }
+      setOtpToken(body.token);
+      form.setValue("uploaderName", otpName.trim());
+      form.setValue("uploaderEmail", otpEmail.trim());
+      setOtpView("form");
+    } catch {
+      setOtpError("Network error. Please try again.");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
   const handleSubmit = async (values: z.infer<typeof uploadSchema>) => {
     const rawText = values.rawText?.trim() ?? "";
     if (!rawText && selectedFiles.length === 0) {
@@ -279,6 +357,7 @@ export default function AdminDashboard() {
         contentType: values.contentType,
         files: selectedFiles.length > 0 ? selectedFiles : undefined,
         responsibleAi: values.responsibleAi ?? false,
+        otpToken: otpToken ?? undefined,
       });
 
       const fileNames = selectedFiles.map((f) => f.name);
@@ -556,7 +635,117 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            {!isSubmitting && !submitResult && (
+            {!isSubmitting && !submitResult && otpView === "identity" && (
+              <div className="space-y-6">
+                <div className="text-center pb-2">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 mb-4">
+                    <Mail className="w-5 h-5 text-primary" />
+                  </div>
+                  <h3 className="font-serif text-lg font-bold text-foreground/90 mb-1">Verify your identity</h3>
+                  <p className="text-sm text-foreground/70 font-light">We'll send a one-time code to your email to confirm it's you.</p>
+                </div>
+                {otpError && (
+                  <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-destructive/40 bg-destructive/5">
+                    <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                    <p className="text-sm text-destructive/90">{otpError}</p>
+                  </div>
+                )}
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/85">Your Name <span className="text-destructive">*</span></label>
+                    <Input
+                      placeholder="Full name"
+                      value={otpName}
+                      onChange={(e) => setOtpName(e.target.value)}
+                      className="bg-background/50 border-border/50 h-12 rounded-xl focus-visible:ring-primary/30"
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleSendOtp(); } }}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/85">Work Email <span className="text-destructive">*</span></label>
+                    <Input
+                      type="email"
+                      placeholder="you@company.com"
+                      value={otpEmail}
+                      onChange={(e) => setOtpEmail(e.target.value)}
+                      className="bg-background/50 border-border/50 h-12 rounded-xl focus-visible:ring-primary/30"
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleSendOtp(); } }}
+                    />
+                  </div>
+                </div>
+                <Button
+                  onClick={() => void handleSendOtp()}
+                  disabled={otpLoading}
+                  className="w-full h-12 font-display uppercase tracking-[0.2em] text-xs bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground border border-primary/30 rounded-xl transition-all duration-300"
+                >
+                  {otpLoading
+                    ? <><div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />Sending code…</>
+                    : <><Mail className="w-4 h-4 mr-2" />Send Verification Code</>}
+                </Button>
+              </div>
+            )}
+
+            {!isSubmitting && !submitResult && otpView === "otp" && (
+              <div className="space-y-6">
+                <div className="text-center pb-2">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 mb-4">
+                    <ShieldCheck className="w-5 h-5 text-primary" />
+                  </div>
+                  <h3 className="font-serif text-lg font-bold text-foreground/90 mb-1">Enter your code</h3>
+                  <p className="text-sm text-foreground/70 font-light">
+                    We sent a 6-digit code to <span className="text-foreground/90 font-medium">{otpEmail}</span>. It expires in 10 minutes.
+                  </p>
+                </div>
+                {otpError && (
+                  <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-destructive/40 bg-destructive/5">
+                    <AlertCircle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                    <p className="text-sm text-destructive/90">{otpError}</p>
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <label className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/85">6-Digit Code</label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="000000"
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    className="bg-background/50 border-border/50 h-14 rounded-xl focus-visible:ring-primary/30 text-center text-2xl tracking-[0.5em] font-mono"
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void handleVerifyOtp(); } }}
+                    autoFocus
+                  />
+                </div>
+                <Button
+                  onClick={() => void handleVerifyOtp()}
+                  disabled={otpLoading || otpCode.length !== 6}
+                  className="w-full h-12 font-display uppercase tracking-[0.2em] text-xs bg-primary/10 hover:bg-primary text-primary hover:text-primary-foreground border border-primary/30 rounded-xl transition-all duration-300"
+                >
+                  {otpLoading
+                    ? <><div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />Verifying…</>
+                    : <><ShieldCheck className="w-4 h-4 mr-2" />Verify Code</>}
+                </Button>
+                <div className="flex items-center justify-between text-xs text-foreground/65">
+                  <button
+                    type="button"
+                    onClick={() => { setOtpView("identity"); setOtpError(null); setOtpCode(""); }}
+                    className="hover:text-foreground/90 transition-colors"
+                  >
+                    ← Change email
+                  </button>
+                  <button
+                    type="button"
+                    disabled={otpLoading}
+                    onClick={() => { setOtpError(null); void handleSendOtp(); }}
+                    className="flex items-center gap-1 hover:text-foreground/90 transition-colors disabled:opacity-40"
+                  >
+                    <RefreshCw className="w-3 h-3" /> Resend code
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!isSubmitting && !submitResult && otpView === "form" && (
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-10">
 
@@ -605,11 +794,11 @@ export default function AdminDashboard() {
                       name="uploaderName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/85">
-                            Your Name <span className="text-destructive">*</span>
+                          <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/85 flex items-center gap-2">
+                            Your Name <ShieldCheck className="w-3 h-3 text-primary/60" />
                           </FormLabel>
                           <FormControl>
-                            <Input placeholder="Full name" className="bg-background/50 border-border/50 h-12 rounded-xl focus-visible:ring-primary/30" {...field} />
+                            <Input readOnly disabled placeholder="Full name" className="bg-background/30 border-border/30 h-12 rounded-xl text-foreground/70 cursor-not-allowed" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -620,11 +809,11 @@ export default function AdminDashboard() {
                       name="uploaderEmail"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/85">
-                            Work Email <span className="text-destructive">*</span>
+                          <FormLabel className="font-display tracking-[0.2em] uppercase text-[10px] text-foreground/85 flex items-center gap-2">
+                            Work Email <ShieldCheck className="w-3 h-3 text-primary/60" />
                           </FormLabel>
                           <FormControl>
-                            <Input type="email" placeholder="you@company.com" className="bg-background/50 border-border/50 h-12 rounded-xl focus-visible:ring-primary/30" {...field} />
+                            <Input type="email" readOnly disabled placeholder="you@company.com" className="bg-background/30 border-border/30 h-12 rounded-xl text-foreground/70 cursor-not-allowed" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>

@@ -5,6 +5,7 @@ import path from "path";
 import fs from "fs";
 import { createHash } from "crypto";
 import { z } from "zod";
+import jwt from "jsonwebtoken";
 import { db, uploadsTable, wikiPagesTable } from "@workspace/db";
 import type { ProcessingError } from "@workspace/db";
 import { requireAuth, requireSuperAuth } from "../middlewares/auth";
@@ -15,6 +16,25 @@ import { dispatchExtraction, SUPPORTED_MIME_TYPES, isSupportedMimeType } from ".
 import { getBackupBucket } from "../lib/gcsClient";
 import { logger } from "../lib/logger";
 import { generateAndStoreQuestions } from "../lib/question-generator";
+
+interface OtpTokenPayload {
+  email: string;
+  name: string;
+  iat: number;
+  exp: number;
+}
+
+function verifyOtpToken(token: string): OtpTokenPayload | null {
+  try {
+    const secret = process.env.SESSION_SECRET;
+    if (!secret) return null;
+    const payload = jwt.verify(token, secret) as OtpTokenPayload;
+    if (typeof payload.email !== "string" || typeof payload.name !== "string") return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
 
 const GCS_UPLOADS_PREFIX = "uploaded-files";
 
@@ -161,6 +181,20 @@ router.post("/uploads", requireAuth, (req, res, next) => {
     next();
   });
 }, async (req, res) => {
+  const rawOtpToken = req.headers["x-otp-token"];
+  const otpToken = typeof rawOtpToken === "string" ? rawOtpToken : undefined;
+  if (!otpToken) {
+    res.status(401).json({ error: "Email verification required. Please verify your email before submitting." });
+    return;
+  }
+  const otpPayload = verifyOtpToken(otpToken);
+  if (!otpPayload) {
+    res.status(401).json({ error: "Invalid or expired verification token. Please verify your email again." });
+    return;
+  }
+  req.body.uploaderEmail = otpPayload.email;
+  req.body.uploaderName = otpPayload.name;
+
   const parseResult = UploadFormSchema.safeParse(req.body);
   if (!parseResult.success) {
     res.status(400).json({ error: "Validation failed", details: parseResult.error.flatten().fieldErrors });

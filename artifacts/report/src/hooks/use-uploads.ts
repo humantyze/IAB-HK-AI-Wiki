@@ -13,6 +13,7 @@ interface UploadData {
   rawText?: string;
   files?: File[];
   responsibleAi?: boolean;
+  otpToken?: string;
 }
 
 export class UploadError extends Error {
@@ -45,10 +46,15 @@ export function useSubmitUpload() {
       }
 
       const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
+      const headers: Record<string, string> = {};
+      if (data.otpToken) {
+        headers["x-otp-token"] = data.otpToken;
+      }
       const res = await fetch(`${baseUrl}/api/uploads`, {
         method: "POST",
         body: formData,
         credentials: "include",
+        headers,
       });
 
       if (!res.ok) {
