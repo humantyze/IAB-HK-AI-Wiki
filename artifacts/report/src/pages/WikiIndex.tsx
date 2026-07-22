@@ -659,7 +659,7 @@ export default function WikiIndex() {
       {/* Header */}
       <header className="border-b border-gray-100 bg-white sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 lg:px-8 py-4 flex items-center gap-6">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <a href="https://iabhongkong.com/" target="_blank" rel="noopener noreferrer">
               <img
                 src={`${(import.meta.env.BASE_URL as string)}iabhk-logo.png`}
