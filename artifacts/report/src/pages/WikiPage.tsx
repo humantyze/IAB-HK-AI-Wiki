@@ -515,11 +515,18 @@ export default function WikiPage({ params }: WikiPageProps) {
 
           {/* Header image — only shown when the wiki page has an associated graphic */}
           {page.imageUrl && (
-            <div className="mb-6 rounded-xl overflow-hidden border border-gray-100 bg-gray-50">
+            <div className="mb-6 rounded-xl overflow-hidden border border-gray-100 relative h-72">
+              {/* Blurred background fill — hides letterbox gaps when image doesn't match the container aspect ratio */}
+              <img
+                src={`${(import.meta.env.BASE_URL as string).replace(/\/$/, "")}/api/wiki-image?path=${encodeURIComponent(page.imageUrl)}`}
+                aria-hidden="true"
+                className="absolute inset-0 w-full h-full object-cover scale-125 blur-xl brightness-75"
+              />
+              {/* Foreground image — shown at its natural aspect ratio, centred over the blurred fill */}
               <img
                 src={`${(import.meta.env.BASE_URL as string).replace(/\/$/, "")}/api/wiki-image?path=${encodeURIComponent(page.imageUrl)}`}
                 alt={page.title}
-                className="w-full max-h-72 object-contain"
+                className="relative w-full h-full object-contain"
                 loading="lazy"
                 onError={(e) => { (e.currentTarget.parentElement as HTMLElement | null)?.remove(); }}
               />
