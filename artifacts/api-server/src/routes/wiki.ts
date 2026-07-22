@@ -57,7 +57,11 @@ async function fetchAllPageSummaries() {
       responsibleAi: wikiPagesTable.responsibleAi,
     })
     .from(wikiPagesTable)
-    .orderBy(asc(wikiPagesTable.title));
+    .orderBy(
+      sql`${wikiPagesTable.imageUrl} IS NOT NULL DESC`,
+      desc(wikiPagesTable.createdAt),
+      asc(wikiPagesTable.title)
+    );
   return pages.map(formatPageSummary);
 }
 
