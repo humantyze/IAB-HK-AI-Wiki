@@ -109,30 +109,32 @@ async function main() {
       logger.error({ err: e }, "Unexpected error during pending-upload recovery");
     });
   }, 20_000);
-  cron.schedule("*/15 * * * *", () => {
-    recoverPendingUploads().catch((e) => {
-      logger.error({ err: e }, "Unexpected error during pending-upload recovery cron");
+  if (process.env["NODE_ENV"] !== "production") {
+    cron.schedule("*/15 * * * *", () => {
+      recoverPendingUploads().catch((e) => {
+        logger.error({ err: e }, "Unexpected error during pending-upload recovery cron");
+      });
     });
-  });
 
-  cron.schedule(
-    "0 2 * * *",
-    async () => {
-      logger.info("Daily backup cron: starting");
-      try {
-        const result = await runBackup(false);
-        if (result.skipped) {
-          logger.info({ reason: result.reason }, "Daily backup cron: skipped");
-        } else {
-          logger.info({ fileName: result.fileName, storageObjectPath: result.storageObjectPath }, "Daily backup cron: completed");
+    cron.schedule(
+      "0 2 * * *",
+      async () => {
+        logger.info("Daily backup cron: starting");
+        try {
+          const result = await runBackup(false);
+          if (result.skipped) {
+            logger.info({ reason: result.reason }, "Daily backup cron: skipped");
+          } else {
+            logger.info({ fileName: result.fileName, storageObjectPath: result.storageObjectPath }, "Daily backup cron: completed");
+          }
+        } catch (err) {
+          logger.error({ err }, "Daily backup cron: failed");
         }
-      } catch (err) {
-        logger.error({ err }, "Daily backup cron: failed");
-      }
-    },
-    { timezone: "Asia/Hong_Kong" },
-  );
-  logger.info("Daily backup cron scheduled (02:00 HKT)");
+      },
+      { timezone: "Asia/Hong_Kong" },
+    );
+    logger.info("Daily backup cron scheduled (02:00 HKT)");
+  }
 }
 
 main().catch((e) => {

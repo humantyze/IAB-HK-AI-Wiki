@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { requireSuperAuth } from "../middlewares/auth";
 import { runBackup, getBackupHistory, restoreBackup } from "../lib/backup";
 import { reindexAll } from "../lib/knowledge-index";
@@ -7,6 +7,7 @@ import { db } from "@workspace/db";
 import { backupLogTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { generateDownloadUrl } from "../lib/gcsClient";
+import { recoverPendingUploads } from "../lib/upload-processing";
 
 const router: IRouter = Router();
 
@@ -80,6 +81,35 @@ router.post("/super-admin/backup/restore/:id", requireSuperAuth, async (req, res
   } catch (err) {
     const message = err instanceof Error ? err.message : "Restore failed";
     logger.error({ err, backupId: id }, "Restore failed");
+    res.status(500).json({ error: message });
+  }
+});
+
+router.post("/super-admin/backup/maintenance", async (req: Request, res: Response) => {
+  const secret = process.env["MAINTENANCE_SECRET"];
+  const provided = req.headers["x-maintenance-secret"];
+  if (!secret || !provided || provided !== secret) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  try {
+    logger.info("Maintenance endpoint: running backup");
+    const backup = await runBackup(false);
+    if (backup.skipped) {
+      logger.info({ reason: backup.reason }, "Maintenance endpoint: backup skipped");
+    } else {
+      logger.info({ fileName: backup.fileName }, "Maintenance endpoint: backup completed");
+    }
+
+    logger.info("Maintenance endpoint: recovering pending uploads");
+    const recovery = await recoverPendingUploads();
+    logger.info("Maintenance endpoint: upload recovery completed");
+
+    res.json({ backup, recovery });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Maintenance run failed";
+    logger.error({ err }, "Maintenance endpoint: failed");
     res.status(500).json({ error: message });
   }
 });
