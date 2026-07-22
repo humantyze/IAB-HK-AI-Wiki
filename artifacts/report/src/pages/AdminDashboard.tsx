@@ -641,8 +641,8 @@ export default function AdminDashboard() {
                   <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 mb-4">
                     <Mail className="w-5 h-5 text-primary" />
                   </div>
-                  <h3 className="font-serif text-lg font-bold text-foreground/90 mb-1">Verify your identity</h3>
-                  <p className="text-sm text-foreground/70 font-light">We'll send a one-time code to your email to confirm it's you.</p>
+                  <h3 className="font-serif text-lg font-bold text-foreground/90 mb-1">Who are you?</h3>
+                  <p className="text-sm text-foreground/70 font-light">Enter your name and work email. We'll send a one-time code to verify it's you before you can submit.</p>
                 </div>
                 {otpError && (
                   <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-destructive/40 bg-destructive/5">
