@@ -1010,7 +1010,7 @@ export default function WikiIndex() {
             />
           </Suspense>
         ) : filtered.length === 0 ? (
-          isSearching ? (
+          isSearching && ragAnswer === null ? (
             <div className="text-center py-20 text-gray-400">
               <div className="w-6 h-6 border-2 border-[#D63425]/20 border-t-[#D63425] rounded-full animate-spin mx-auto mb-3" />
               <p className="text-sm">Searching…</p>
