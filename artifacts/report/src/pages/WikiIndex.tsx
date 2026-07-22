@@ -715,13 +715,13 @@ export default function WikiIndex() {
 
         {/* Sample questions + Quiz CTA — stacked */}
         <div className="flex flex-col gap-4 mt-3">
-          <div className="flex flex-wrap gap-2 max-w-xl">
+          <div className="flex flex-col gap-1.5 max-w-xl">
             {shownQuestions.map((q) => (
               <button
                 key={q}
                 type="button"
                 onClick={() => { setQuery(q); setActiveQuery(q); }}
-                className="text-xs px-3 py-1.5 rounded-full border border-gray-200 bg-white text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors"
+                className="w-full text-left text-xs px-3 py-2 rounded-lg border border-gray-200 bg-transparent text-gray-400 hover:border-gray-300 hover:text-gray-600 transition-colors whitespace-nowrap overflow-hidden text-ellipsis"
               >
                 {q}
               </button>
@@ -731,24 +731,21 @@ export default function WikiIndex() {
           <div>
             <Link href="/quiz">
               <div
-                className="inline-flex items-center gap-4 rounded-xl border px-5 py-3.5 cursor-pointer transition-all hover:shadow-md group"
-                style={{ borderColor: "#D63425", backgroundColor: "#fff5f5" }}
+                className="inline-flex items-center gap-4 rounded-xl px-6 py-4 cursor-pointer transition-all hover:scale-[1.02] hover:shadow-lg group"
+                style={{ backgroundColor: "#D63425" }}
               >
-                <div
-                  className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: "#D63425" }}
-                >
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-white/20">
                   <Lightbulb size={16} color="#fff" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-gray-800 group-hover:text-[#D63425] transition-colors">
+                  <p className="text-sm font-semibold text-white">
                     Test your AI marketing knowledge
                   </p>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <p className="text-xs text-white/75 mt-0.5">
                     Take the interactive quiz — questions drawn from the full knowledge base
                   </p>
                 </div>
-                <ChevronRight size={16} className="text-gray-400 group-hover:text-[#D63425] ml-auto shrink-0 transition-colors" />
+                <ChevronRight size={16} className="text-white/70 ml-auto shrink-0" />
               </div>
             </Link>
           </div>
