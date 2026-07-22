@@ -700,11 +700,11 @@ export default function WikiIndex() {
           </div>
           <button
             type="submit"
-            disabled={isSearching}
+            disabled={isSearching && ragAnswer === null}
             className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold rounded-lg transition-all shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ backgroundColor: "#D63425", color: "#fff" }}
           >
-            {isSearching ? (
+            {isSearching && ragAnswer === null ? (
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             ) : (
               <Sparkles size={13} />
