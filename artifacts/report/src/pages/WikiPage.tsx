@@ -266,6 +266,7 @@ export default function WikiPage({ params }: WikiPageProps) {
   const [shareOpen, setShareOpen] = useState(false);
   const [sourceFiles, setSourceFiles] = useState<SourceFile[]>([]);
   const [sourceLinks, setSourceLinks] = useState<SourceLink[]>([]);
+  const [submitters, setSubmitters] = useState<string[]>([]);
   const [pendingFile, setPendingFile] = useState<SourceFile | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -273,13 +274,15 @@ export default function WikiPage({ params }: WikiPageProps) {
     let cancelled = false;
     setSourceFiles([]);
     setSourceLinks([]);
+    setSubmitters([]);
     const base = (import.meta.env.BASE_URL as string).replace(/\/$/, "");
     fetch(`${base}/api/wiki/${encodeURIComponent(slug)}/source-files`, { credentials: "include" })
-      .then((r) => (r.ok ? (r.json() as Promise<{ files: SourceFile[]; links: SourceLink[] }>) : null))
+      .then((r) => (r.ok ? (r.json() as Promise<{ files: SourceFile[]; links: SourceLink[]; submitters: string[] }>) : null))
       .then((data) => {
         if (!data || cancelled) return;
         setSourceFiles(Array.isArray(data.files) ? data.files : []);
         setSourceLinks(Array.isArray(data.links) ? data.links : []);
+        setSubmitters(Array.isArray(data.submitters) ? data.submitters : []);
       })
       .catch(() => { /* section simply stays hidden */ });
     return () => { cancelled = true; };
@@ -527,6 +530,16 @@ export default function WikiPage({ params }: WikiPageProps) {
           <div className="max-w-none">
             {renderMarkdown(page.bodyMarkdown)}
           </div>
+
+          {/* Submitter attribution */}
+          {submitters.length > 0 && (
+            <p className="mt-8 text-xs text-gray-400">
+              Based on information supplied by{" "}
+              {submitters.length === 1
+                ? submitters[0]
+                : submitters.slice(0, -1).join(", ") + " and " + submitters[submitters.length - 1]}
+            </p>
+          )}
 
           {/* Download source */}
           {(sourceFiles.length > 0 || sourceLinks.length > 0) && (

@@ -383,6 +383,7 @@ router.get("/wiki/:slug/source-files", async (req, res) => {
     }
 
     const files: Array<{ uploadId: number; filename: string; sizeBytes: number; label: string }> = [];
+    const submitters: string[] = [];
 
     if (uploadIds.size > 0) {
       const uploads = await db
@@ -390,6 +391,7 @@ router.get("/wiki/:slug/source-files", async (req, res) => {
           id: uploadsTable.id,
           filePath: uploadsTable.filePath,
           moderationStatus: uploadsTable.moderationStatus,
+          uploaderName: uploadsTable.uploaderName,
         })
         .from(uploadsTable)
         .where(inArray(uploadsTable.id, Array.from(uploadIds)));
@@ -397,6 +399,11 @@ router.get("/wiki/:slug/source-files", async (req, res) => {
       const uploadsDir = path.join(process.cwd(), "uploads");
       for (const upload of uploads) {
         if (upload.moderationStatus === "rejected") continue;
+
+        if (upload.uploaderName && !submitters.includes(upload.uploaderName)) {
+          submitters.push(upload.uploaderName);
+        }
+
         if (!upload.filePath) continue;
         const filenames = upload.filePath.split(",").map((f) => f.trim()).filter(Boolean);
         for (const filename of filenames) {
@@ -418,7 +425,7 @@ router.get("/wiki/:slug/source-files", async (req, res) => {
       }
     }
 
-    res.json({ files, links });
+    res.json({ files, links, submitters });
   } catch (err) {
     logger.error({ err, slug }, "Failed to list wiki source files");
     res.status(500).json({ error: "Internal server error" });
