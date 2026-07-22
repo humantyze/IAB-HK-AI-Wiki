@@ -713,8 +713,8 @@ export default function WikiIndex() {
           </button>
         </form>
 
-        {/* Sample questions + Quiz CTA — side by side on desktop */}
-        <div className="flex flex-col lg:flex-row lg:items-start gap-4 mt-3">
+        {/* Sample questions + Quiz CTA — stacked */}
+        <div className="flex flex-col gap-4 mt-3">
           <div className="flex flex-wrap gap-2 max-w-xl">
             {shownQuestions.map((q) => (
               <button
@@ -728,7 +728,7 @@ export default function WikiIndex() {
             ))}
           </div>
           {/* Quiz CTA */}
-          <div className="lg:ml-auto shrink-0">
+          <div>
             <Link href="/quiz">
               <div
                 className="inline-flex items-center gap-4 rounded-xl border px-5 py-3.5 cursor-pointer transition-all hover:shadow-md group"
