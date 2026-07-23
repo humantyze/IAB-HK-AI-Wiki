@@ -215,6 +215,7 @@ export default function WikiIndex() {
   const [responsibleAiOnly, setResponsibleAiOnly] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "graph">("grid");
   const [graphFilteredPages, setGraphFilteredPages] = useState<WikiPageSummary[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
   const graphDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   // Refs for animation tracking (synchronous, no stale-closure risk)
@@ -625,6 +626,12 @@ export default function WikiIndex() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredSlugsKey]);
 
+  // Reset to page 1 whenever the filtered set changes.
+  useEffect(() => {
+    setCurrentPage(1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredSlugsKey]);
+
   // Populate follow-up chips once streaming finishes; clear on new search.
   useEffect(() => {
     if (searchDone && !isRagStreaming && ragAnswer !== null) {
@@ -661,6 +668,10 @@ export default function WikiIndex() {
   }, [questionPool]);
 
   const usingAI = aiResults !== null && activeQuery.trim().length >= 3;
+
+  const PAGE_SIZE = 12;
+  const totalPages = usingAI ? 1 : Math.ceil(filtered.length / PAGE_SIZE);
+  const pagedFiltered = usingAI ? filtered : filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const canonicalOrigin = typeof window !== "undefined" ? window.location.origin : "";
   const indexSchema = pages && pages.length > 0 ? {
@@ -1091,7 +1102,7 @@ export default function WikiIndex() {
               <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-4">Related pages</p>
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map((page) => {
+            {pagedFiltered.map((page) => {
               const imgSrc = page.imageUrl
                 ? `${baseUrl}/api/wiki-image?path=${encodeURIComponent(page.imageUrl)}`
                 : null;
@@ -1154,6 +1165,24 @@ export default function WikiIndex() {
               );
             })}
             </div>
+            {!usingAI && totalPages > 1 && (
+              <div className="flex items-center justify-center gap-1.5 mt-8">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => { setCurrentPage(page); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                    className="w-8 h-8 rounded-full text-xs font-semibold transition-all"
+                    style={
+                      page === currentPage
+                        ? { backgroundColor: "#D63425", color: "#fff" }
+                        : { backgroundColor: "#f3f4f6", color: "#6b7280" }
+                    }
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
