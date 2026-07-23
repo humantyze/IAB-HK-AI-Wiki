@@ -814,7 +814,7 @@ export default function WikiIndex() {
 
       {/* Tag filters + count row */}
       <div className="max-w-6xl mx-auto px-6 lg:px-8">
-        <div className="flex flex-wrap gap-2 mb-4">
+        {!usingAI && <div className="flex flex-wrap gap-2 mb-4">
           {ALL_TAGS.slice(0, 1).map((tag) => (
             <button
               key={tag}
@@ -854,7 +854,7 @@ export default function WikiIndex() {
               {tag}
             </button>
           ))}
-        </div>
+        </div>}
 
         <div className="border-t border-gray-100 pt-4 pb-2 flex items-center justify-between">
           <div className="flex items-center gap-3">
