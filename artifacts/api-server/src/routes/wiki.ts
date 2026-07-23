@@ -5,13 +5,17 @@ import fs from "fs";
 import { db, wikiPagesTable, uploadsTable, knowledgeChunksTable, EMBEDDING_DIMENSIONS } from "@workspace/db";
 import { requireSuperAuth } from "../middlewares/auth";
 import { retrieve, indexWikiPage } from "../lib/knowledge-index";
-import { generateDownloadUrl } from "../lib/gcsClient";
+import { generateDownloadUrl, getBackupBucket } from "../lib/gcsClient";
+import sharp from "sharp";
 import { extractImages } from "../lib/pdf-extractor";
 import { assignImageToWikiPage, synthesizeWikiGaps } from "../lib/ai-service";
 import { logger } from "../lib/logger";
 import { getTextAIConfig } from "../lib/ai-text-model";
 
 let synthesizeRunning = false;
+
+// In-flight lock for thumbnail generation — prevents duplicate resizes for concurrent requests.
+const thumbInFlight = new Map<string, Promise<void>>();
 
 function formatPageSummary(p: {
   id: number;
@@ -557,7 +561,7 @@ router.get("/wiki/:slug", async (req, res) => {
 });
 
 router.get("/wiki-image", async (req, res) => {
-  const { path: objectPath } = req.query as { path?: string };
+  const { path: objectPath, variant } = req.query as { path?: string; variant?: string };
   if (!objectPath || typeof objectPath !== "string" || objectPath.trim().length === 0) {
     res.status(400).json({ error: "Missing path query parameter" });
     return;
@@ -566,8 +570,55 @@ router.get("/wiki-image", async (req, res) => {
     res.status(400).json({ error: "Invalid image path" });
     return;
   }
+
+  // Derive thumbnail GCS path: wiki-images/foo.png → wiki-images/thumbs/foo.webp
+  const wantThumb = variant === "thumb";
+  let serveObjectPath = objectPath;
+
+  if (wantThumb) {
+    const lastSlash = objectPath.lastIndexOf("/");
+    const dir = objectPath.slice(0, lastSlash);
+    const file = objectPath.slice(lastSlash + 1);
+    const baseName = file.includes(".") ? file.slice(0, file.lastIndexOf(".")) : file;
+    const thumbPath = `${dir}/thumbs/${baseName}.webp`;
+
+    try {
+      const bucket = getBackupBucket();
+      const [exists] = await bucket.file(thumbPath).exists();
+
+      if (!exists) {
+        // Ensure only one resize runs at a time per thumbnail path.
+        let inFlight = thumbInFlight.get(thumbPath);
+        if (!inFlight) {
+          inFlight = (async () => {
+            const [origBuffer] = await bucket.file(objectPath).download();
+            const thumbBuffer = await sharp(origBuffer)
+              .resize({ width: 600, withoutEnlargement: true })
+              .webp({ quality: 75 })
+              .toBuffer();
+            await bucket.file(thumbPath).save(thumbBuffer, { contentType: "image/webp" });
+          })();
+          thumbInFlight.set(thumbPath, inFlight);
+          try {
+            await inFlight;
+          } finally {
+            thumbInFlight.delete(thumbPath);
+          }
+        } else {
+          await inFlight;
+        }
+      }
+
+      serveObjectPath = thumbPath;
+    } catch (err) {
+      // Thumbnail generation failed — fall back to original silently.
+      logger.warn({ err, objectPath, thumbPath }, "Thumbnail generation failed — serving original");
+      serveObjectPath = objectPath;
+    }
+  }
+
   try {
-    const signedUrl = await generateDownloadUrl(objectPath);
+    const signedUrl = await generateDownloadUrl(serveObjectPath);
     res.redirect(302, signedUrl);
   } catch (err) {
     logger.error({ err, objectPath }, "Failed to generate wiki image signed URL");

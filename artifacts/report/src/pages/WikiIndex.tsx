@@ -1105,7 +1105,7 @@ export default function WikiIndex() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {pagedFiltered.map((page) => {
               const imgSrc = page.imageUrl
-                ? `${baseUrl}/api/wiki-image?path=${encodeURIComponent(page.imageUrl)}`
+                ? `${baseUrl}/api/wiki-image?path=${encodeURIComponent(page.imageUrl)}&variant=thumb`
                 : null;
               return (
                 <Link key={page.slug} href={`/wiki/${page.slug}`}>
