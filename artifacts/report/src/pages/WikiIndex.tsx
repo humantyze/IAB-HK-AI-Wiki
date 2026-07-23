@@ -1170,7 +1170,7 @@ export default function WikiIndex() {
                 rel="noopener noreferrer"
                 className="font-semibold hover:text-[#D63425] transition-colors"
               >
-                Humantyze
+                Humantyze AI
               </a>
             </span>
             <Link href="/admin" className="text-xs text-gray-400 hover:text-[#D63425] transition-colors uppercase tracking-widest font-medium flex items-center gap-1.5">
