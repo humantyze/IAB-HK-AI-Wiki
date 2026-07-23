@@ -744,7 +744,7 @@ export default function WikiIndex() {
       <div className="max-w-6xl mx-auto px-6 lg:px-8 pt-12 pb-8">
         <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: "#D63425" }}>IAB Hong Kong · AI & TECH COMMITTEE</p>
         <h1 className="text-3xl font-bold text-gray-800 mb-3" style={{ letterSpacing: "-0.5px" }}>HONG KONG AI MARKETING PLAYBOOK</h1>
-        <p className="text-sm text-gray-500 max-w-2xl leading-relaxed">Welcome to the HK AI Marketing Playbook! An initiative of the 2026 AI and Technology Committee, this web app is a living knowledge resource inspired by the "Second Brain" concept popularized by Andrej Karpathy. As new material is submitted, our language model reviews it in full, identifies key entities and ideas, and creates or updates relevant wiki pages. It also refines topic summaries, builds cross-links across related subjects, and flags inconsistencies, helping each new source strengthen an evolving, interconnected knowledge graph. </p>
+        <p className="text-sm text-gray-500 leading-relaxed">Welcome to the HK AI Marketing Playbook! An initiative of the 2026 AI and Technology Committee, this web app is a living knowledge resource inspired by the "Second Brain" concept popularized by Andrej Karpathy. As new material is submitted, our language model reviews it in full, identifies key entities and ideas, and creates or updates relevant wiki pages. It also refines topic summaries, builds cross-links across related subjects, and flags inconsistencies, helping each new source strengthen an evolving, interconnected knowledge graph. </p>
 
         {/* Search */}
         <form onSubmit={handleSubmit} className="mt-6 flex items-center gap-2 max-w-xl">
