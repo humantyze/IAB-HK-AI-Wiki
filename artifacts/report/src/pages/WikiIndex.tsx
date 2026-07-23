@@ -610,6 +610,7 @@ export default function WikiIndex() {
   const filteredSlugsKey = filtered.map((p) => p.slug).sort().join(",");
 
   const graphFirstPopulated = useRef(false);
+  const cardGridRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!graphFirstPopulated.current && filtered.length > 0) {
       graphFirstPopulated.current = true;
@@ -1062,7 +1063,7 @@ export default function WikiIndex() {
         </div>
       )}
       {/* Card grid or Graph view */}
-      <div className="max-w-6xl mx-auto px-6 lg:px-8 pb-20">
+      <div ref={cardGridRef} className="max-w-6xl mx-auto px-6 lg:px-8 pb-20">
         {isLoading ? (
           <div className="flex items-center justify-center py-24">
             <div className="w-8 h-8 border-2 border-[#D63425]/20 border-t-[#D63425] rounded-full animate-spin" />
@@ -1170,7 +1171,7 @@ export default function WikiIndex() {
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                   <button
                     key={page}
-                    onClick={() => { setCurrentPage(page); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                    onClick={() => { setCurrentPage(page); cardGridRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
                     className="w-8 h-8 rounded-full text-xs font-semibold transition-all"
                     style={
                       page === currentPage
