@@ -1165,7 +1165,7 @@ export default function WikiIndex() {
             <span className="text-xs text-gray-400">
               Created by{" "}
               <a
-                href="https://humantyze.com"
+                href="https://humantyze.ai"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-semibold hover:text-[#D63425] transition-colors"
