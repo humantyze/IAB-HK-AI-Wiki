@@ -101,19 +101,29 @@ async function _generate(): Promise<{ questions: string[] }> {
     return { questions: [] };
   }
 
-  // Score each candidate by RAG richness: sum of reranker scores across top chunks.
+  // Score each candidate by RAG richness: mean similarity of top-3 wiki chunks.
+  // Only wiki source types are queried to match what POST /knowledge/search actually searches.
   const scored: Array<{ question: string; score: number }> = [];
   for (const question of candidates.slice(0, 25)) {
     if (typeof question !== "string" || question.trim().length < 5) continue;
     try {
-      const chunks = await retrieve(question.trim(), { limit: 8 });
-      const score = chunks.reduce((sum, c) => sum + c.similarity, 0);
-      if (score > 0) {
-        scored.push({ question: question.trim(), score });
+      const chunks = await retrieve(question.trim(), { limit: 8, sourceTypes: ["wiki"] });
+      const top3 = chunks.slice(0, 3);
+      const meanTop3 = top3.length > 0 ? top3.reduce((sum, c) => sum + c.similarity, 0) / top3.length : 0;
+      const passes =
+        chunks.length >= 3 &&
+        chunks[0].similarity > 0.5 &&
+        meanTop3 > 0.45;
+      if (passes) {
+        scored.push({ question: question.trim(), score: meanTop3 });
       }
     } catch (err) {
       logger.warn({ err, question }, "Retrieve failed for question candidate — skipping");
     }
+  }
+
+  if (scored.length < 10) {
+    logger.warn({ count: scored.length }, "Question generation: fewer than 10 candidates passed strict validation");
   }
 
   scored.sort((a, b) => b.score - a.score);
@@ -127,7 +137,7 @@ async function _generate(): Promise<{ questions: string[] }> {
   await db.delete(knowledgeQuestionsTable);
   await db.insert(knowledgeQuestionsTable).values({ questions, generatedAt: new Date() });
 
-  logger.info({ count: questions.length, topScore: scored[0]?.score }, "Sample questions regenerated and stored");
+  logger.info({ count: questions.length, topMeanSim: scored[0]?.score }, "Sample questions regenerated and stored");
 
   // Fire-and-forget quiz generation so the MCQ cache stays in sync
   generateAndStoreQuiz().catch((err) => logger.warn({ err }, "Quiz generation failed after question regen"));
